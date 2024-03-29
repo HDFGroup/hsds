@@ -224,13 +224,13 @@ async def docker_update_dn_info(app):
         log.warn("head_url is not set, can not register yet")
         return
     req_reg = head_url + "/register"
-    log.info(f"register: {req_reg}")
+    log.debug(f"register: {req_reg}")
 
     body = {"id": app["id"], "port": app["node_port"], "node_type": app["node_type"]}
     rsp_json = None
 
     try:
-        log.info(f"register req: {req_reg} body: {body}")
+        log.debug(f"register req: {req_reg} body: {body}")
         rsp_json = await http_post(app, req_reg, data=body)
     except HTTPInternalServerError:
         log.error("HEAD node seems to be down.")
@@ -242,7 +242,7 @@ async def docker_update_dn_info(app):
         app["dn_ids"] = []
 
     if rsp_json is not None:
-        log.info(f"register response: {rsp_json}")
+        log.debug(f"register response: {rsp_json}")
         app["dn_urls"] = rsp_json["dn_urls"]
         app["dn_ids"] = rsp_json["dn_ids"]
 

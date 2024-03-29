@@ -786,7 +786,6 @@ def chunkReadSelection(chunk_arr, slices=None, select_dt=None):
         if len(fields) > 1:
             for field in fields:
                 arr[field] = output_arr[field]
-            log.debug(f"arr: {arr}")
         else:
             arr[...] = output_arr[fields[0]]
         output_arr = arr  # return this
@@ -801,7 +800,6 @@ def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
 
     log.debug(f"chunkWriteSelection for slices: {slices}")
     dims = chunk_arr.shape
-    log.debug(f"data: {data}")
 
     rank = len(dims)
 
@@ -846,7 +844,6 @@ def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
         else:
             # check if the new data modifies the array or not
             # TBD - is this worth the cost of comparing two arrays element by element?
-            log.debug(f"ndcompare: {chunk_arr[slices]} to {data}")
             if not ndarray_compare(chunk_arr[slices], data):
                 # update chunk array
                 chunk_arr[slices] = data
@@ -858,7 +855,6 @@ def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
         raise
 
     log.debug(f"ChunkWriteSelection - chunk updated: {updated}")
-    log.debug(f"chunk_arr: {chunk_arr}")
 
     return updated
 
@@ -954,7 +950,6 @@ def chunkWritePoints(chunk_id=None,
     if select_dt is None:
         select_dt = dset_dtype  # no field selection
     log.debug(f"dtype: {dset_dtype}")
-    log.debug(f"point_arr: {point_arr}")
 
     # point_arr should have the following type:
     #       (coord1, coord2, ...) | select_dtype

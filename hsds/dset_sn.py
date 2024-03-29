@@ -906,9 +906,7 @@ async def POST_Dataset(request):
             msg += f"{min_chunk_size}, expanding"
             log.debug(msg)
             kwargs = {"chunk_min": min_chunk_size, "layout_class": layout_class}
-            adjusted_chunk_dims = expandChunk(
-                chunk_dims, item_size, shape_json, **kwargs
-            )
+            adjusted_chunk_dims = expandChunk(chunk_dims, item_size, shape_json, **kwargs)
         elif chunk_size > max_chunk_size:
             msg = f"chunk size: {chunk_size} greater than max size: "
             msg += f"{max_chunk_size}, shrinking"

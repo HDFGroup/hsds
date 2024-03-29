@@ -327,7 +327,6 @@ class FileClient:
 
         filesep = pp.normpath("/")  # '/' on linux, '\\' on windows
 
-        await asyncio.sleep(0)  # for async compat
         basedir = pp.join(self._root_dir, bucket)
         if prefix:
             basedir = pp.join(basedir, prefix)
@@ -354,6 +353,8 @@ class FileClient:
                     files.append(filename)
                     if limit and len(files) >= limit:
                         break
+                    if len(files) % 1000 == 0:
+                        await asyncio.sleep(0)
                 break  # don't recurse into subdirs
 
             else:
@@ -366,6 +367,8 @@ class FileClient:
                     files.append(filepath)
                     if limit and len(files) >= limit:
                         break
+                    if len(files) % 1000:
+                        await asyncio.sleep(0)
 
         # use a dictionary to hold return values if stats are needed
         key_names = {} if include_stats else []

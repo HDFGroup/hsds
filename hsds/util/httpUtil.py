@@ -13,7 +13,7 @@
 # httpUtil:
 # http-related helper functions
 #
-from asyncio import CancelledError
+from asyncio import CancelledError, TimeoutError
 import os
 import socket
 import numpy as np
@@ -327,6 +327,12 @@ async def http_get(app, url, params=None, client=None):
     except CancelledError as cle:
         log.warn(f"CancelledError for http_get({url}): {cle}")
         raise HTTPInternalServerError()
+    except ConnectionResetError as cre:
+        log.warn(f"ConnectionResetError for http_get({url}): {cre}")
+        raise HTTPInternalServerError()
+    except TimeoutError as toe:
+        log.warn(f"TimeoutError for http_get({url}: {toe})")
+        raise HTTPServiceUnavailable()
 
     return retval
 
@@ -335,10 +341,18 @@ async def http_post(app, url, data=None, params=None, client=None):
     """
     Helper function  - async HTTP POST
     """
+    if not url:
+        log.error("http_post with no url")
+        return
+    if url.startswith("http://head"):
+        # just use debug for health check traffic
+        logmsg = log.debug
+    else:
+        logmsg = log.info
     msg = f"http_post('{url}'"
     if isinstance(data, bytes):
         msg += f" {len(data)} bytes"
-    log.info(msg)
+    logmsg(msg)
     if client is None:
         client = get_http_client(app, url=url)
     url = get_http_std_url(url)
@@ -355,7 +369,7 @@ async def http_post(app, url, data=None, params=None, client=None):
 
     try:
         async with client.post(url, **kwargs) as rsp:
-            log.info(f"http_post status: {rsp.status}")
+            logmsg(f"http_post status: {rsp.status}")
             if rsp.status == 200:
                 pass  # ok
             elif rsp.status == 201:
@@ -394,6 +408,12 @@ async def http_post(app, url, data=None, params=None, client=None):
     except CancelledError as cle:
         log.warn(f"CancelledError for http_post({url}): {cle}")
         raise HTTPInternalServerError()
+    except ConnectionResetError as cre:
+        log.warn(f"ConnectionResetError for http_post({url}): {cre}")
+        raise HTTPInternalServerError()
+    except TimeoutError as toe:
+        log.warn(f"TimeoutError for http_post({url}: {toe})")
+        raise HTTPServiceUnavailable()
 
     return retval
 
@@ -451,6 +471,12 @@ async def http_put(app, url, data=None, params=None, client=None):
     except CancelledError as cle:
         log.warn(f"CancelledError for http_put({url}): {cle}")
         raise HTTPInternalServerError()
+    except ConnectionResetError as cre:
+        log.warn(f"ConnectionResetError for http_put({url}): {cre}")
+        raise HTTPInternalServerError()
+    except TimeoutError as toe:
+        log.warn(f"TimeoutError for http_put({url}: {toe})")
+        raise HTTPServiceUnavailable()
     return retval
 
 
@@ -499,6 +525,9 @@ async def http_delete(app, url, data=None, params=None, client=None):
     except ConnectionResetError as cre:
         log.warn(f"ConnectionResetError for http_delete({url}): {cre}")
         raise HTTPInternalServerError()
+    except TimeoutError as toe:
+        log.warn(f"TimeoutError for http_delete({url}: {toe})")
+        raise HTTPServiceUnavailable()
 
     return rsp_json
 
