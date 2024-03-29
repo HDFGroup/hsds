@@ -353,7 +353,7 @@ class FileClient:
                     files.append(filename)
                     if limit and len(files) >= limit:
                         break
-                    if len(files) % 1000:
+                    if len(files) % 1000 == 0:
                         await asyncio.sleep(0)
                 break  # don't recurse into subdirs
 
