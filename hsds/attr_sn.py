@@ -1052,16 +1052,15 @@ async def PUT_AttributeValue(request):
     if "Content-Type" in request.headers:
         # client should use "application/octet-stream" for binary transfer
         content_type = request.headers["Content-Type"]
-        expected = ("application/json", "application/octet-stream")
-        if content_type not in expected:
+        if "application/octet-stream" in content_type:
+            log.debug("PUT AttributeValue - request_type is binary")
+            request_type = "binary"
+        elif "application/json" in content_type:
+            log.debug("PUT AttribueValue - request type is json")
+        else:
             msg = f"Unknown content_type: {content_type}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        if content_type == "application/octet-stream":
-            log.debug("PUT AttributeValue - request_type is binary")
-            request_type = "binary"
-        else:
-            log.debug("PUT AttribueValue - request type is json")
 
     binary_data = None
     if request_type == "binary":
