@@ -528,8 +528,6 @@ async def http_delete(app, url, data=None, params=None, client=None):
     except TimeoutError as toe:
         log.warn(f"TimeoutError for http_delete({url}: {toe})")
         raise HTTPServiceUnavailable()
-    
-    
 
     return rsp_json
 
