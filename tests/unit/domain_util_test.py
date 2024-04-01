@@ -129,7 +129,6 @@ class DomainUtilTest(unittest.TestCase):
         self.assertFalse(isValidBucketName("bucket\""))
         self.assertFalse(isValidBucketName("bucket "))
         self.assertFalse(isValidBucketName("bucket>"))
-        self.assertFalse(isValidBucketName(".bucket"))
         self.assertFalse(isValidBucketName(""))
 
         self.assertTrue(isValidBucketName("bucket"))
@@ -137,6 +136,12 @@ class DomainUtilTest(unittest.TestCase):
         self.assertTrue(isValidBucketName("bucket1"))
         self.assertTrue(isValidBucketName("_"))
         self.assertTrue(isValidBucketName("___1234567890___"))
+
+        self.assertTrue(isValidBucketName("bucket"))
+        self.assertTrue(isValidBucketName("buck.et"))
+        self.assertTrue(isValidBucketName("bucket1"))
+        self.assertTrue(isValidBucketName("buck-et"))
+        self.assertTrue(isValidBucketName("bucket-1.bucket1-.1"))
 
 
 if __name__ == "__main__":

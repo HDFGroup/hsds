@@ -304,8 +304,7 @@ def getLimits():
 
 def isValidBucketName(bucket):
     """
-    Check whether the given bucket name contains only
-    alphanumeric characters and underscores
+    Check whether the given bucket name is valid
     """
     is_valid = True
 
@@ -316,8 +315,8 @@ def isValidBucketName(bucket):
     if len(bucket) < 1:
         is_valid = False
 
-    # Bucket names can consist only of alphanumeric characters and underscores
-    if not re.fullmatch("[a-zA-Z0-9_]+", bucket):
+    # Bucket names can consist only of alphanumeric characters, underscores, dots, and hyphens
+    if not re.fullmatch("[a-zA-Z0-9_\\.\\-]+", bucket):
         is_valid = False
 
     return is_valid
