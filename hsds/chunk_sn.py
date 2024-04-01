@@ -922,7 +922,7 @@ async def PUT_Value(request):
 
         for page_number in range(len(pages)):
             page = pages[page_number]
-            msg = f"streaming request data for page: {page_number+1} of {len(pages)}, "
+            msg = f"streaming request data for page: {page_number + 1} of {len(pages)}, "
             msg += f"selection: {page}"
             log.info(msg)
             kwargs = {"page_number": page_number, "page": page}
@@ -1094,7 +1094,7 @@ async def GET_Value(request):
             try:
                 for page_number in range(len(pages)):
                     page = pages[page_number]
-                    msg = f"streaming response data for page: {page_number+1} "
+                    msg = f"streaming response data for page: {page_number + 1} "
                     msg += f"of {len(pages)}, selection: {page}"
                     log.info(msg)
 

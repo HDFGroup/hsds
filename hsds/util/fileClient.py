@@ -131,7 +131,7 @@ class FileClient:
         self._validateKey(key)
 
         if length > 0:
-            range = f"bytes={offset}-{offset+length-1}"
+            range = f"bytes={offset} - {offset + length - 1}"
             log.info(f"storage range request: {range}")
 
         filepath = self._getFilePath(bucket, key)
@@ -152,7 +152,7 @@ class FileClient:
             finish_time = time.time()
             msg = f"fileClient.get_object({key} bucket={bucket}) "
             msg += f"start={start_time:.4f} finish={finish_time:.4f} "
-            msg += f"elapsed={finish_time-start_time:.4f}  bytes={len(data)}"
+            msg += f"elapsed={finish_time - start_time:.4f}  bytes={len(data)}"
             log.info(msg)
         except FileNotFoundError:
             msg = f"fileClient: {key} not found "
@@ -217,7 +217,7 @@ class FileClient:
             finish_time = time.time()
             msg = f"fileClient.put_object({key} bucket={bucket}) "
             msg += f"start={start_time:.4f} finish={finish_time:.4f} "
-            msg += f"elapsed={finish_time-start_time:.4f} bytes={len(data)}"
+            msg += f"elapsed={finish_time - start_time:.4f} bytes={len(data)}"
             log.info(msg)
             write_rsp = self._getFileStats(filepath, data=data)
         except IOError as ioe:
@@ -263,7 +263,7 @@ class FileClient:
             finish_time = time.time()
             msg = f"fileClient.delete_object({key} bucket={bucket}) "
             msg += f"start={start_time:.4f} finish={finish_time:.4f} "
-            msg += f"elapsed={finish_time-start_time:.4f}"
+            msg += f"elapsed={finish_time - start_time:.4f}"
             log.info(msg)
 
         except IOError as ioe:

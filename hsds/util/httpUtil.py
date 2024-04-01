@@ -708,9 +708,9 @@ def getContentType(request):
     if "Content-Type" in request.headers:
         # client should use "application/octet-stream" for binary transfer
         content_type = request.headers["Content-Type"]
-        if content_type == "application/octet-stream":
+        if "application/octet-stream" in content_type:
             request_type = "binary"
-        elif content_type == "application/json":
+        elif "application/json" in content_type:
             request_type = "json"
         else:
             msg = f"Unknown content_type: {content_type}"
@@ -728,6 +728,6 @@ def isBinaryResponse(rsp):
     is_binary = False
     if "Content-Type" in rsp.headers:
         content_type = rsp.headers["Content-Type"]
-        if content_type == "application/octet-stream":
+        if "application/octet-stream" in content_type:
             is_binary = True
     return is_binary

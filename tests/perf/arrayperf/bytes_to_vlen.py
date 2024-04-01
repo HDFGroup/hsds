@@ -52,19 +52,19 @@ for j in range(count):
 then = time.time()
 buffer_size = getByteArraySize(arr)
 now = time.time()
-msg = f"getByteArraySize - elapsed: {(now-then):6.4f} for {count} elements, "
+msg = f"getByteArraySize - elapsed: {(now - then):6.4f} for {count} elements, "
 msg += f"returned {buffer_size}"
 print(msg)
 then = time.time()
 buffer = arrayToBytes(arr)
 now = time.time()
-print(f"arrayToBytes - elpased: {(now-then):6.4f} for {count} elements")
+print(f"arrayToBytes - elpased: {(now - then):6.4f} for {count} elements")
 
 # convert back to a numpy array
 then = time.time()
 arr_ret = bytesToArray(buffer, dt, [count, ])
 now = time.time()
-print(f"bytesToArray - elpased: {(now-then):6.4f} for {count} elements")
+print(f"bytesToArray - elpased: {(now - then):6.4f} for {count} elements")
 
 # verify that same original strings got returned
 for i in range(count):

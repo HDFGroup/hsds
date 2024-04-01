@@ -9,26 +9,29 @@ on:
     branches: [master]
 
 jobs:
-  build:
+  build-and-test:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest,]
-        python-version: ["3.8", "3.9", "3.10"]
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        test-other: ["none", "h5pyd"]
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
         shell: bash
         run: |
           python -m pip install --upgrade pip
           python -m pip install flake8 pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
       - name: Lint with flake8
         shell: bash
         run: |
@@ -36,14 +39,17 @@ jobs:
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
           flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
+          
       - name: Install package
         shell: bash
         run: |
           pip install -e .
+
       - name: Run unit tests
         shell: bash
         run: |
           pytest
+
       - name: Run integration tests
         shell: bash
         env:
@@ -53,18 +59,53 @@ jobs:
           USER_PASSWORD: test
           USER2_NAME: test_user2
           USER2_PASSWORD: test
+          HSDS_ENDPOINT: http://127.0.0.1:5101
+
         run: |
-          mkdir data &&
-          mkdir data/hsdstest &&
-          cp admin/config/groups.default admin/config/groups.txt &&
-          cp admin/config/passwd.default admin/config/passwd.txt &&
-          echo "ADMIN_PASSWORD=admin" >> $GITHUB_ENV &&
-          echo "ADMIN_USERNAME=admin" >> $GITHUB_ENV &&
-          echo "USER_NAME=test_user1" >> $GITHUB_ENV &&
-          echo "USER_PASSWORD=test" >> $GITHUB_ENV &&
-          echo "USER2_NAME=test_user2" >> $GITHUB_ENV &&
-          echo "USER2_PASSWORD=test" >> $GITHUB_ENV &&
+          mkdir data
+          mkdir data/hsdstest
+          cp admin/config/groups.default admin/config/groups.txt
+          cp admin/config/passwd.default admin/config/passwd.txt
           hsds --root_dir data --host localhost --port 5101 --password_file admin/config/passwd.txt --logfile hs.log   --loglevel DEBUG  --config_dir=admin/config --count=4 &
-          sleep 10 # let the nodes get ready &&
+          sleep 10 # let the nodes get ready
           pytest tests/integ/setup_test.py
           pytest tests/integ
+
+      - name: Checkout h5pyd
+        if: ${{ ( matrix.test-other ==  'h5pyd' ) && ( matrix.os != 'windows-latest' ) }}
+        uses: actions/checkout@v4
+        with:
+          repository: HDFGroup/h5pyd
+          path: ${{github.workspace}}/h5pyd
+
+      - name: Install h5pyd
+        if: ${{ ( matrix.test-other ==  'h5pyd' ) && ( matrix.os != 'windows-latest' ) }}
+        working-directory: ${{github.workspace}}/h5pyd
+        run: |
+          pip install . -v
+        
+      - name: Create h5pyd test folder
+        if: ${{ ( matrix.test-other ==  'h5pyd' ) && ( matrix.os != 'windows-latest' ) }}
+        working-directory: ${{github.workspace}}/h5pyd
+        env:
+          HS_USERNAME: test_user1
+          HS_PASSWORD: test
+          TEST2_USERNAME: test_user1
+          TEST2_PASSWORD: test
+          HS_ENDPOINT: http://127.0.0.1:5101
+          H5PYD_TEST_FOLDER: /home/test_user1/h5pyd_tests/
+        run: |
+          hstouch -e http://127.0.0.1:5101 /home/test_user1/h5pyd_tests/
+
+      - name: Run h5pyd tests
+        if: ${{ ( matrix.test-other ==  'h5pyd' ) && ( matrix.os != 'windows-latest' ) }}
+        working-directory: ${{github.workspace}}/h5pyd
+        env:
+          HS_USERNAME: test_user1
+          HS_PASSWORD: test
+          TEST2_USERNAME: test_user1
+          TEST2_PASSWORD: test
+          HS_ENDPOINT: http://127.0.0.1:5101
+          H5PYD_TEST_FOLDER: /home/test_user1/h5pyd_tests/
+        run: |
+          python testall.py

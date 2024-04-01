@@ -713,6 +713,55 @@ class VlenTest(unittest.TestCase):
                 # strings are showing up as bytes in the response
                 self.assertEqual(req_item, rsp_item.decode())
 
+    def testPutVLenUTF8(self):
+        # Test PUT value for 1d dataset with vlen seq of vlen utf-8 strings
+        print("testPutVLenUTF8", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create dataset
+        vlen_utf8_type = {
+            "charSet": "H5T_CSET_UTF8",
+            "class": "H5T_STRING",
+            "length": "H5T_VARIABLE",
+            "strPad": "H5T_STR_NULLPAD",
+        }
+
+        datatype = {"class": "H5T_VLEN", "base": vlen_utf8_type}
+
+        payload = {
+            "type": datatype,
+            "shape": "H5S_SCALAR",
+        }
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = "dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        data = u"one: \u4e00"
+        payload = {"value": data}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
 
 if __name__ == "__main__":
     # setup test files

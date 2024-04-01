@@ -80,7 +80,7 @@ field_name = options["field"]
 arr_field = arr[field_name]
 msg = f"consecutive read with random start [{start}:{end}]: "
 msg += f"{arr_field.min():4.2f}, {arr_field.max():4.2f}, "
-msg += f"{arr_field.mean():4.2f}, {te-ts:4.2f} s"
+msg += f"{arr_field.mean():4.2f}, {te - ts:4.2f} s"
 print(msg)
 
 # read with stride
@@ -98,7 +98,7 @@ else:
     arr_field = arr[field_name]
     msg = f"strided read with random start index [{start}:{end}:{stride}]: "
     msg += f"{arr_field.min():4.2f}, {arr_field.max():4.2f}, "
-    msg += f"{arr_field.mean():4.2f}, {te-ts:4.2f} s"
+    msg += f"{arr_field.mean():4.2f}, {te - ts:4.2f} s"
     print(msg)
 
 
@@ -117,5 +117,5 @@ te = time.time()
 arr_field = arr[field_name]
 msg = "read with random indices [[n0,n1,...,nx]]: "
 msg += f"{arr_field.min():4.2f}, {arr_field.max():4.2f}, "
-msg += f"{arr_field.mean():4.2f}, {te-ts:4.2f} s"
+msg += f"{arr_field.mean():4.2f}, {te - ts:4.2f} s"
 print(msg)

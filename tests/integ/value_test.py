@@ -1756,7 +1756,7 @@ class ValueTest(unittest.TestCase):
 
         # read 1x4 block from dataset
         row_index = 2
-        params = {"select": f"[{row_index}:{row_index+1}, 0:4]"}
+        params = {"select": f"[{row_index}:{row_index + 1}, 0:4]"}
         params["nonstrict"] = 1  # SN can read directly from S3 or DN node
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -3366,7 +3366,7 @@ class ValueTest(unittest.TestCase):
         z = 35
         count = 10
         # read 10 element, starting at index (x,y,z)
-        params = {"select": f"[{x}, {y}, {z}:{z+count}]"}
+        params = {"select": f"[{x}, {y}, {z}:{z + count}]"}
         params["nonstrict"] = 1  # enable SN to invoke lambda func
 
         # read the selection

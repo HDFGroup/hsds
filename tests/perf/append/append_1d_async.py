@@ -312,5 +312,5 @@ print("num success:", cfg["success_count"])
 print("num failures:", cfg["error_count"])
 count = cfg["rows_added"]
 print("rows added:", count)
-print(f"added {count} rows in {(end_ts-start_ts):8.4f} seconds")
-print(f"{count/(end_ts-start_ts):5.4f} rows/sec")
+print(f"added {count} rows in {(end_ts - start_ts):8.4f} seconds")
+print(f"{count / (end_ts - start_ts):5.4f} rows/sec")
