@@ -228,6 +228,9 @@ def main():
 
     kwargs = {}  # options to pass to hsdsapp
 
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
     # setup logging
     if args.loglevel:
         log_level_cfg = args.loglevel

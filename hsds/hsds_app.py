@@ -185,7 +185,7 @@ class HsdsApp:
     def print_process_output(self):
         """print any queue output from sub-processes"""
         if self._logfile:
-            f = open(self._logfile, "a")
+            f = open(self._logfile, "a", encoding="utf-8")
         else:
             f = sys.stdout
 
@@ -303,9 +303,10 @@ class HsdsApp:
             # logging.info(f"starting {pargs[0]}")
             pargs.extend(common_args)
             p = subprocess.Popen(
-                pargs, bufsize=1, universal_newlines=True, shell=False, stdout=pout
+                pargs, bufsize=1, universal_newlines=True, shell=False, stdout=pout,
+                stderr=subprocess.STDOUT, encoding='utf-8'
             )
-            p.stdout.reconfigure(encoding='utf-8')
+
             self._processes[pname] = p
             # setup queue so we can check on process output without blocking
             q = queue.Queue()
