@@ -374,6 +374,8 @@ class FileClient:
         key_names = {} if include_stats else []
         count = 0
         for filename in files:
+            if len(key_names) % 1000 == 0:
+                await asyncio.sleep(0)
             if filename.startswith(filesep):
                 filename = filename[1:]
             log.debug(f"filename: {filename}, basedir: {basedir}")
