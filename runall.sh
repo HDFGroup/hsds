@@ -143,19 +143,9 @@ fi
 
 [[ -z ${HSDS_ENDPOINT} ]] && echo "HSDS_ENDPOINT is not set" && exit 1
 
-if [[ ${AWS_S3_GATEWAY} ]]; then
-  COMPOSE_FILE="admin/docker/docker-compose.aws.yml"
-  echo "AWS_S3_GATEWAY set, using ${BUCKET_NAME} S3 Bucket (verify that this bucket exists)"
-elif [[ ${AZURE_CONNECTION_STRING} ]]; then
-  COMPOSE_FILE="admin/docker/docker-compose.azure.yml"
-  echo "AZURE_CONNECTION_STRING set, using ${BUCKET_NAME} Azure Storage Container (verify that the container exsits)"
-else 
+if [[ ${ROOT_DIR} ]]; then 
   COMPOSE_FILE="admin/docker/docker-compose.posix.yml"
-  echo "no AWS or AZURE env set, using POSIX storage"
-  if [[ -z ${ROOT_DIR} ]]; then
-    export ROOT_DIR=$PWD/data
-    echo "no ROOT_DIR env set, using $ROOT_DIR directory for storage"
-  fi
+  echo "ROOT_DIR set, using POSIX storage"
   if [[ ! -d ${ROOT_DIR} ]]; then
       echo "creating directory ${ROOT_DIR}"
       mkdir ${ROOT_DIR}
@@ -164,6 +154,15 @@ else
       echo "creating directory ${ROOT_DIR}/${BUCKET_NAME}"
       mkdir ${ROOT_DIR}/${BUCKET_NAME}
   fi
+elif [[ ${AWS_S3_GATEWAY} ]]; then
+  COMPOSE_FILE="admin/docker/docker-compose.aws.yml"
+  echo "AWS_S3_GATEWAY set, using ${BUCKET_NAME} S3 Bucket (verify that this bucket exists)"
+elif [[ ${AZURE_CONNECTION_STRING} ]]; then
+  COMPOSE_FILE="admin/docker/docker-compose.azure.yml"
+  echo "AZURE_CONNECTION_STRING set, using ${BUCKET_NAME} Azure Storage Container (verify that the container exsits)"
+else
+  echo "no storage setting defined (set at least one of ROOT_DIR, AWS_S3_GATEWAY or AZURE_CONNECTION_STRING)"
+  exit 1
 fi
  
 if [[ -z $AWS_IAM_ROLE ]] && [[ $AWS_S3_GATEWAY ]]; then

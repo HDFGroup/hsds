@@ -516,7 +516,7 @@ class PointSelTest(unittest.TestCase):
         root_uuid = rspJson["root"]
 
         # create dataset fodr /g1/g1.1/dset1.1.2
-        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/tall.h5"
+        s3path = hdf5_sample_bucket + "/data/hdf5test" + "/tall.h5"
         data = {"type": "H5T_STD_I32BE", "shape": 20}
         layout = {
             "class": "H5D_CONTIGUOUS_REF",
@@ -578,7 +578,6 @@ class PointSelTest(unittest.TestCase):
             msg = f"s3object: {s3path} not found, "
             msg += "skipping point read chunk reference contiguous test"
             print(msg)
-
             return
 
         self.assertEqual(rsp.status_code, 200)
@@ -586,9 +585,8 @@ class PointSelTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         ret_value = rspJson["value"]
         self.assertEqual(len(ret_value), len(points))
-        self.assertEqual(
-            ret_value, points
-        )  # get back the points since the dataset in the range 0-20
+        self.assertEqual(ret_value, points)
+        # get back the points since the dataset in the range 0-20
 
         # do a point selection read on dset22
         req = self.endpoint + "/datasets/" + dset22_id + "/value"
@@ -610,7 +608,7 @@ class PointSelTest(unittest.TestCase):
             print("hdf5_sample_bucket config not set, skipping testChunkedRefDataset")
             return
 
-        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
+        s3path = hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
         SNP500_ROWS = 3207353
 
         snp500_json = helper.getHDF5JSON("snp500.json")
@@ -618,17 +616,13 @@ class PointSelTest(unittest.TestCase):
             print("snp500.json file not found, skipping testPostChunkedRefDataset")
             return
 
-        if "snp500.h5" not in snp500_json:
-            self.assertTrue(False)
+        self.assertTrue("snp500.h5" in snp500_json)
 
-        chunk_dims = [
-            60000,
-        ]  # chunk layout used in snp500.h5 file
+        chunk_dims = [60000, ]  # chunk layout used in snp500.h5 file
 
         chunk_info = snp500_json["snp500.h5"]
         dset_info = chunk_info["/dset"]
-        if "byteStreams" not in dset_info:
-            self.assertTrue(False)
+        self.assertTrue("byteStreams" in dset_info)
         byteStreams = dset_info["byteStreams"]
 
         # construct map of chunks
@@ -675,9 +669,7 @@ class PointSelTest(unittest.TestCase):
 
         data = {
             "type": datatype,
-            "shape": [
-                SNP500_ROWS,
-            ],
+            "shape": [SNP500_ROWS, ],
         }
         layout = {
             "class": "H5D_CHUNKED_REF",
@@ -731,7 +723,7 @@ class PointSelTest(unittest.TestCase):
             print(msg)
             return
 
-        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
+        s3path = hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
         SNP500_ROWS = 3207353
 
         snp500_json = helper.getHDF5JSON("snp500.json")
@@ -739,16 +731,14 @@ class PointSelTest(unittest.TestCase):
             print("snp500.json file not found, skipping testChunkedRefDataset")
             return
 
-        if "snp500.h5" not in snp500_json:
-            self.assertTrue(False)
+        self.assertTrue("snp500.h5" in snp500_json)
 
         chunk_dims = [60000,]  # chunk layout used in snp500.h5 file
         num_chunks = (SNP500_ROWS // chunk_dims[0]) + 1
 
         chunk_info = snp500_json["snp500.h5"]
         dset_info = chunk_info["/dset"]
-        if "byteStreams" not in dset_info:
-            self.assertTrue(False)
+        self.assertTrue("byteStreams" in dset_info)
         byteStreams = dset_info["byteStreams"]
 
         self.assertEqual(len(byteStreams), num_chunks)
@@ -777,9 +767,7 @@ class PointSelTest(unittest.TestCase):
         chunkinfo_type = {"class": "H5T_COMPOUND", "fields": fields}
         req = self.endpoint + "/datasets"
         # Store 40 chunk locations
-        chunkinfo_dims = [
-            num_chunks,
-        ]
+        chunkinfo_dims = [num_chunks, ]
         payload = {"type": chunkinfo_type, "shape": chunkinfo_dims}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
@@ -832,9 +820,7 @@ class PointSelTest(unittest.TestCase):
 
         data = {
             "type": datatype,
-            "shape": [
-                SNP500_ROWS,
-            ],
+            "shape": [SNP500_ROWS, ],
         }
         layout = {
             "class": "H5D_CHUNKED_REF_INDIRECT",

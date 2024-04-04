@@ -327,6 +327,7 @@ async def get_metadata_obj(app, obj_id, bucket=None):
     log.info(f"get_metadata_obj: {obj_id} bucket: {bucket}")
     if isValidDomain(obj_id):
         domain_bucket = getBucketForDomain(obj_id)
+        log.debug(f"tbd - domain_bucket: {domain_bucket}")
         if bucket and domain_bucket and bucket != domain_bucket:
             msg = f"get_metadata_obj for domain: {obj_id} but bucket param was: {bucket}"
             log.error(msg)
@@ -334,7 +335,9 @@ async def get_metadata_obj(app, obj_id, bucket=None):
         if not bucket:
             bucket = domain_bucket
 
-    if not bucket:
+    if bucket:
+        log.debug(f"get_metadata_obj - using bucket: {bucket}")
+    else:
         log.warn("get_metadata_obj - bucket is None")
 
     # don't call validateInPartition since this is used to pull in
@@ -355,6 +358,7 @@ async def get_metadata_obj(app, obj_id, bucket=None):
         obj_json = meta_cache[obj_id]
     else:
         s3_key = getS3Key(obj_id)
+        log.debug(f"get_metadata_obj - using s3_key: {s3_key}")
         pending_s3_read = app["pending_s3_read"]
         if obj_id in pending_s3_read:
             # already a read in progress, wait for it to complete
@@ -364,12 +368,10 @@ async def get_metadata_obj(app, obj_id, bucket=None):
             log.info(msg)
             store_read_timeout = float(config.get("store_read_timeout", default=2.0))
             log.debug(f"store_read_timeout: {store_read_timeout}")
-            store_read_sleep_interval = float(
-                config.get("store_read_sleep_interval", default=0.1)
-            )
+            store_read_sleep = float(config.get("store_read_sleep_interval", default=0.1))
             while time.time() - read_start_time < store_read_timeout:
                 log.debug(f"waiting for pending s3 read {s3_key}, sleeping")
-                await asyncio.sleep(store_read_sleep_interval)  # sleep for sub-second?
+                await asyncio.sleep(store_read_sleep)
                 if obj_id in meta_cache:
                     log.info(f"object {obj_id} has arrived!")
                     obj_json = meta_cache[obj_id]
@@ -1027,13 +1029,18 @@ async def get_chunk(
     log.debug(f"filter_ops: {filter_ops}")
 
     if s3path:
+        if s3path.startswith("s3://"):
+            bucket = "s3://"
+        else:
+            bucket = ""
         try:
-            bucket = getBucketFromStorURI(s3path)
+            bucket += getBucketFromStorURI(s3path)
             s3key = getKeyFromStorURI(s3path)
         except ValueError as ve:
             log.error(f"Invalid URI path: {s3path} exception: {ve}")
             raise
             # raise HTTPInternalServerError()
+
         msg = f"Using s3path bucket: {bucket} and  s3key: {s3key} "
         msg += f"offset: {s3offset} length: {s3size}"
         log.debug(msg)

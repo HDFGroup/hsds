@@ -277,58 +277,93 @@ def _compress(data, compressor=None, level=5, shuffle=0, dtype=None, chunk_shape
     return data
 
 
-def _getStorageClient(app):
-    """get storage client s3 or azure blob"""
+def _getStorageDriverName(app, bucket=None):
+    """Return name of storage driver that is being used"""
+    driver = None
+    if bucket:
+        if bucket.startswith("s3://"):
+            driver = "S3Client"
+        elif bucket.startswith("file://"):
+            driver = "FileClient"
+        elif bucket.startswith("https://") and bucket.find(".blob.core.windows.net/") > 0:
+            driver = "AzureBlobClient"
+        else:
+            pass  # will determine the default driver below
+    if not driver:
+        # select a default driver based on config settings
+        if config.get("root_dir"):
+            driver = "FileClient"
+        elif config.get("aws_s3_gateway"):
+            driver = "S3Client"
+        elif config.get("azure_connection_string"):
+            driver = "AzureBlobClient"
+        else:
+            driver = "FileClient"
+    return driver
 
-    if "storage_client" in app:
-        return app["storage_client"]
 
-    if config.get("aws_s3_gateway"):
+def _getStorageClient(app, bucket=None):
+    """get storage client posix, or s3 or azure blob"""
+
+    driver = _getStorageDriverName(app, bucket=bucket)
+
+    storage_clients = app["storage_clients"]
+    if driver in storage_clients:
+        return storage_clients[driver]
+
+    # initialize a new client
+    if driver == "S3Client":
         log.debug("_getStorageClient getting S3Client")
         client = S3Client(app)
-    elif config.get("azure_connection_string"):
+    elif driver == "FileClient":
+        log.debug("_getStorageClient getting FileClient")
+        client = FileClient(app)
+    elif driver == "AzureBlobClient":
         log.debug("_getStorageClient getting AzureBlobClient")
         client = AzureBlobClient(app)
     else:
-        log.debug("_getStorageClient getting FileClient")
-        client = FileClient(app)
+        msg = f"_getStorageClient - unexpected storage driver: {driver}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
     # save client so we don't neeed to recreate each time
-    app["storage_client"] = client
+    storage_clients[driver] = client
+
     return client
-
-
-def getStorageDriverName(app):
-    """Return name of storage driver that is being used"""
-    if config.get("aws_s3_gateway"):
-        driver = "S3Client"
-    elif config.get("azure_connection_string"):
-        driver = "AzureBlobClient"
-    else:
-        driver = "FileClient"
-    return driver
 
 
 async def releaseStorageClient(app):
     """release the client storage connection
     (Used for cleanup on application exit)
     """
-    client = _getStorageClient(app)
-    await client.releaseClient()
 
-    if "storage_client" in app:
-        del app["storage_client"]
+    storage_clients = app["storage_clients"]
+    drivers = list(storage_clients)
+    for driver in drivers:
+        log.debug(f"releasing storage client: {driver}")
+        client = storage_clients[driver]
+        await client.releaseClient()
+        del storage_clients[driver]
 
 
 def _getURIParts(uri):
     """return tuple of (bucket, path) for given URI"""
-    if uri.startswith("s3://"):
-        uri = uri[5:]
+    S3_URI = "s3://"
+    FILE_URI = "file://"
+    AZURE_URI = "blob.core.windows.net/"  # preceded with "https://"
+    if uri.startswith(S3_URI):
+        uri = uri[len(S3_URI):]
+    elif uri.startswith(FILE_URI):
+        uri = uri[len(FILE_URI):]
+    elif uri.startswith("https://") and uri.find(AZURE_URI) > 0:
+        n = uri.find(AZURE_URI) + len(AZURE_URI)
+        uri = uri[n:]
     if uri.startswith("/"):
         raise ValueError("invalid uri")
     n = uri.find("/")
-    if n < 0:
+    if n <= 0:
         raise ValueError("invalid uri")
-    fields = (uri[:n], uri[n:])
+    fields = (uri[:n], uri[n + 1:])
     return fields
 
 
@@ -336,6 +371,7 @@ def getBucketFromStorURI(uri):
     """Return a bucket name given a storage URI
     Examples:
       s3://mybucket/folder/object.json  -> mybucket
+      https://myaccount.blob.core.windows.net/mybucket/folder/object.json" -> mybucket
       mybucket/folder/object.json  -> mybucket
       mybucket -> ValueError  # no slash
       /mybucket/folder/object.json -> ValueError # not expecting abs path
@@ -350,8 +386,8 @@ def getBucketFromStorURI(uri):
 def getKeyFromStorURI(uri):
     """Return a key (path within a bucket) given a storage URI
     Examples:
-      s3://mybucket/folder/object.json  -> mybucket
-      mybucket/folder/object.json  -> mybucket
+      s3://mybucket/folder/object.json  -> folder/object.json
+      mybucket/folder/object.json  -> folder/object.json
       mybucket -> ValueError  # no slash
       /mybucket/folder/object.json -> ValueError # not expecting abs path
     """
@@ -364,7 +400,7 @@ def getKeyFromStorURI(uri):
 
 def getURIFromKey(app, bucket=None, key=None):
     """ return URI for given bucket and key """
-    client = _getStorageClient(app)
+    client = _getStorageClient(app, bucket=bucket)
     if not bucket:
         bucket = app["bucket_name"]
     if key[0] == "/":
@@ -376,7 +412,7 @@ def getURIFromKey(app, bucket=None, key=None):
 async def getStorJSONObj(app, key, bucket=None):
     """Get object identified by key and read as JSON"""
 
-    client = _getStorageClient(app)
+    client = _getStorageClient(app, bucket=bucket)
     if not bucket:
         bucket = app["bucket_name"]
     if key[0] == "/":
@@ -411,7 +447,7 @@ async def getStorBytes(app,
                        ):
     """Get object identified by key and read as bytes"""
 
-    client = _getStorageClient(app)
+    client = _getStorageClient(app, bucket=bucket)
     if not bucket:
         bucket = app["bucket_name"]
     if key[0] == "/":
@@ -533,7 +569,7 @@ async def getHyperChunks(app,
 async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
     """Store byte string as S3 object with given key"""
 
-    client = _getStorageClient(app)
+    client = _getStorageClient(app, bucket=bucket)
     if not bucket:
         bucket = app["bucket_name"]
     if key[0] == "/":
@@ -552,7 +588,7 @@ async def putStorBytes(app, key, data, filter_ops=None, bucket=None):
 async def putStorJSONObj(app, key, json_obj, bucket=None):
     """Store JSON data as storage object with given key"""
 
-    client = _getStorageClient(app)
+    client = _getStorageClient(app, bucket=bucket)
     if not bucket:
         bucket = app["bucket_name"]
     if key[0] == "/":
@@ -569,7 +605,7 @@ async def putStorJSONObj(app, key, json_obj, bucket=None):
 async def deleteStorObj(app, key, bucket=None):
     """Delete storage object identfied by given key"""
 
-    client = _getStorageClient(app)
+    client = _getStorageClient(app, bucket=bucket)
     if not bucket:
         bucket = app["bucket_name"]
     if key[0] == "/":
@@ -585,7 +621,7 @@ async def getStorObjStats(app, key, bucket=None):
     """Return etag, size, and last modified time for given object"""
     # TBD - will need to be refactored to handle azure responses
 
-    client = _getStorageClient(app)
+    client = _getStorageClient(app, bucket=bucket)
     if not bucket:
         bucket = app["bucket_name"]
     stats = {}
@@ -606,7 +642,7 @@ async def getStorObjStats(app, key, bucket=None):
 async def isStorObj(app, key, bucket=None):
     """Test if the given key maps to S3 object"""
     found = False
-    client = _getStorageClient(app)
+    client = _getStorageClient(app, bucket=bucket)
     if not bucket:
         bucket = app["bucket_name"]
     else:
@@ -630,7 +666,7 @@ async def getStorKeys(
     limit=None,
 ):
     # return keys matching the arguments
-    client = _getStorageClient(app)
+    client = _getStorageClient(app, bucket=bucket)
     if not bucket:
         bucket = app["bucket_name"]
     msg = f"getStorKeys('{prefix}','{deliminator}','{suffix}', "
