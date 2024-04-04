@@ -281,7 +281,7 @@ class S3Client:
 
         start_time = time.time()
         if length > 0:
-            range = f"bytes={offset} - {offset + length - 1}"
+            range = f"bytes={offset}-{offset + length - 1}"
             log.info(f"storage range request: {range}")
         log.debug(f"s3Client.get_object({bucket}/{key}) range: {range} start: {start_time}")
         session = self._app["session"]
