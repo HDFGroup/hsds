@@ -16,7 +16,7 @@ Run the following commands to install Docker on Linux/Ubuntu:
 7. Log out and back in again (you may also need to stop/start docker service)
 8. `docker ps` to verify that Docker is running.
 
-Install docker-compose:
+Install docker compose:
 
 1. See: <https://docs.docker.com/compose/install/>
 

@@ -9,7 +9,7 @@ Export environment variables as shown in "Sample .bashrc" below.
 2. Create a directory for storage files and set the ROOT_DIR environment variable to point to it
 3. Create a subdirectory under ROOT_DIR that will be the default location when "bucket" is not defined.
 4. Set the environment variable BUCKET_NAME to the name of the subdirectory
-5. Install Docker and docker-compose if necessary.  See [Docker Setup](setup_docker.md)
+5. Install Docker and docker compose if necessary.  See [Docker Setup](setup_docker.md)
 6. Get project source code: `$ git clone https://github.com/HDFGroup/hsds`
 7. Go to admin/config directory: `$ cd hsds/admin/config`
 8. Copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish.  Modify existing passwords (for admin, test_user1, test_user2) for security
@@ -53,5 +53,5 @@ To get the latest codes changes from the HSDS repo do the following:
 
 1. Shutdown the service: `$ stopall.sh`
 2. Get code changes: `$ git pull`
-3. Build a new Docker image: `$ docker-compose build`
+3. Build a new Docker image: `$ docker compose build`
 4. Start the service: `$ ./runall.sh`

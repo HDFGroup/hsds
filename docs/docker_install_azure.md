@@ -68,7 +68,7 @@ These environment variables will be passed to the Docker containers on startup.
 Follow the following steps to setup HSDS:
 
 1. SSH to the VM created above.  Replace [publicIpAddress] with the public IP displayed in the output of your VM creation command above: `ssh $VM_USER@[publicIpAddress]`
-2. Install Docker and docker-compose if necessary.   See [Docker Setup](setup_docker.md)
+2. Install Docker and docker compose if necessary.   See [Docker Setup](setup_docker.md)
 3. Get project source code: `git clone https://github.com/HDFGroup/hsds`
 4. If you plan to use HTTP Basic Auth (usernames and passwords managed by the service), go to hsds/admin/config directory: `cd admin/config`, and copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish.  Modify existing passwords (for admin, test_user1, test_user2, etc.) for security.  If you wish to use Azure Active Directory for authentication, follow the instructions in [Azure Active Directory Setup](azure_ad_setup.md)
 5. If group-level permissions are desired (See [Authorization](authorization.md)), copy the file "groups.default" to "groups.txt".  Modify existing groups as needed

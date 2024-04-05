@@ -27,4 +27,4 @@ fi
 
 echo "count $count"
 
-docker-compose -f docker-compose.yml up -d --scale hswritetest=$count
+docker compose -f docker-compose.yml up -d --scale hswritetest=$count

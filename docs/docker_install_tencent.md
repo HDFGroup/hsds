@@ -13,7 +13,7 @@ values should be fine.  Record the bucket name and endpoint value.
 8. For the security group, enable ports 22, and 80
 9. Start instance and ssh into the instance.  The following steps will be performed on the instance
 10. Install Python 3 (e.g. with Miniconda <https://docs.conda.io/en/latest/miniconda.html>)
-11. Install docker-compose by running: `$ curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose`, and `$ chmod +x /usr/local/bin/docker-compose` 
+11. Install docker compose by running: `$ curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker compose`, and `$ chmod +x /usr/local/bin/docker-compose`
 12. If docker is not running, start it with: `systemctl start docker`
 13. Get project source code: `$ git clone https://github.com/HDFGroup/hsds`
 14. Go to the hsds directory and run: `$ ./build.sh`
