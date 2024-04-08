@@ -27,7 +27,7 @@ AZURE_URI = "blob.core.windows.net/"  # preceded with "https://"
 
 
 def _getStorageProtocol(uri):
-    """ returns 's3://', 'file://', or 'https://...net/' prefix if pressent.
+    """ returns 's3://', 'file://', or 'https://...net/' prefix if present.
     If the prefix is in the form: https://myaccount.blob.core.windows.net/mycontainer
     (references Azure blob storage), return: https://myaccount.blob.core.windows.net/
     otherwise None """

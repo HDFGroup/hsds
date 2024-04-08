@@ -327,7 +327,6 @@ async def get_metadata_obj(app, obj_id, bucket=None):
     log.info(f"get_metadata_obj: {obj_id} bucket: {bucket}")
     if isValidDomain(obj_id):
         domain_bucket = getBucketForDomain(obj_id)
-        log.debug(f"tbd - domain_bucket: {domain_bucket}")
         if bucket and domain_bucket and bucket != domain_bucket:
             msg = f"get_metadata_obj for domain: {obj_id} but bucket param was: {bucket}"
             log.error(msg)
