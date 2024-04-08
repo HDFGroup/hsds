@@ -43,38 +43,78 @@ class IdUtilTest(unittest.TestCase):
             pass  # expected
 
     def testIsValidUuid(self):
-        group_id = "g-314d61b8-9954-11e6-a733-3c15c2da029e"
-        dataset_id = "d-4c48f3ae-9954-11e6-a3cd-3c15c2da029e"
-        ctype_id = "t-8c785f1c-9953-11e6-9bc2-0242ac110005"
-        chunk_id = "c-8c785f1c-9953-11e6-9bc2-0242ac110005_7_2"
+        group1_id = "g-314d61b8-9954-11e6-a733-3c15c2da029e"      # orig schema
+        group2_id = "g-314d61b8-995411e6-a733-3c15c2-da029e"
+        root_id = "g-f9aaa28e-d42e10e5-7122-2a065c-a6986d"
+        dataset1_id = "d-4c48f3ae-9954-11e6-a3cd-3c15c2da029e"    # orig schema
+        dataset2_id = "d-4c48f3ae-995411e6-a3cd-3c15c2-da029e"
+        ctype1_id = "t-8c785f1c-9953-11e6-9bc2-0242ac110005"      # orig schema
+        ctype2_id = "t-8c785f1c-995311e6-9bc2-0242ac-110005"
+        chunk1_id = "c-8c785f1c-9953-11e6-9bc2-0242ac110005_7_2"  # orig schema
+        chunk2_id = "c-8c785f1c-995311e6-9bc2-0242ac-110005_7_2"
         domain_id = "mybucket/bob/mydata.h5"
-        valid_ids = (group_id, dataset_id, ctype_id, chunk_id, domain_id)
+        s3_domain_id = "s3://mybucket/bob/mydata.h5"
+        file_domain_id = "file://mybucket/bob/mydata.h5"
+        azure_domain_id = "https://myaccount.blob.core.windows.net/mybucket/bob/mydata.h5"
+        valid_id_map = {
+            group1_id: "a49be-g-314d61b8-9954-11e6-a733-3c15c2da029e",
+            group2_id: "db/314d61b8-995411e6/g/a733-3c15c2-da029e/.group.json",
+            dataset1_id: "26928-d-4c48f3ae-9954-11e6-a3cd-3c15c2da029e",
+            dataset2_id: "db/4c48f3ae-995411e6/d/a3cd-3c15c2-da029e/.dataset.json",
+            ctype1_id: "5a9cf-t-8c785f1c-9953-11e6-9bc2-0242ac110005",
+            ctype2_id: "db/8c785f1c-995311e6/t/9bc2-0242ac-110005/.datatype.json",
+            chunk1_id: "dc4ce-c-8c785f1c-9953-11e6-9bc2-0242ac110005_7_2",
+            chunk2_id: "db/8c785f1c-995311e6/d/9bc2-0242ac-110005/7_2",
+            domain_id: "bob/mydata.h5/.domain.json",
+            s3_domain_id: "bob/mydata.h5/.domain.json",
+            file_domain_id: "bob/mydata.h5/.domain.json",
+            azure_domain_id: "bob/mydata.h5/.domain.json", }
+
         bad_ids = ("g-1e76d862", "/bob/mydata.h5")
 
-        self.assertTrue(isValidUuid(group_id))
-        self.assertFalse(isSchema2Id(group_id))
-        self.assertTrue(isValidUuid(group_id, obj_class="Group"))
-        self.assertTrue(isValidUuid(group_id, obj_class="group"))
-        self.assertTrue(isValidUuid(group_id, obj_class="groups"))
-        self.assertTrue(isValidUuid(dataset_id, obj_class="datasets"))
-        self.assertFalse(isSchema2Id(dataset_id))
-        self.assertTrue(isValidUuid(ctype_id, obj_class="datatypes"))
-        self.assertFalse(isSchema2Id(ctype_id))
-        self.assertTrue(isValidUuid(chunk_id, obj_class="chunks"))
-        self.assertFalse(isSchema2Id(chunk_id))
-        validateUuid(group_id)
+        self.assertTrue(isValidUuid(group1_id))
+        self.assertFalse(isSchema2Id(group1_id))
+        self.assertTrue(isValidUuid(group1_id, obj_class="Group"))
+        self.assertTrue(isValidUuid(group1_id, obj_class="group"))
+        self.assertTrue(isValidUuid(group1_id, obj_class="groups"))
+        self.assertTrue(isSchema2Id(root_id))
+        self.assertTrue(isValidUuid(root_id, obj_class="Group"))
+        self.assertTrue(isValidUuid(root_id, obj_class="group"))
+        self.assertTrue(isValidUuid(root_id, obj_class="groups"))
+        self.assertTrue(isRootObjId(root_id))
+        self.assertTrue(isValidUuid(dataset1_id, obj_class="datasets"))
+        self.assertFalse(isSchema2Id(dataset1_id))
+        self.assertTrue(isValidUuid(ctype1_id, obj_class="datatypes"))
+        self.assertFalse(isSchema2Id(ctype1_id))
+        self.assertTrue(isValidUuid(chunk1_id, obj_class="chunks"))
+        self.assertFalse(isSchema2Id(chunk1_id))
+        self.assertTrue(isValidUuid(group2_id))
+        self.assertTrue(isSchema2Id(group2_id))
+        self.assertTrue(isValidUuid(group2_id, obj_class="Group"))
+        self.assertTrue(isValidUuid(group2_id, obj_class="group"))
+        self.assertTrue(isValidUuid(group2_id, obj_class="groups"))
+        self.assertFalse(isRootObjId(group2_id))
+        self.assertTrue(isValidUuid(dataset2_id, obj_class="datasets"))
+        self.assertTrue(isSchema2Id(dataset2_id))
+        self.assertTrue(isValidUuid(ctype2_id, obj_class="datatypes"))
+        self.assertTrue(isSchema2Id(ctype2_id))
+        self.assertTrue(isValidUuid(chunk2_id, obj_class="chunks"))
+        self.assertTrue(isSchema2Id(chunk2_id))
+        validateUuid(group1_id)
         try:
-            isRootObjId(group_id)
+            isRootObjId(group1_id)
             self.assertTrue(False)
         except ValueError:
             # only works for v2 schema
             pass  # expected
 
-        for item in valid_ids:
+        for item in valid_id_map:
             self.assertTrue(isObjId(item))
             s3key = getS3Key(item)
             self.assertTrue(s3key[0] != "/")
             self.assertTrue(isS3ObjKey(s3key))
+            expected = valid_id_map[item]
+            self.assertEqual(s3key, expected)
             if item.find("/") > 0:
                 continue  # bucket name gets lost when domain ids get converted to s3keys
             objid = getObjId(s3key)

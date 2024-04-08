@@ -26,6 +26,8 @@ from aiohttp.web_exceptions import HTTPForbidden, HTTPBadRequest
 from .. import hsds_logger as log
 from .. import config
 
+S3_URI = "s3://"
+
 
 class S3Client:
     """
@@ -268,16 +270,20 @@ class S3Client:
         """
 
         range = ""
-        if length > 0:
-            range = f"bytes={offset} - {offset + length - 1}"
-            log.info(f"storage range request: {range}")
 
         if not bucket:
             log.error("get_object - bucket not set")
             raise HTTPInternalServerError()
 
+        # remove s3:// prefix if present
+        if bucket.startswith(S3_URI):
+            bucket = bucket[len(S3_URI):]
+
         start_time = time.time()
-        log.debug(f"s3Client.get_object({bucket}/{key}) start: {start_time}")
+        if length > 0:
+            range = f"bytes={offset}-{offset + length - 1}"
+            log.info(f"storage range request: {range}")
+        log.debug(f"s3Client.get_object({bucket}/{key}) range: {range} start: {start_time}")
         session = self._app["session"]
         self._renewToken()
         kwargs = self._get_client_kwargs()
@@ -342,6 +348,10 @@ class S3Client:
             log.error("put_object - bucket not set")
             raise HTTPInternalServerError()
 
+        # remove s3:// prefix if present
+        if bucket.startswith(S3_URI):
+            bucket = bucket[len(S3_URI):]
+
         start_time = time.time()
         log.debug(f"s3Client.put_object({bucket}/{key} start: {start_time}")
         session = self._app["session"]
@@ -391,9 +401,14 @@ class S3Client:
 
     async def delete_object(self, key, bucket=None):
         """Deletes the object at the given key"""
+
         if not bucket:
             log.error("delete_object - bucket not set")
             raise HTTPInternalServerError()
+
+        # remove s3:// prefix if present
+        if bucket.startswith(S3_URI):
+            bucket = bucket[len(S3_URI):]
 
         start_time = time.time()
         log.debug(f"s3Client.delete_object({bucket}/{key} start: {start_time}")
@@ -437,6 +452,11 @@ class S3Client:
         if not bucket:
             log.error("is_object - bucket not set")
             raise HTTPInternalServerError()
+
+        # remove s3:// prefix if present
+        if bucket.startswith(S3_URI):
+            bucket = bucket[len(S3_URI):]
+
         start_time = time.time()
         found = False
         session = self._app["session"]
@@ -473,6 +493,15 @@ class S3Client:
 
     async def get_key_stats(self, key, bucket=None):
         """Get ETag, size, and last modified time for given object"""
+
+        if not bucket:
+            log.error("get_key_stats - bucket not set")
+            raise HTTPInternalServerError()
+
+        # remove s3:// prefix if present
+        if bucket.startswith(S3_URI):
+            bucket = bucket[len(S3_URI):]
+
         start_time = time.time()
         session = self._app["session"]
         self._renewToken()
@@ -577,6 +606,11 @@ class S3Client:
         if not bucket:
             log.error("list_keys - bucket not set")
             raise HTTPInternalServerError()
+
+        # remove s3:// prefix if present
+        if bucket.startswith(S3_URI):
+            bucket = bucket[len(S3_URI):]
+
         msg = f"list_keys('{prefix}','{deliminator}','{suffix}', "
         msg += f"include_stats={include_stats}, "
         msg += f"callback {'set' if callback is not None else 'not set'}"

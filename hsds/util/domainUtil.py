@@ -51,22 +51,103 @@ def isIPAddress(s):
     return True
 
 
+def _stripProtocol(uri):
+    """ returns part of the uri or bucket name after any protocol specification:
+      'xyz://' or 'https://myaccount.blob.core.windows.net/'
+    """
+
+    if not uri or uri.startswith("/"):
+        return uri
+
+    n = uri.find("://")
+    if n < 0:
+        return uri
+
+    uri = uri[(n + 3):]
+    parts = uri.split("/")
+    if len(parts) == 1:
+        return uri
+    if parts[0].endswith(".blob.core.windows.net"):
+        # part of the URI to indicate azure blob storage, skip it
+        parts = parts[1:]
+    return "/".join(parts)
+
+
+def isValidBucketName(bucket):
+    """
+    Check whether the given bucket name is valid
+    """
+    is_valid = True
+
+    if bucket is None:
+        return True
+
+    bucket = _stripProtocol(bucket)
+
+    # Bucket names must contain at least 1 character
+    if len(bucket) < 1:
+        is_valid = False
+
+    # Bucket names can consist only of alphanumeric characters, underscores, dots, and hyphens
+    # other than
+    if not re.fullmatch("[a-zA-Z0-9_\\.\\-]+", bucket):
+        is_valid = False
+
+    return is_valid
+
+
 def getBucketForDomain(domain):
     """get the bucket for the domain or None
     if no bucket is given
     """
     if not domain:
         return None
-    if domain[0] == "/":
+
+    # strip s3://, file://, etc
+    domain_path = _stripProtocol(domain)
+    if domain_path.startswith("/"):
         # no bucket specified
         return None
-    index = domain.find("/")
-    if index < 0:
+
+    nchars = len(domain) - len(domain_path)
+    protocol = domain[:nchars]  # save this so we can re-attach to the bucket name
+
+    parts = domain_path.split("/")
+    if len(parts) < 2:
         # invalid domain?
+        msg = f"invalid domain: {domain}"
+        raise HTTPBadRequest(reason=msg)
+    bucket_name = parts[0]
+    if not isValidBucketName(bucket_name):
         return None
-    if not isValidBucketName(domain[:index]):
+
+    # fit back the protocol prefix if set
+    if protocol:
+        bucket = protocol
+    else:
+        bucket = ""
+    bucket += bucket_name
+    return bucket
+
+
+def getPathForDomain(domain):
+    """
+    Return the non-bucket part of the domain
+    """
+    if not domain:
         return None
-    return domain[:index]
+
+    domain_path = _stripProtocol(domain)
+    if domain_path.startswith("/"):
+        # no bucket
+        return domain_path
+
+    nindex = domain_path.find("/")
+    if nindex > 0:
+        # don't include the bucket
+        domain_path = domain_path[nindex:]
+
+    return domain_path
 
 
 def getParentDomain(domain):
@@ -161,7 +242,7 @@ def validateDomainPath(path):
     if len(path) < 1:
         raise ValueError("Domain path too short")
     if path == "/":
-        return  # default buckete, root folder
+        return  # default bucket, root folder
     if path[:-1].find("/") == -1:
         msg = "Domain path should have at least one '/' before trailing slash"
         raise ValueError(msg)
@@ -262,23 +343,11 @@ def getDomainFromRequest(request, validate=True, allow_dns=True):
         pass  # no bucket specified
 
     if bucket and validate:
-        if (bucket.find("/") >= 0) or (not isValidBucketName(bucket)):
+        if not isValidBucketName(bucket):
             raise ValueError(f"bucket name: {bucket} is not valid")
         if domain[0] == "/":
             domain = bucket + domain
     return domain
-
-
-def getPathForDomain(domain):
-    """
-    Return the non-bucket part of the domain
-    """
-    if not domain:
-        return None
-    index = domain.find("/")
-    if index < 1:
-        return domain  # no bucket
-    return domain[(index):]
 
 
 def verifyRoot(domain_json):
@@ -300,23 +369,3 @@ def getLimits():
     limits["max_request_size"] = int(config.get("max_request_size"))
 
     return limits
-
-
-def isValidBucketName(bucket):
-    """
-    Check whether the given bucket name is valid
-    """
-    is_valid = True
-
-    if bucket is None:
-        return True
-
-    # Bucket names must contain at least 1 character
-    if len(bucket) < 1:
-        is_valid = False
-
-    # Bucket names can consist only of alphanumeric characters, underscores, dots, and hyphens
-    if not re.fullmatch("[a-zA-Z0-9_\\.\\-]+", bucket):
-        is_valid = False
-
-    return is_valid

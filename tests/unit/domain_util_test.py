@@ -19,7 +19,7 @@ from hsds.util.domainUtil import (
     isValidDomainPath,
     getBucketForDomain,
     getPathForDomain,
-    isValidBucketName
+    isValidBucketName,
 )
 
 
@@ -52,7 +52,11 @@ class DomainUtilTest(unittest.TestCase):
         for domain in invalid_domains:
             self.assertFalse(isValidDomain(domain))
 
-        valid_domains = ("/gov/nasa/nex", "/home")
+        azure_path = "https://myaccount.blob.core.windows.net//home"
+        s3_path = "s3://mybucket/home"
+        file_path = "file://mybucket/home"
+
+        valid_domains = ("/gov/nasa/nex", "/home", s3_path, file_path, azure_path)
         for domain in valid_domains:
             self.assertTrue(isValidDomain(domain))
 
@@ -121,6 +125,24 @@ class DomainUtilTest(unittest.TestCase):
         bucket = getBucketForDomain(domain)
         self.assertEqual(bucket, "mybucket")
 
+        domain = "s3://nasaeos/gov/nasa/nex/climate.h5"
+        domain_path = getPathForDomain(domain)
+        self.assertEqual("/gov/nasa/nex/climate.h5", domain_path)
+        bucket = getBucketForDomain(domain)
+        self.assertEqual(bucket, "s3://nasaeos")
+
+        domain = "file://nasaeos/gov/nasa/nex/climate.h5"
+        domain_path = getPathForDomain(domain)
+        self.assertEqual("/gov/nasa/nex/climate.h5", domain_path)
+        bucket = getBucketForDomain(domain)
+        self.assertEqual(bucket, "file://nasaeos")
+
+        domain = "https://myaccount.blob.core.windows.net/nasaeos/gov/nasa/nex/climate.h5"
+        domain_path = getPathForDomain(domain)
+        self.assertEqual("/gov/nasa/nex/climate.h5", domain_path)
+        bucket = getBucketForDomain(domain)
+        self.assertEqual(bucket, "https://myaccount.blob.core.windows.net/nasaeos")
+
     def testIsValidBucketName(self):
         # Illegal characters
         self.assertFalse(isValidBucketName("bucket;"))
@@ -130,6 +152,7 @@ class DomainUtilTest(unittest.TestCase):
         self.assertFalse(isValidBucketName("bucket "))
         self.assertFalse(isValidBucketName("bucket>"))
         self.assertFalse(isValidBucketName(""))
+        self.assertFalse(isValidBucketName("s3:/mybucket"))
 
         self.assertTrue(isValidBucketName("bucket"))
         self.assertTrue(isValidBucketName("bucket_"))
@@ -142,6 +165,9 @@ class DomainUtilTest(unittest.TestCase):
         self.assertTrue(isValidBucketName("bucket1"))
         self.assertTrue(isValidBucketName("buck-et"))
         self.assertTrue(isValidBucketName("bucket-1.bucket1-.1"))
+
+        self.assertTrue(isValidBucketName("s3://mybucket"))
+        self.assertTrue(isValidBucketName("file://mybucket"))
 
 
 if __name__ == "__main__":

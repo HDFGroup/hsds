@@ -279,7 +279,12 @@ async def PUT_Chunk(request):
             log.error(msg)
             raise HTTPInternalServerError()
 
-        input_arr = bytesToArray(input_bytes, select_dt, [num_elements, ])
+        try:
+            input_arr = bytesToArray(input_bytes, select_dt, [num_elements, ])
+        except ValueError as ve:
+            log.error(f"bytesToArray threw ValueError: {ve}")
+            raise HTTPInternalServerError()
+
         if bcshape:
             input_arr = input_arr.reshape(bcshape)
             log.debug(f"broadcasting {bcshape} to mshape {mshape}")

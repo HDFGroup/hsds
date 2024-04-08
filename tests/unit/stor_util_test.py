@@ -23,7 +23,7 @@ import hsds.config as config
 from hsds.util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
 from hsds.util.storUtil import getStorBytes, isStorObj
 from hsds.util.storUtil import getStorObjStats, getStorKeys, releaseStorageClient
-from hsds.util.storUtil import getStorageDriverName
+from hsds.util.storUtil import _getStorageDriverName, getBucketFromStorURI, getKeyFromStorURI
 
 
 class StorUtilTest(unittest.TestCase):
@@ -31,10 +31,29 @@ class StorUtilTest(unittest.TestCase):
         super(StorUtilTest, self).__init__(*args, **kwargs)
         # main
 
-    async def stor_util_test(self, app):
+    def s3path_test(self):
+        uri = "s3://mybucket/afolder/afile.h5"
+        self.assertEqual(getBucketFromStorURI(uri), "mybucket")
+        self.assertEqual(getKeyFromStorURI(uri), "afolder/afile.h5")
+        uri = "file://mybucket/afolder/afile.h5"
+        self.assertEqual(getBucketFromStorURI(uri), "mybucket")
+        self.assertEqual(getKeyFromStorURI(uri), "afolder/afile.h5")
+        uri = "https://myaccount.blob.core.windows.net/mybucket/afolder/afile.h5"
+        self.assertEqual(getBucketFromStorURI(uri), "mybucket")
+        self.assertEqual(getKeyFromStorURI(uri), "afolder/afile.h5")
 
-        storage_driver = getStorageDriverName(app)
-        print(f"Using storage driver: {storage_driver}")
+    async def stor_util_test(self, app):
+        default_storage_driver = _getStorageDriverName(app)
+        print(f"Default storage driver: {default_storage_driver}")
+        uri = "mybucket/afolder/afile.h5"
+        self.assertEqual(_getStorageDriverName(app, bucket=uri), default_storage_driver)
+        uri = "s3://mybucket/afolder/afile.h5"
+        self.assertEqual(_getStorageDriverName(app, bucket=uri), "S3Client")
+        uri = "file://mybucket/afolder/afile.h5"
+        self.assertEqual(_getStorageDriverName(app, bucket=uri), "FileClient")
+        uri = "https://myaccount.blob.core.windows.net/mybucket/afolder/afile.h5"
+        self.assertEqual(_getStorageDriverName(app, bucket=uri), "AzureBlobClient")
+
         try:
             await getStorKeys(app)
         except HTTPNotFound:
@@ -104,7 +123,6 @@ class StorUtilTest(unittest.TestCase):
         for i in range(nchars):
             bucket_name[i] = ord("a") + random.randint(0, 25)
         bucket_name = bucket_name.decode("ascii")
-        print("bucket name:", bucket_name)
 
         try:
             await getStorBytes(app, f"{key_folder}/bogus", bucket=bucket_name)
@@ -145,8 +163,6 @@ class StorUtilTest(unittest.TestCase):
 
         # list keys in folder - get all subkeys
         key_list = await getStorKeys(app, prefix=key_folder + "/", deliminator="")
-        for key in key_list:
-            print("got key:", key)
 
         self.assertEqual(len(key_list), 7)
         self.assertTrue(f"{key_folder}/obj_json_1" in key_list)
@@ -159,8 +175,6 @@ class StorUtilTest(unittest.TestCase):
 
         # get just sub-folders
         key_list = await getStorKeys(app, prefix=key_folder + "/", deliminator="/")
-        for key in key_list:
-            print("got delim key:", key)
         self.assertEqual(len(key_list), 1)
         self.assertTrue(f"{subkey_folder}/" in key_list)
 
@@ -171,10 +185,6 @@ class StorUtilTest(unittest.TestCase):
 
         # get keys with obj etag, size, last modified
         key_dict = await getStorKeys(app, prefix=key_folder + "/", include_stats=True)
-
-        for k in key_dict:
-            v = key_dict[k]
-            print(f"{k}: {v}")
 
         now = time.time()
         for k in key_dict:
@@ -214,9 +224,9 @@ class StorUtilTest(unittest.TestCase):
         await releaseStorageClient(app)
 
     def testStorUtil(self):
+        # run synchronus tests
+        self.s3path_test()
 
-        cors_domain = config.get("cors_domain")
-        print(f"cors_domain: [{cors_domain}]")
         bucket = config.get("hsds_unit_test_bucket")
         if not bucket:
             msg = "No bucket configured, create bucket and export "
@@ -227,11 +237,12 @@ class StorUtilTest(unittest.TestCase):
 
         # we need to setup a asyncio loop to query s3
         loop = asyncio.get_event_loop()
-        session = get_session(loop=loop)
+        session = get_session()
 
         app = {}
         app["session"] = session
         app["bucket_name"] = bucket
+        app["storage_clients"] = {}
         app["loop"] = loop
 
         loop.run_until_complete(self.stor_util_test(app))

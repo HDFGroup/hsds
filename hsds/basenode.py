@@ -567,6 +567,7 @@ def baseInit(node_type):
     app["start_time"] = int(time.time())  # seconds after epoch
     app["register_time"] = 0
     app["max_task_count"] = config.get("max_task_count")
+    app["storage_clients"] = {}  # storage client drivers
 
     is_standalone = config.getCmdLineArg("standalone")
 

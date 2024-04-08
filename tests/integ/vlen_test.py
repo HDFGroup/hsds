@@ -664,8 +664,6 @@ class VlenTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers_bin_rsp)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers["Content-Type"], "application/octet-stream")
-        for k in rsp.headers:
-            print(f"{k}: {rsp.headers[k]}")
         data = rsp.content
         self.assertEqual(len(data), 192)
         arr_rsp = bytesToArray(data, dt_compound, [count,])

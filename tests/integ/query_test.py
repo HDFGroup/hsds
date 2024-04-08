@@ -273,7 +273,7 @@ class QueryTest(unittest.TestCase):
             )
             return
 
-        s3path = "s3://" + hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
+        s3path = hdf5_sample_bucket + "/data/hdf5test" + "/snp500.h5"
         SNP500_ROWS = 3207353
 
         snp500_json = helper.getHDF5JSON("snp500.json")
@@ -281,16 +281,14 @@ class QueryTest(unittest.TestCase):
             print("snp500.json file not found, skipping testChunkedRefDataset")
             return
 
-        if "snp500.h5" not in snp500_json:
-            self.assertTrue(False)
+        self.assertTrue("snp500.h5" in snp500_json)
 
         chunk_dims = [60000, ]  # chunk layout used in snp500.h5 file
         num_chunks = (SNP500_ROWS // chunk_dims[0]) + 1
 
         chunk_info = snp500_json["snp500.h5"]
         dset_info = chunk_info["/dset"]
-        if "byteStreams" not in dset_info:
-            self.assertTrue(False)
+        self.assertTrue("byteStreams" in dset_info)
         byteStreams = dset_info["byteStreams"]
 
         self.assertEqual(len(byteStreams), num_chunks)
@@ -319,9 +317,7 @@ class QueryTest(unittest.TestCase):
         chunkinfo_type = {"class": "H5T_COMPOUND", "fields": fields}
         req = self.endpoint + "/datasets"
         # Store 40 chunk locations
-        chunkinfo_dims = [
-            num_chunks,
-        ]
+        chunkinfo_dims = [num_chunks, ]
         payload = {"type": chunkinfo_type, "shape": chunkinfo_dims}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
@@ -374,9 +370,7 @@ class QueryTest(unittest.TestCase):
 
         data = {
             "type": datatype,
-            "shape": [
-                SNP500_ROWS,
-            ],
+            "shape": [SNP500_ROWS, ],
         }
         layout = {
             "class": "H5D_CHUNKED_REF_INDIRECT",

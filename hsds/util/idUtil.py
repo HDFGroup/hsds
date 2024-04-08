@@ -21,6 +21,43 @@ from aiohttp.web_exceptions import HTTPServiceUnavailable
 from .. import hsds_logger as log
 
 
+S3_URI = "s3://"
+FILE_URI = "file://"
+AZURE_URI = "blob.core.windows.net/"  # preceded with "https://"
+
+
+def _getStorageProtocol(uri):
+    """ returns 's3://', 'file://', or 'https://...net/' prefix if present.
+    If the prefix is in the form: https://myaccount.blob.core.windows.net/mycontainer
+    (references Azure blob storage), return: https://myaccount.blob.core.windows.net/
+    otherwise None """
+
+    if not uri:
+        protocol = None
+    elif uri.startswith(S3_URI):
+        protocol = S3_URI
+    elif uri.startswith(FILE_URI):
+        protocol = FILE_URI
+    elif uri.startswith("https://") and uri.find(AZURE_URI) > 0:
+        n = uri.find(AZURE_URI) + len(AZURE_URI)
+        protocol = uri[:n]
+    elif uri.find("://") >= 0:
+        raise ValueError(f"storage uri: {uri} not supported")
+    else:
+        protocol = None
+    return protocol
+
+
+def _getBaseName(uri):
+    """ Return the part of the URI after the storage protocol (if any) """
+
+    protocol = _getStorageProtocol(uri)
+    if not protocol:
+        return uri
+    else:
+        return uri[len(protocol):]
+
+
 def getIdHash(id):
     """Return md5 prefix based on id value"""
     m = hashlib.new("md5")
@@ -146,14 +183,19 @@ def getS3Key(id):
         Chunk ids have the chunk index added after the slash:
         "db/id[0:16]/d/id[16:32]/x_y_z
 
-    For domain id's return a key with the .domain suffix and no
-    preceeding slash
+    For domain id's:
+        Return a key with the .domain suffix and no preceeding slash.
+        For non-default buckets, use the format: <bucket_name>/s3_key
+        If the id has a storage specifier ("s3://", "file://", etc.)
+        include that along with the bucket name. e.g.: "s3://mybucket/a_folder/a_file.h5"
     """
-    if id.find("/") > 0:
+
+    base_id = _getBaseName(id)  # strip any s3://, etc.
+    if base_id.find("/") > 0:
         # a domain id
         domain_suffix = ".domain.json"
-        index = id.find("/") + 1
-        key = id[index:]
+        index = base_id.find("/") + 1
+        key = base_id[index:]
         if not key.endswith(domain_suffix):
             if key[-1] != "/":
                 key += "/"
