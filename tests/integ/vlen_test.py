@@ -711,9 +711,12 @@ class VlenTest(unittest.TestCase):
                 # strings are showing up as bytes in the response
                 self.assertEqual(req_item, rsp_item.decode())
 
-    def testPutVLenUTF8(self):
+    def testPutVlenVlenError(self):
         # Test PUT value for 1d dataset with vlen seq of vlen utf-8 strings
-        print("testPutVLenUTF8", self.base_domain)
+        # HSDS does not currently support this datatype, but previous versions
+        # of HSDS crashed when a request contained them. This test is to
+        # ensure that HSDS still responds successfully with an error.
+        print("testPutVlenVlenError", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
         req = self.endpoint + "/"
@@ -758,6 +761,11 @@ class VlenTest(unittest.TestCase):
         payload = {"value": data}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertTrue(rsp.status_code >= 400)
+
+        # Check that HSDS still responds to requests by getting the root
+        req = self.endpoint + "/"
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
 
