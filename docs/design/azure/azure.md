@@ -28,7 +28,7 @@ The current implementation of HSDS uses these AWS specific technologies:
 - AWS S3 - Storage of HDF data
 - AWS DynamoDB - HSDS usernames and passwords
 
-When running HSDS on a single VM using Docker, there should be no differences between AWS and Azure as far as how containers are set (i.e. the same docker-compose configuration should work for both).  
+When running HSDS on a single VM using Docker, there should be no differences between AWS and Azure as far as how containers are set (i.e. the same docker compose configuration should work for both).
 
 For running HSDS in a self-managed Kubernetes cluster, this should also work the same way on Azure.  In addition, both Amazon and Microsoft offers a supported Kubernetes services: AWS EKS and Azure AKS.  But self-hosted Kubernetes, vs AWS EKS vs. Azure should have minimal differences given common Kubernetes API and command line tools (e.g. kubectl), so we won't address Kubernetes differences here.
 

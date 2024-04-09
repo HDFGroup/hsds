@@ -4,7 +4,7 @@ Installation using Docker with AWS S3 storage
 Export environment variables as shown in "Sample .bashrc" below.
 
 1. Install Python 3 (e.g. with Miniconda <https://docs.conda.io/en/latest/miniconda.html>)
-2. Install Docker and docker-compose if necessary. See [Docker Setup](setup_docker.md) 
+2. Install Docker and docker compose if necessary. See [Docker Setup](setup_docker.md)
 3. Create a bucket for HSDS, using aws cli tools or aws management console
 4. Get project source code: `$ git clone https://github.com/HDFGroup/hsds`
 5. Build the docker image: `$ ./build.sh --nolint`

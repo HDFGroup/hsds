@@ -132,8 +132,8 @@ if [[ ${NO_DOCKER} ]]; then
   echo "using password file: ${PASSWORD_FILE}"
      
 else
-    # check that docker-compose is available
-    docker-compose --version >/dev/null || exit 1
+    # check that docker compose is available
+    docker compose --version >/dev/null || exit 1
     if [[ -z ${COMPOSE_PROJECT_NAME} ]]; then
       export COMPOSE_PROJECT_NAME=hsds  # use "hsds_" as prefix for container names
     fi
@@ -201,12 +201,12 @@ if [[ $NO_DOCKER ]] ; then
 else
   if [[ $DOCKER_CMD == "down" ]]; then
     # use the compose file to shutdown the sevice
-    echo "Running docker-compose -f ${COMPOSE_FILE} down"
-    docker-compose -f ${COMPOSE_FILE} down
+    echo "Running docker compose -f ${COMPOSE_FILE} down"
+    docker compose -f ${COMPOSE_FILE} down
     exit 0  # can quit now
   else
-    echo "Running docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}"
-    docker-compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
+    echo "Running docker compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}"
+    docker compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
   fi
 
   # wait for the server to be ready
