@@ -15,7 +15,6 @@
 
 import asyncio
 import json
-import time
 import numpy as np
 from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPForbidden
@@ -35,7 +34,7 @@ from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
 from .util.arrayUtil import arrayToBytes, bytesToArray, jsonToArray
 from .util.hdf5dtype import createDataType
 from .util.rangegetUtil import ChunkLocation, chunkMunge, getHyperChunkIndex, getHyperChunkFactors
-
+from .util.timeUtil import getNow
 from . import config
 from . import hsds_logger as log
 from .dset_lib import getFillValue
@@ -166,7 +165,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
             del pending_s3_write_tasks[obj_id]
         return None
 
-    now = time.time()
+    now = getNow(app)
 
     last_update_time = now
     if obj_id in dirty_ids:
@@ -315,7 +314,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
         notify_objs[root_id] = bucket
 
     # calculate time to do the write
-    elapsed_time = time.time() - now
+    elapsed_time = getNow(app) - now
     log.info(f"s3 write for {obj_id} took {elapsed_time:.3f}s")
     return obj_id
 
@@ -368,7 +367,7 @@ async def get_metadata_obj(app, obj_id, bucket=None):
             store_read_timeout = float(config.get("store_read_timeout", default=2.0))
             log.debug(f"store_read_timeout: {store_read_timeout}")
             store_read_sleep = float(config.get("store_read_sleep_interval", default=0.1))
-            while time.time() - read_start_time < store_read_timeout:
+            while getNow(app) - read_start_time < store_read_timeout:
                 log.debug(f"waiting for pending s3 read {s3_key}, sleeping")
                 await asyncio.sleep(store_read_sleep)
                 if obj_id in meta_cache:
@@ -384,13 +383,13 @@ async def get_metadata_obj(app, obj_id, bucket=None):
         if not obj_json:
             log.debug(f"getS3JSONObj({obj_id}, bucket={bucket})")
             if obj_id not in pending_s3_read:
-                pending_s3_read[obj_id] = time.time()
+                pending_s3_read[obj_id] = getNow(app)
             # read S3 object as JSON
             try:
                 obj_json = await getStorJSONObj(app, s3_key, bucket=bucket)
                 # read complete - remove from pending map
                 if obj_id in pending_s3_read:
-                    elapsed_time = time.time() - pending_s3_read[obj_id]
+                    elapsed_time = getNow(app) - pending_s3_read[obj_id]
                     log.info(f"s3 read for {obj_id} took {elapsed_time}")
                 else:
                     log.warn(f"s3 read complete but pending object: {obj_id} not found")
@@ -461,7 +460,7 @@ async def save_metadata_obj(
     meta_cache[obj_id] = obj_json
 
     meta_cache.setDirty(obj_id)
-    now = time.time()
+    now = getNow(app)
     log.debug(f"setting dirty_ids[{obj_id}] = ({now}, {bucket})")
     if isValidUuid(obj_id) and not bucket:
         log.warn(f"bucket is not defined for save_metadata_obj: {obj_id}")
@@ -1065,7 +1064,7 @@ async def get_chunk(
                 config.get("store_read_sleep_interval", default=0.1)
             )
 
-            while time.time() - read_start_time < store_read_timeout:
+            while getNow(app) - read_start_time < store_read_timeout:
                 log.debug("waiting for pending s3 read, sleeping")
                 await asyncio.sleep(store_read_sleep_interval)
                 if chunk_id in chunk_cache:
@@ -1079,7 +1078,7 @@ async def get_chunk(
 
         if chunk_arr is None:
             if chunk_id not in pending_s3_read:
-                pending_s3_read[chunk_id] = time.time()
+                pending_s3_read[chunk_id] = getNow(app)
 
             try:
                 kwargs = {
@@ -1099,7 +1098,7 @@ async def get_chunk(
 
                 if chunk_id in pending_s3_read:
                     # read complete - remove from pending map
-                    elapsed_time = time.time() - pending_s3_read[chunk_id]
+                    elapsed_time = getNow(app) - pending_s3_read[chunk_id]
                     log.info(f"s3 read for {chunk_id} took {elapsed_time}")
                 else:
                     msg = f"expected to find {chunk_id} in "
@@ -1192,7 +1191,7 @@ def save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=None):
 
     # async write to S3
     dirty_ids = app["dirty_ids"]
-    now = time.time()
+    now = getNow(app)
     dirty_ids[chunk_id] = (now, bucket)
 
 
@@ -1233,7 +1232,7 @@ async def s3sync(app, s3_age_time=0):
             log.error(msg)
 
     update_count = 0
-    s3sync_start = time.time()
+    s3sync_start = getNow(app)
 
     log.info(f"s3sync - processing {len(dirty_ids)} dirty_ids")
     for obj_id in dirty_ids:
@@ -1335,7 +1334,7 @@ async def s3sync(app, s3_age_time=0):
 async def s3syncCheck(app):
     s3_sync_interval = config.get("s3_sync_interval")
     s3_age_time = config.get("s3_age_time", default=1)
-    last_update = time.time()
+    last_update = getNow(app)
     if app["node_state"] != "TERMINATING":
         s3_dirty_age_to_write = config.get("s3_dirty_age_to_write", default=20)
         log.debug(f"s3sync - s3_dirty_age_to_write is {s3_dirty_age_to_write}")
@@ -1373,11 +1372,11 @@ async def s3syncCheck(app):
 
         if update_count > 0:
             log.debug("s3syncCheck short sleep")
-            last_update = time.time()
+            last_update = getNow(app)
             # give other tasks a chance to run
             await asyncio.sleep(0)
         else:
-            last_update_delta = time.time() - last_update
+            last_update_delta = getNow(app) - last_update
             if last_update_delta > s3_sync_interval:
                 sleep_time = s3_sync_interval
             else:

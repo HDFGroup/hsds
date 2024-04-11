@@ -58,3 +58,13 @@ def elapsedTime(timestamp):
         ret_str += "{} minutes ".format(minutes)
     ret_str += "{} seconds".format(delta)
     return ret_str
+
+
+def getNow(app):
+    """
+    Get current time in unix timestamp
+
+    Returns a precise timestamp even on platforms where
+    time.time() has low resolution (e.g. Windows)
+    """
+    return (time.perf_counter() - app["start_time_relative"]) + app["start_time"]

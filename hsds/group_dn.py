@@ -13,7 +13,6 @@
 # data node of hsds cluster
 #
 
-import time
 import asyncio
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
@@ -22,6 +21,7 @@ from aiohttp.web import json_response
 
 from .util.idUtil import isValidUuid, isSchema2Id, isRootObjId, getRootObjId
 from .util.domainUtil import isValidBucketName
+from .util.timeUtil import getNow
 from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj
 from .datanode_lib import save_metadata_obj, delete_metadata_obj
 from . import hsds_logger as log
@@ -121,7 +121,7 @@ async def POST_Group(request):
         raise HTTPInternalServerError()
 
     # ok - all set, create group obj
-    now = time.time()
+    now = getNow(app)
 
     group_json = {
         "id": group_id,
@@ -188,7 +188,7 @@ async def PUT_Group(request):
         log.error(f"Expected root id for flush but got: {root_id}")
         raise HTTPInternalServerError()
 
-    flush_start = time.time()
+    flush_start = getNow(app)
     flush_set = set()
     dirty_ids = app["dirty_ids"]
 
@@ -204,7 +204,7 @@ async def PUT_Group(request):
     log.debug(f"flushop - waiting on {len(flush_set)} items")
 
     if len(flush_set) > 0:
-        while time.time() - flush_start < flush_timeout:
+        while getNow(app) - flush_start < flush_timeout:
             await asyncio.sleep(flush_sleep_interval)  # wait a bit
             # check to see if the items in our flush set are still there
             remaining_set = set()
@@ -322,7 +322,7 @@ async def POST_Root(request):
             log.error("unexpected value for timestamp: {params}")
             raise HTTPInternalServerError()
     else:
-        timestamp = time.time()
+        timestamp = getNow(app)
 
     log.info(f"POST_Root: {root_id} bucket: {bucket} timestamp: {timestamp}")
 

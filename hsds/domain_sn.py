@@ -16,7 +16,6 @@
 import asyncio
 import json
 import os.path as op
-import time
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
@@ -37,6 +36,7 @@ from .util.domainUtil import getPathForDomain, getLimits
 from .util.storUtil import getStorKeys, getCompressors
 from .util.boolparser import BooleanParser
 from .util.globparser import globmatch
+from .util.timeUtil import getNow
 from .servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
 from .servicenode_lib import getRootInfo, checkBucketAccess, doFlush, getDomainResponse
 from .basenode import getVersion
@@ -901,7 +901,7 @@ async def PUT_Domain(request):
             post_params = {"timestamp": 0}  # have scan run immediately
             if bucket:
                 post_params["bucket"] = bucket
-            req_send_time = time.time()
+            req_send_time = getNow(app)
             await http_post(app, notify_req, data={}, params=post_params)
 
             # Poll until the scan_complete time is greater than
@@ -913,7 +913,7 @@ async def PUT_Domain(request):
                 if scan_time > req_send_time:
                     log.info(f"scan complete for root: {root_id}")
                     break
-                if time.time() - req_send_time > MAX_WAIT_TIME:
+                if getNow(app) - req_send_time > MAX_WAIT_TIME:
                     log.warn(f"scan failed to complete in {MAX_WAIT_TIME} seconds for {root_id}")
                     raise HTTPServiceUnavailable()
                 log.debug(f"do_rescan sleeping for {RESCAN_SLEEP_TIME}s")
