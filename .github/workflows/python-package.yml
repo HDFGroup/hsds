@@ -94,7 +94,7 @@ jobs:
       - name: Wait for node startup
         shell: bash
         run: |
-          sleep 45
+          sleep 90
 
       - name: Run HSDS tests
         if: ${{!(matrix.build-method == 'docker' && matrix.os == 'windows-latest')}}
