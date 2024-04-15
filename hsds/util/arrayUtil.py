@@ -368,10 +368,22 @@ def getElementCount(buffer, offset=0):
 
 def readElement(buffer, offset, arr, index, dt):
     """
-    Read element from bytearrray
-    """
-    # print(f"readElement, offset: {offset}, index: {index} dt: {dt}")
+    Read a single element from buffer into array.
 
+    Parameters:
+        buffer (bytearray): Byte array to read an element from.
+        offset (int): Starting offset in the buffer.
+        arr (numpy.ndarray): Array to store the element.
+        index (int): Index in 'arr' at which to store the element.
+        dt (numpy.dtype): Numpy datatype of the element.
+
+    Note: If the provided datatype is a variable-length sequence,
+    this function will read the byte count from the first 4 bytes
+    of the buffer, and then read the entire sequence.
+
+    Returns:
+        int: The updated offset value after reading the element.
+    """
     if len(dt) > 1:
         e = arr[index]
         for name in dt.names:
@@ -391,7 +403,7 @@ def readElement(buffer, offset, arr, index, dt):
             raise
     else:
         # variable length element
-        vlen = dt.metadata["vlen"]
+        vlenBaseType = dt.metadata["vlen"]
         e = arr[index]
 
         if isinstance(e, np.ndarray):
@@ -401,6 +413,7 @@ def readElement(buffer, offset, arr, index, dt):
                 offset = readElement(buffer, offset, e, i, dt)
             e.reshape(dt.shape)
         else:
+            # total number of bytes in the vlen sequence/variable-length string
             count = getElementCount(buffer, offset=offset)
             offset += 4
             n = offset
@@ -409,19 +422,18 @@ def readElement(buffer, offset, arr, index, dt):
                 e_buffer = buffer[n:m]
                 offset += count
 
-                if vlen is bytes:
+                if vlenBaseType is bytes:
                     arr[index] = bytes(e_buffer)
-                elif vlen is str:
+                elif vlenBaseType is str:
                     s = e_buffer.decode("utf-8")
                     arr[index] = s
                 else:
                     try:
-                        e = np.frombuffer(bytes(e_buffer), dtype=vlen)
+                        e = np.frombuffer(bytes(e_buffer), dtype=vlenBaseType)
                     except ValueError:
-                        msg = f"e_buffer: {e_buffer}, dtype: {vlen}"
+                        msg = f"Failed to parse vlen data: {e_buffer} with dtype: {vlenBaseType}"
                         raise ValueError(msg)
                     arr[index] = e
-    # print("readElement returning offset:", offset)
     return offset
 
 
