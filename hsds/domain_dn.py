@@ -13,13 +13,13 @@
 # data node of hsds cluster
 #
 
-import time
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 from aiohttp.web import json_response
 
 from .util.authUtil import getAclKeys
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.idUtil import validateInPartition
+from .util.timeUtil import getNow
 from .datanode_lib import get_metadata_obj, save_metadata_obj
 from .datanode_lib import delete_metadata_obj, check_metadata_obj
 from . import hsds_logger as log
@@ -131,7 +131,7 @@ async def PUT_Domain(request):
         log.info("no root id, creating folder")
     domain_json["owner"] = body_json["owner"]
     domain_json["acls"] = body_json["acls"]
-    now = time.time()
+    now = getNow(app)
     domain_json["created"] = now
     domain_json["lastModified"] = now
 
@@ -213,7 +213,7 @@ async def PUT_ACL(request):
     acls[acl_username] = acl
 
     # update the timestamp
-    now = time.time()
+    now = getNow(app)
     domain_json["lastModified"] = now
 
     # write back to S3

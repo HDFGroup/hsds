@@ -1702,6 +1702,49 @@ class LinkTest(unittest.TestCase):
             rsp = self.session.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 410)
 
+    def testLinkCreationOrder(self):
+        domain = self.base_domain + "/testLinkCreationOrder.h5"
+        helper.setupDomain(domain)
+        print("testLinkCreationOrder", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/"
+
+        # create a subgroup to hold the links
+        req = helper.getEndpoint() + "/groups"
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        grp_id = rspJson["id"]
+        self.assertTrue(helper.validateId(grp_id))
+
+        # create soft links under the group in sequence
+        link_count = 10
+
+        for i in range(link_count):
+            title = f"link_{i}"
+            req = helper.getEndpoint() + f"/groups/{grp_id}/links/{title}"
+            body = {"h5path": f"some_path_{i}"}
+            rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+
+        # retrieve all links in grp in creation order
+        req = helper.getEndpoint() + f"/groups/{grp_id}/links"
+        params = {"CreateOrder": 1}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        links_json = rspJson["links"]
+
+        # verify the links are in order
+        for i in range(link_count - 1):
+            prev_link = links_json[i]
+            link = links_json[i + 1]
+
+            self.assertEqual(prev_link['title'], f"link_{i}")
+            self.assertEqual(link['title'], f"link_{i + 1}")
+
+            self.assertTrue(prev_link["created"] < link["created"])
+
 
 if __name__ == "__main__":
     # setup test files

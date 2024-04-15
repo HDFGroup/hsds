@@ -14,7 +14,6 @@
 #
 
 import asyncio
-import time
 import traceback
 from aiohttp.web import run_app
 
@@ -25,6 +24,7 @@ from .util.idUtil import isRootObjId
 from .util.httpUtil import isUnixDomainUrl, bindToSocket, getPortFromUrl
 from .util.httpUtil import jsonResponse, release_http_client
 from .util.storUtil import setBloscThreads, getBloscThreads
+from .util.timeUtil import getNow
 from .basenode import healthCheck, baseInit
 from . import hsds_logger as log
 from .domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
@@ -99,7 +99,7 @@ async def bucketScan(app):
     short_sleep_time = float(scan_sleep_time) / 10.0
     scan_wait_time = int(config.get("scan_wait_time", default=60.0))  # default to ~1min
     log.info(f"scan_wait_time: {scan_wait_time}")
-    last_action = time.time()  # keep track of the last time any work was done
+    last_action = getNow(app)  # keep track of the last time any work was done
 
     # update/initialize root object before starting node updates
 
@@ -111,7 +111,7 @@ async def bucketScan(app):
 
         root_scan_ids = app["root_scan_ids"]
         root_ids = {}
-        now = time.time()
+        now = getNow(app)
         # copy ids to a new map so we don't need to worry about
         # race conditions
         for root_id in root_scan_ids:
@@ -165,9 +165,9 @@ async def bucketScan(app):
                 tb = traceback.format_exc()
                 print("traceback:", tb)
 
-            last_action = time.time()
+            last_action = getNow(app)
 
-        now = time.time()
+        now = getNow(app)
         if (now - last_action) > scan_sleep_time:
             sleep_time = scan_sleep_time  # long nap
         else:
@@ -375,10 +375,10 @@ async def preStop(request):
     log.request(request)
     app = request.app
 
-    shutdown_start = time.time()
+    shutdown_start = getNow(app)
     log.warn(f"preStop request calling on_shutdown at {shutdown_start:.2f}")
     await on_shutdown(app)
-    shutdown_elapse_time = time.time() - shutdown_start
+    shutdown_elapse_time = getNow(app) - shutdown_start
     msg = f"shutdown took: {shutdown_elapse_time:.2f} seconds"
     if shutdown_elapse_time > 2.0:
         # 2.0 is the default grace period for kubernetes

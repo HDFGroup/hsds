@@ -13,7 +13,6 @@
 # data node of hsds cluster
 #
 
-import time
 from copy import copy
 from bisect import bisect_left
 
@@ -25,6 +24,7 @@ from .util.idUtil import isValidUuid
 from .util.globparser import globmatch
 from .util.linkUtil import validateLinkName, getLinkClass, isEqualLink
 from .util.domainUtil import isValidBucketName
+from .util.timeUtil import getNow
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import hsds_logger as log
 
@@ -365,7 +365,8 @@ async def PUT_Links(request):
     else:
         link_delete_set = set()
 
-    create_time = time.time()
+    create_time = getNow(app)
+
     for title in new_links:
         item = items[title]
         item["created"] = create_time
@@ -472,7 +473,7 @@ async def DELETE_Links(request):
 
     if save_obj:
         # update the group lastModified
-        now = time.time()
+        now = getNow(app)
         group_json["lastModified"] = now
 
         # write back to S3

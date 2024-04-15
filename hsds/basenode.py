@@ -565,6 +565,7 @@ def baseInit(node_type):
     app["node_number"] = -1
     app["node_type"] = node_type
     app["start_time"] = int(time.time())  # seconds after epoch
+    app["start_time_relative"] = time.perf_counter()  # high precision time
     app["register_time"] = 0
     app["max_task_count"] = config.get("max_task_count")
     app["storage_clients"] = {}  # storage client drivers
