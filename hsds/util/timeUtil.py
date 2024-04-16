@@ -11,6 +11,7 @@
 ##############################################################################
 from datetime import datetime
 import time
+import os
 import pytz
 
 
@@ -67,4 +68,16 @@ def getNow(app):
     Returns a precise timestamp even on platforms where
     time.time() has low resolution (e.g. Windows)
     """
-    return (time.perf_counter() - app["start_time_relative"]) + app["start_time"]
+    system = os.name
+    current_time = 0
+
+    if system == "nt":
+        # Windows
+        current_time = (time.perf_counter() - app["start_time_relative"]) + app["start_time"]
+    elif system == "posix":
+        # Unix
+        current_time = time.time()
+    else:
+        raise ValueError(f"Unsupported OS: {system}")
+
+    return current_time
