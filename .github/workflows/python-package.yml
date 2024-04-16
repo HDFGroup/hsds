@@ -64,6 +64,10 @@ jobs:
           USER2_PASSWORD: test
           HSDS_ENDPOINT: http://127.0.0.1:5101
           BUCKET_NAME: hsdstest
+          MAX_SCAN_DURATION: 500
+          FLUSH_TIMEOUT: 300
+          FLUSH_SLEEP_INTERVAL: 5
+          LOG_LEVEL: DEBUG
         run: |
           mkdir data
           mkdir data/hsdstest
@@ -83,6 +87,10 @@ jobs:
           USER2_PASSWORD: test
           HSDS_ENDPOINT: http://127.0.0.1:5101
           BUCKET_NAME: hsdstest
+          MAX_SCAN_DURATION: 500
+          FLUSH_TIMEOUT: 300
+          FLUSH_SLEEP_INTERVAL: 5
+          LOG_LEVEL: DEBUG
         run: |
           mkdir data
           mkdir data/hsdstest
@@ -98,6 +106,7 @@ jobs:
 
       - name: Run HSDS tests
         if: ${{!(matrix.build-method == 'docker' && matrix.os == 'windows-latest')}}
+        id: hsds-tests
         shell: bash
         env:
           ADMIN_PASSWORD: admin
@@ -107,9 +116,28 @@ jobs:
           USER2_NAME: test_user2
           USER2_PASSWORD: test
           BUCKET_NAME: hsdstest
+          MAX_SCAN_DURATION: 500
+          FLUSH_TIMEOUT: 300
+          FLUSH_SLEEP_INTERVAL: 5
+          LOG_LEVEL: DEBUG
         run: |
-          pytest tests/integ/setup_test.py
-          pytest tests/integ
+          python testall.py
+      
+      - name: Show HSDS Logs on Fail (Docker)
+        # Only run if the whole workflow failed due to HSDS tests
+        if: ${{failure() && steps.hsds-tests.outcome == 'failure' && (matrix.build-method == 'docker' && matrix.os != 'windows-latest')}}
+        run: |
+          docker logs hsds-sn-1 >&1
+          docker logs hsds-dn-1 >&1
+          docker logs hsds-dn-2 >&1
+          docker logs hsds-dn-3 >&1
+          docker logs hsds-dn-4 >&1
+      
+      - name: Show HSDS Logs on Fail (Manual)
+        # Only run if the whole workflow failed due to HSDS tests
+        if: ${{failure() && steps.hsds-tests.outcome == 'failure' && (matrix.build-method == 'manual')}}
+        run: |
+          cat hs.log
 
       - name: Checkout h5pyd
         if: ${{ ( matrix.os != 'windows-latest' ) }}

@@ -33,8 +33,9 @@ max_tcp_connections: 100 # max number of inflight tcp connections
 head_sleep_time: 10 # max sleep time between health checks for head node
 node_sleep_time: 10 # max sleep time between health checks for SN/DN nodes
 async_sleep_time: 1 # max sleep time between async task runs
-scan_sleep_time: 10  # max sleep time between scaning runs
+scan_sleep_time: 10  # max sleep time between scanning runs
 scan_wait_time: 10   # min time to wait after a domain update before starting a scan
+max_scan_duration: 180 # max time to wait for a scan to complete before raising error
 gc_sleep_time: 10   # max time between runs to delete unused objects
 s3_sync_interval: 1 # time to wait between s3_sync checks (in sec)
 s3_age_time: 1 # time to wait since last update to write an object to S3
