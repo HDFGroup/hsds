@@ -147,7 +147,7 @@ def _load_cfg():
             override = yml_override[x]
             debug(f"got config override for {x}")
 
-        if override is not None:
+        if override is not None and override != "":
             if cfgval is not None:
                 try:
                     # convert to same type as yaml
