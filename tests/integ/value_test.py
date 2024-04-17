@@ -50,6 +50,7 @@ class ValueTest(unittest.TestCase):
                 continue
             # should get a NO_CONTENT code
             self.assertEqual(rsp.status_code, 204)
+            break
 
         # do a get and verify the additional keys are
         req = f"{self.endpoint}/datasets/{dset_id}"
