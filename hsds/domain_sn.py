@@ -913,7 +913,7 @@ async def PUT_Domain(request):
             while True:
                 scan_time = await getScanTime(app, root_id, bucket=bucket)
                 log.debug(f"Most recent scan on domain {root_id} completed at time {scan_time}")
-                if scan_time > req_send_time:
+                if scan_time >= req_send_time:
                     log.info(f"scan complete for root: {root_id}")
                     break
                 if getNow(app) - req_send_time > max_scan_duration:
