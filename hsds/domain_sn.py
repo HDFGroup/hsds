@@ -903,17 +903,12 @@ async def PUT_Domain(request):
                 post_params["bucket"] = bucket
             req_send_time = getNow(app)
             log.debug(f"Sending rescan request at time {req_send_time}")
+            await http_post(app, notify_req, data={}, params=post_params)
 
             # Poll until the scan_complete time is greater than
             # req_send_time or 3 minutes have elapsed
             max_scan_duration = int(config.get("max_scan_duration", default=180))
             RESCAN_SLEEP_TIME = 0.1
-            INITIAL_SCAN_SLEEP_TIME = 0.4
-
-            # Start with brief wait to avoid time discrepancies between nodes
-            asyncio.sleep(INITIAL_SCAN_SLEEP_TIME)
-
-            await http_post(app, notify_req, data={}, params=post_params)
 
             while True:
                 scan_time = await getScanTime(app, root_id, bucket=bucket)
