@@ -635,7 +635,8 @@ async def _doHyperslabWrite(app,
 
     if crawler_status not in (200, 201):
         msg = f"crawler failed for page: {page_number} with status: {crawler_status}"
-        log.warn(msg)
+        log.error(msg)
+        raise HTTPInternalServerError()
     else:
         log.info("crawler write_chunk_hyperslab successful")
 
