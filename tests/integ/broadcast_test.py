@@ -36,28 +36,6 @@ class BroadcastTest(unittest.TestCase):
             domain, username=username, password=password, session=self.session
         )
 
-    def checkVerbose(self, dset_id, headers=None, expected=None):
-        # do a flush with rescan, then check the expected return values are correct
-        req = f"{self.endpoint}/"
-        params = {"flush": 1, "rescan": 1}
-        rsp = self.session.put(req, params=params, headers=headers)
-        # should get a NO_CONTENT code,
-        self.assertEqual(rsp.status_code, 204)
-
-        # do a get and verify the additional keys are
-        req = f"{self.endpoint}/datasets/{dset_id}"
-        params = {"verbose": 1}
-
-        rsp = self.session.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-
-        for k in expected:
-            self.assertTrue(k in rspJson)
-            self.assertEqual(rspJson[k], expected[k])
-
-        # main
-
     def testPut1DDataset(self):
         # Test PUT value with broadcast for 1d dataset
         print("testPut1DDataset", self.base_domain)

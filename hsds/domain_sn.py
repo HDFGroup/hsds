@@ -902,19 +902,23 @@ async def PUT_Domain(request):
             if bucket:
                 post_params["bucket"] = bucket
             req_send_time = getNow(app)
+            log.debug(f"Sending rescan request at time {req_send_time}")
             await http_post(app, notify_req, data={}, params=post_params)
 
             # Poll until the scan_complete time is greater than
             # req_send_time or 3 minutes have elapsed
-            MAX_WAIT_TIME = 180
+            max_scan_duration = int(config.get("max_scan_duration", default=180))
             RESCAN_SLEEP_TIME = 0.1
+
             while True:
                 scan_time = await getScanTime(app, root_id, bucket=bucket)
-                if scan_time > req_send_time:
+                log.debug(f"Most recent scan on domain {root_id} completed at time {scan_time}")
+                if scan_time >= req_send_time:
                     log.info(f"scan complete for root: {root_id}")
                     break
-                if getNow(app) - req_send_time > MAX_WAIT_TIME:
-                    log.warn(f"scan failed to complete in {MAX_WAIT_TIME} seconds for {root_id}")
+                if getNow(app) - req_send_time > max_scan_duration:
+                    log.warn(f"scan failed to complete in {max_scan_duration}\
+                              seconds for {root_id}")
                     raise HTTPServiceUnavailable()
                 log.debug(f"do_rescan sleeping for {RESCAN_SLEEP_TIME}s")
                 await asyncio.sleep(RESCAN_SLEEP_TIME)  # avoid busy wait

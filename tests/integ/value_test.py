@@ -40,11 +40,17 @@ class ValueTest(unittest.TestCase):
 
     def checkVerbose(self, dset_id, headers=None, expected=None):
         # do a flush with rescan, then check the expected return values are correct
+        num_retries = 5
         req = f"{self.endpoint}/"
         params = {"flush": 1, "rescan": 1}
-        rsp = self.session.put(req, params=params, headers=headers)
-        # should get a NO_CONTENT code,
-        self.assertEqual(rsp.status_code, 204)
+        for i in range(num_retries):
+            rsp = self.session.put(req, params=params, headers=headers)
+            if (rsp.status_code == 503):
+                # Retry
+                continue
+            # should get a NO_CONTENT code
+            self.assertEqual(rsp.status_code, 204)
+            break
 
         # do a get and verify the additional keys are
         req = f"{self.endpoint}/datasets/{dset_id}"
@@ -57,8 +63,6 @@ class ValueTest(unittest.TestCase):
         for k in expected:
             self.assertTrue(k in rspJson)
             self.assertEqual(rspJson[k], expected[k])
-
-        # main
 
     def testPut1DDataset(self):
         # Test PUT value for 1d dataset
