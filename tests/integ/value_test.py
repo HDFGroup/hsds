@@ -14,6 +14,7 @@ import json
 import numpy as np
 import helper
 import config
+import time
 
 
 class ValueTest(unittest.TestCase):
@@ -47,6 +48,7 @@ class ValueTest(unittest.TestCase):
             rsp = self.session.put(req, params=params, headers=headers)
             if (rsp.status_code == 503):
                 # Retry
+                time.sleep(3)
                 continue
             # should get a NO_CONTENT code
             self.assertEqual(rsp.status_code, 204)
