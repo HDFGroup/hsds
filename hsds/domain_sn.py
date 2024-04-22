@@ -163,7 +163,7 @@ async def get_domains(request):
     # allow domain with / to indicate a folder
     prefix = None
     try:
-        prefix = getDomainFromRequest(request, validate=False, allow_dns=False)
+        prefix = getDomainFromRequest(request, validate=False)
     except ValueError:
         pass  # igore
     if not prefix:

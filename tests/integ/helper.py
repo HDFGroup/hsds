@@ -132,19 +132,6 @@ def getParentDomain(domain):
     return parent
 
 
-def getDNSDomain(domain):
-    """Get DNS-style domain name given a filepath domain"""
-    names = domain.split('/')
-    names.reverse()
-    dns_domain = ''
-    for name in names:
-        if name:
-            dns_domain += name
-            dns_domain += '.'
-    dns_domain = dns_domain[:-1]  # str trailing dot
-    return dns_domain
-
-
 def setupDomain(domain, folder=False, username=None, password=None, root_gcpl=None):
     """Create domain (and parent domain if needed)"""
     endpoint = config.get("hsds_endpoint")

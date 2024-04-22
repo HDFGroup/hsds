@@ -15,7 +15,6 @@ import sys
 sys.path.append("../..")
 from hsds.util.domainUtil import getParentDomain, isValidDomain, isValidHostDomain
 from hsds.util.domainUtil import (
-    getDomainForHost,
     isValidDomainPath,
     getBucketForDomain,
     getPathForDomain,
@@ -58,6 +57,7 @@ class DomainUtilTest(unittest.TestCase):
 
         valid_domains = ("/gov/nasa/nex", "/home", s3_path, file_path, azure_path)
         for domain in valid_domains:
+            print(domain)
             self.assertTrue(isValidDomain(domain))
 
     def testValidDomainPath(self):
@@ -67,12 +67,6 @@ class DomainUtilTest(unittest.TestCase):
         valid_domains = ("/home/test_user1/mytests/", "/")
         for domain in valid_domains:
             self.assertTrue(isValidDomainPath(domain))
-
-    def testGetDomainForHost(self):
-        domain = getDomainForHost("nex.nasa.gov")
-        self.assertEqual(domain, "/gov/nasa/nex")
-        domain = getDomainForHost("my-data.nex.nasa.gov")
-        self.assertEqual(domain, "/gov/nasa/nex/my-data")
 
     def testGetParentDomain(self):
 
