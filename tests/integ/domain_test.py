@@ -521,7 +521,7 @@ class DomainTest(unittest.TestCase):
             self.assertEqual(root_id, rspJson["root"])
 
     def testCreateDomainNodeIds(self):
-        domain = self.base_domain + "/newdomain.h6"
+        domain = self.base_domain + "/newdomain.h7"
         print("testCreateDomainNodeIds", domain)
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + "/"
