@@ -57,7 +57,6 @@ class DomainUtilTest(unittest.TestCase):
 
         valid_domains = ("/gov/nasa/nex", "/home", s3_path, file_path, azure_path)
         for domain in valid_domains:
-            print(domain)
             self.assertTrue(isValidDomain(domain))
 
     def testValidDomainPath(self):

@@ -228,7 +228,6 @@ def validateDomain(id):
         raise ValueError("Slash at end not allowed")
     # the non-bucket part of the domain should start with '/'
     domain_path = getPathForDomain(id)
-    print("domain_path:", domain_path)
     if not domain_path or domain_path[0] != "/":
         raise ValueError("Domain path should start with '/'")
 
