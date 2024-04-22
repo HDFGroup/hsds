@@ -226,6 +226,10 @@ def validateDomain(id):
         raise ValueError("Domain names should include a '/'")
     if id[-1] == "/":
         raise ValueError("Slash at end not allowed")
+    # the non-bucket part of the domain should start with '/'
+    domain_path = getPathForDomain(id)
+    if not domain_path or domain_path[0] != "/":
+        raise ValueError("Domain path should start with '/'")
 
 
 def isValidDomain(id):
@@ -263,38 +267,7 @@ def validateDomainKey(domain_key):
         raise ValueError("Invalid domain key")
 
 
-def getDomainForHost(host_value):
-    # Convert domain paths to S3 keys
-    npos = host_value.rfind(":")
-    if npos > 0:
-        host = host_value[:npos]
-    else:
-        host = host_value
-
-    if len(host) < 3:
-        # by equivalence to internet top-level domains, .org, .com, etc
-        raise ValueError("domain name is not valid")
-
-    if host[0] == "." or host[-1] == ".":
-        # can't have a first or last dot'
-        raise ValueError("domain name is not valid")
-
-    dns_path = host.split(".")
-    dns_path.reverse()  # flip to filesystem ordering
-    domain = "/"
-    for field in dns_path:
-        if len(field) == 0:
-            # consecutive dots are not allowed
-            raise ValueError("domain name is not valid")
-        domain += field
-        domain += "/"
-
-    domain = domain[:-1]  # remove trailing slash
-
-    return domain
-
-
-def getDomainFromRequest(request, validate=True, allow_dns=True):
+def getDomainFromRequest(request, validate=True):
     # print("gotDomainFromRequest:", request, "validate=", validate)
     app = request.app
     domain = None
@@ -302,34 +275,16 @@ def getDomainFromRequest(request, validate=True, allow_dns=True):
     params = request.rel_url.query
     if "domain" in params:
         domain = params["domain"]
+    elif "X-Hdf-domain" in request.headers:
+        domain = request.headers["X-Hdf-domain"]
     else:
-        if "host" in params and allow_dns:
-            domain = params["host"]
-        elif "X-Hdf-domain" in request.headers:
-            domain = request.headers["X-Hdf-domain"]
-        elif "X-Forwarded-Host" in request.headers and allow_dns:
-            domain = request.headers["X-Forwarded-Host"]
-        elif allow_dns:
-            domain = request.host
-    if not domain:
-        raise ValueError("no domain")
+        return None
 
     if domain.startswith("hdf5:/"):
         # strip off the prefix to make following logic easier
         domain = domain[6:]
 
-    if domain[0] != "/":
-        # DNS style hostname
-        if validate:
-            validateHostDomain(domain)  # throw ValueError if invalid
-            domain = getDomainForHost(domain)  # convert to s3 path
-        else:
-            try:
-                validateHostDomain(domain)
-                domain = getDomainForHost(domain)
-            except ValueError:
-                pass  # ignore
-    # now validate that its a properly formed domain
+    # validate that its a properly formed domain
     if validate:
         validateDomain(domain)
     if "bucket" in params and params["bucket"]:

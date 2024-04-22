@@ -46,20 +46,6 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
 
-        # verify that passing domain as query string works as well
-        del headers["X-Hdf-domain"]
-        req += "?host=" + self.base_domain
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
-
-        # try using DNS-style domain name
-        domain = helper.getDNSDomain(self.base_domain)
-        params = {"host": domain}
-        rsp = self.session.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
-
     def testGetDomain(self):
         domain = helper.getTestDomain("tall.h5")
         print("testGetDomain", domain)
@@ -154,15 +140,12 @@ class DomainTest(unittest.TestCase):
                 attr_count += 1
         self.assertEqual(attr_count, 4)
 
-        # verify that passing domain as query string works as well
+        # passing domain via the host header is deprecated
+        # Previously his returned 200, now it is a 400
         del headers["X-Hdf-domain"]
         params = {"host": domain}
         rsp = self.session.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
-        rspJson = json.loads(rsp.text)
-        root_uuid_2 = rspJson["root"]
-        self.assertEqual(root_uuid, root_uuid_2)
+        self.assertEqual(rsp.status_code, 400)
 
         # same deal using the "domain" param
         params = {"domain": domain}
@@ -187,7 +170,7 @@ class DomainTest(unittest.TestCase):
         params = {"domain": domain}
 
         rsp = self.session.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 400)
+        self.assertEqual(rsp.status_code, 404)
 
     def testPostDomainSingle(self):
         domain = helper.getTestDomain("tall.h5")
@@ -382,10 +365,9 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rspJson["class"], "folder")
         domain = f"{user_name}.home"
         headers = helper.getRequestHeaders(domain=domain)
-
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.status_code, 400)  # DNS-style no longer supported
 
     def testCreateDomain(self):
         domain = self.base_domain + "/newdomain.h6"
@@ -448,18 +430,6 @@ class DomainTest(unittest.TestCase):
             limit = limits[k]
             self.assertTrue(isinstance(limit, int))
             self.assertTrue(limit > 0)
-
-        # try doing a GET with a host query args
-        headers = helper.getRequestHeaders()
-        req = helper.getEndpoint() + "/?host=" + domain
-        # do a get on the domain with a query arg for host
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        for k in ("root", "owner"):
-            self.assertTrue(k in rspJson)
-        # we should get the same value for root id
-        self.assertEqual(root_id, rspJson["root"])
 
         # verify we can access root groups
         root_req = helper.getEndpoint() + "/groups/" + root_id
@@ -835,7 +805,7 @@ class DomainTest(unittest.TestCase):
         headers = helper.getRequestHeaders(domain=domain)
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 404)  # TBD - should this be 400?
+        self.assertEqual(rsp.status_code, 400)
 
     def testWithBucket(self):
         domain = self.base_domain + "/with_bucket.h5"
@@ -853,48 +823,6 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 400)
-
-    def testDNSDomain(self):
-        # DNS domain names are in reverse order with dots as seperators...
-
-        dns_domain = helper.getDNSDomain(self.base_domain)
-        print("testDNSDomain", dns_domain)
-        # verify we can access base domain as via dns name
-        headers = helper.getRequestHeaders(domain=dns_domain)
-
-        req = helper.getEndpoint() + "/"
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
-
-        # can't have two consecutive dots'
-        domain = "two.dots..are.bad." + dns_domain
-        req = helper.getEndpoint() + "/"
-        headers = helper.getRequestHeaders(domain=domain)
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 400)  # 400 == bad syntax
-
-        # can't have a slash
-        domain = "no/slash." + dns_domain
-        req = helper.getEndpoint() + "/"
-        headers = helper.getRequestHeaders(domain=domain)
-        rsp = self.session.get(req, headers=headers)
-        # somehow this is showing up as a 400 in ceph and 404 in S3
-        self.assertTrue(rsp.status_code in (400, 404))  # 400 == bad syntax
-
-        # just a dot is no good
-        domain = "." + dns_domain
-        req = helper.getEndpoint() + "/"
-        headers = helper.getRequestHeaders(domain=domain)
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 400)  # 400 == bad syntax
-
-        # dot in the front is bad
-        domain = ".dot.in.front.is.bad." + dns_domain
-        req = helper.getEndpoint() + "/"
-        headers = helper.getRequestHeaders(domain=domain)
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 400)  # 400 == bad syntax
 
     def testDeleteDomain(self):
         domain = self.base_domain + "/deleteme.h6"
@@ -966,7 +894,7 @@ class DomainTest(unittest.TestCase):
             self.assertEqual(rsp.status_code, 200)
         else:
             msg = "Skipping admin delete test, set ADMIN_USERNAME and ADMIN_PASSWORD"
-            msg += "environment variables to enable"
+            msg += " environment variables to enable"
             print(msg)
 
         username = config.get("user2_name")
