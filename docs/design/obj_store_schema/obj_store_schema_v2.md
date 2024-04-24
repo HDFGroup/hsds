@@ -562,7 +562,7 @@ If the chunk is not compressed, the size of the object would be `10 * 10 * <item
 
 ### Variable Length Data
 
-For fixed length datatypes (or compound type composed of fixed length types), serialization of chunk data is straight forward. For variable
+For fixed length datatypes (or compound types composed of fixed length types), serialization of chunk data is straight forward. For variable
 length data, the data needs an additional field so the original data can be decoded again on read. This is done by adding a 4-byte element
 length in front of each element when writing to storage. The length describes the number of bytes used by that element. On read, the length
 field can be used to allocate heap memory to store the given element.
