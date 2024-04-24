@@ -269,7 +269,7 @@ Within the username key there are six required sub-keys that each have a value o
 - "readACL" - If true, the user has permission to read any ACL in the domain
 - "updateACL" - If true, the has permission to modify the ACL (including adding additional usernames)
 
-Note: optionally, an ACL key can be used in a group, dataset, or committed datatype object. If an ACL is present, it is can be used to enforce permissions for that object. If not present, the domain ACL is used as described above.
+Note: optionally, an ACL key can be used in a group, dataset, or committed datatype object. If an ACL is present, it can be used to enforce permissions for that object. If not present, the domain ACL is used as described above.
 
 Example: Using the ACLs defined for the "my_domain" object above, user "test_user1" would be authorized to make any change to objects in the domain, or change the ACL itself. User "joebob" (not listed in the ACL keys), would have permission to perform any read operation (assuming a more restrictive ACL is not present in the requested object), but not have authority to modify or delete any object.
 
