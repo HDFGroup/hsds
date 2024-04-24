@@ -92,7 +92,7 @@ By contrast the object storage schema stores each HDF object as an object storag
 
 The goal of the object schema is to be of sufficient fidelity that it should be possible to convert a traditional HDF5 file to a set of objects, and then convert the set of objects to a HDF5 file that is equivalent to the original file.
 
-Comparison of managing HDF5 entities in a file vs. an object store
+## Comparison of managing HDF5 entities in a file vs. an object store
 
 ---
 
