@@ -644,6 +644,7 @@ The specification for these borrows heavily from the HDF5/JSON specification, so
 - dataspace
 - attribute
 - creationProperties
+- link
 
 ### Type
 
@@ -754,6 +755,24 @@ The following example shows properties for "allocTime", "fillValue", and "layout
         "class": "H5D_CHUNKED",
         "dims": [10]
     }
+}
+```
+
+### Links
+
+Links are stored on group objects, and represent pointers to other HDF5 data model objects. Links may be hard, soft, or external.
+
+An example of JSON describing links within a group is given here: <https://hdf5-json.readthedocs.io/en/latest/examples/tgroup.html?highlight=links#a-few-hdf5-groups>.
+
+#### Link example
+
+The following example describes a hard link named "g1" which uses a UUID to point to a group.
+```json
+{
+    "collection": "groups",
+    "title": "g1",
+    "class": "H5L_TYPE_HARD",
+    "id": "a6c3f58c-7bf7-11e4-a370-3c15c2da029e"
 }
 ```
 
