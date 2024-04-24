@@ -103,7 +103,7 @@ Management of HDF5 entities in an object store brings up a different set of cons
 3. The object storage system doesn't provide the equivalent of an append operation, so the entire object must be re-written for each write (though partial reads are supported)
 4. Performance is sensitive to the size of objects in the object store (c.f. <http://improve.dk/pushing-the-limits-of-amazon-s3-upload-performance/>)
 5. Given that writes to the object store are atomic, there is no possibility that the storage system will be left in an inconsistent state
-6. Certain functions that are typically performed by the filesystem (e.g. listing files, file permissions) we need to be managed by the service (e.g. there needs to be the ability to store the access rights for a given object
+6. Certain functions that are typically performed by the filesystem (e.g. listing files, file permissions) we need to be managed by the service (e.g. there needs to be the ability to store the access rights for a given object)
 7. Unlike HDF5 entities in a file, the "file" an object store object is contained in is not immediately apparent. The connection between objects and the "file" they are contained in needs to be explicitly managed.
 
 ## Additions to the HDF5 data model to support the HDF REST API
@@ -130,7 +130,7 @@ within the same domain:
     d-b03b24ef-69f244b6-56e5-25125a-89ba79
 
 The id for the root group uses the same layout, but the second half of the id is based on the first half. A root group id formed by
-taking a handom 16 character hex string and rotating each character by 8 to form the next 16 characters (exclusive of the hyphens). For
+taking a random 16 character hex string and rotating each character by 8 to form the next 16 characters (exclusive of the hyphens). For
 example the root group for the two ids above would be:
 
     g-b03b24ef-69f244b6-38b3-ac67e1-7acc3e
