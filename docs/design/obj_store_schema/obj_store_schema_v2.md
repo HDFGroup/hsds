@@ -538,7 +538,7 @@ The chunk storage key is of the form:
 Where:
 
 - &lt;uuid1&gt; is the first 16 hex characters of the dataset id the chunk belongs to
-- &lt;uuid1&gt; is the second 16 hex characters of the dataset id
+- &lt;uuid2&gt; is the second 16 hex characters of the dataset id
 - Following the &lt;uuid&gt; there is a series of stringified integers separated by underscores. The number of integers is equal to the rank (number of dimensions) of the dataset.
 - The coordinates &lt;i&gt;, &lt;j&gt;, &lt;k&gt;, etc. identify the coordinate of the chunk (fastest varying dimension last)
 
