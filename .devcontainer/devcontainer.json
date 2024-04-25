@@ -1,5 +1,5 @@
 {
-  "name": "HSDS Examples",
+  "name": "HSDS Codespace configuration",
   "dockerComposeFile": "docker-compose.yaml",
   "updateContentCommand": "python3 -m pip install -r requirements.txt",
   "postCreateCommand": "",
