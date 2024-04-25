@@ -33,7 +33,7 @@ services:
     volumes:
       - ../hsds/data:/data
       - ../admin/config/:/config/
-  dn1:
+  dn:
     build:
       context: ..
       dockerfile: Dockerfile

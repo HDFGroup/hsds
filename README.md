@@ -1,3 +1,6 @@
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/hdfgroup/hsds_examples)
+
+
 # HSDS (Highly Scalable Data Service) - REST-based service for HDF5 data
 
 ## Introduction
@@ -10,6 +13,13 @@ HSDS can be run a single machine with or without Docker or on a cluster using Ku
 In addition, HSDS can be run in serverless mode with AWS Lambda or h5pyd local mode.
 
 ## Quick Start
+
+### With Github codespaces
+
+Launch a Codespaces environment by clicking the banner __["Open in GitHub Codespaces"](https://codespaces.new/HDFGroup/hdf5-tutorial)__.  Once the codespace is ready, type:
+`python testall.py` in the terminal window to run the test suite.
+
+### On your desktop/laptop
 
 Make sure you have Python 3 and Pip installed, then:
 
