@@ -1,8 +1,5 @@
 {
   "name": "HSDS Examples",
-  "hostRequirements": {
-    "cpus": 4
-  },
   "dockerComposeFile": "docker-compose.yaml",
   "updateContentCommand": "python3 -m pip install -r requirements.txt",
   "postCreateCommand": "",
