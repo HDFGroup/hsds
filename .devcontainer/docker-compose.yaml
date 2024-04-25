@@ -1,7 +1,9 @@
 version: "3"
 services:
   app:
-    image: "mcr.microsoft.com/devcontainers/universal:2"
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
     environment:
       - HS_ENDPOINT=http://localhost:5101
       - HS_USERNAME=test_user1
@@ -15,12 +17,14 @@ services:
     # Runs app on the same network as the SN container, allows "forwardPorts" in devcontainer.json function.
     network_mode: service:sn
   head:
-    image: hdfgroup/hsds:master
+    build:
+      context: ..
+      dockerfile: Dockerfile
     restart: on-failure
     mem_limit: 512m
     environment:
       - TARGET_SN_COUNT=1
-      - TARGET_DN_COUNT=4
+      - TARGET_DN_COUNT=1
       - NODE_TYPE=head_node
     env_file:
       - 'override.env'
@@ -30,7 +34,9 @@ services:
       - ../hsds/data:/data
       - ../admin/config/:/config/
   dn1:
-    image: hdfgroup/hsds:master
+    build:
+      context: ..
+      dockerfile: Dockerfile
     restart: on-failure
     mem_limit: 1g
     environment:
@@ -46,59 +52,10 @@ services:
       - ../admin/config/:/config/
     links:
       - head
-  dn2:
-    image: hdfgroup/hsds:master
-    restart: on-failure
-    mem_limit: 1g
-    environment:
-      - NODE_TYPE=dn
-    env_file:
-      - 'override.env'
-    ports:
-      - 6102
-    depends_on:
-      - head
-    volumes:
-      - ../data:/data
-      - ../admin/config/:/config/
-    links:
-      - head
-  dn3:
-    image: hdfgroup/hsds:master
-    restart: on-failure
-    mem_limit: 1g
-    environment:
-      - NODE_TYPE=dn
-    env_file:
-      - 'override.env'
-    ports:
-      - 6103
-    depends_on:
-      - head
-    volumes:
-      - ../data:/data
-      - ../admin/config/:/config/
-    links:
-      - head
-  dn4:
-    image: hdfgroup/hsds:master
-    restart: on-failure
-    mem_limit: 1g
-    environment:
-      - NODE_TYPE=dn
-    env_file:
-      - 'override.env'
-    ports:
-      - 6104
-    depends_on:
-      - head
-    volumes:
-      - ../data:/data
-      - ../admin/config/:/config/
-    links:
-      - head
   sn:
-    image: hdfgroup/hsds:master
+    build:
+      context: ..
+      dockerfile: Dockerfile
     restart: on-failure
     mem_limit: 1g
     environment:
