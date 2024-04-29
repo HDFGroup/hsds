@@ -92,7 +92,7 @@ By contrast the object storage schema stores each HDF object as an object storag
 
 The goal of the object schema is to be of sufficient fidelity that it should be possible to convert a traditional HDF5 file to a set of objects, and then convert the set of objects to a HDF5 file that is equivalent to the original file.
 
-Comparison of managing HDF5 entities in a file vs. an object store
+## Comparison of managing HDF5 entities in a file vs. an object store
 
 ---
 
@@ -103,7 +103,7 @@ Management of HDF5 entities in an object store brings up a different set of cons
 3. The object storage system doesn't provide the equivalent of an append operation, so the entire object must be re-written for each write (though partial reads are supported)
 4. Performance is sensitive to the size of objects in the object store (c.f. <http://improve.dk/pushing-the-limits-of-amazon-s3-upload-performance/>)
 5. Given that writes to the object store are atomic, there is no possibility that the storage system will be left in an inconsistent state
-6. Certain functions that are typically performed by the filesystem (e.g. listing files, file permissions) we need to be managed by the service (e.g. there needs to be the ability to store the access rights for a given object
+6. Certain functions that are typically performed by the filesystem (e.g. listing files, file permissions) we need to be managed by the service (e.g. there needs to be the ability to store the access rights for a given object)
 7. Unlike HDF5 entities in a file, the "file" an object store object is contained in is not immediately apparent. The connection between objects and the "file" they are contained in needs to be explicitly managed.
 
 ## Additions to the HDF5 data model to support the HDF REST API
@@ -130,7 +130,7 @@ within the same domain:
     d-b03b24ef-69f244b6-56e5-25125a-89ba79
 
 The id for the root group uses the same layout, but the second half of the id is based on the first half. A root group id formed by
-taking a handom 16 character hex string and rotating each character by 8 to form the next 16 characters (exclusive of the hyphens). For
+taking a random 16 character hex string and rotating each character by 8 to form the next 16 characters (exclusive of the hyphens). For
 example the root group for the two ids above would be:
 
     g-b03b24ef-69f244b6-38b3-ac67e1-7acc3e
@@ -269,7 +269,7 @@ Within the username key there are six required sub-keys that each have a value o
 - "readACL" - If true, the user has permission to read any ACL in the domain
 - "updateACL" - If true, the has permission to modify the ACL (including adding additional usernames)
 
-Note: optionally, an ACL key can be used in a group, dataset, or committed datatype object. If an ACL is present, it is can be used to enforce permissions for that object. If not present, the domain ACL is used as described above.
+Note: optionally, an ACL key can be used in a group, dataset, or committed datatype object. If an ACL is present, it can be used to enforce permissions for that object. If not present, the domain ACL is used as described above.
 
 Example: Using the ACLs defined for the "my_domain" object above, user "test_user1" would be authorized to make any change to objects in the domain, or change the ACL itself. User "joebob" (not listed in the ACL keys), would have permission to perform any read operation (assuming a more restrictive ACL is not present in the requested object), but not have authority to modify or delete any object.
 
@@ -538,7 +538,7 @@ The chunk storage key is of the form:
 Where:
 
 - &lt;uuid1&gt; is the first 16 hex characters of the dataset id the chunk belongs to
-- &lt;uuid1&gt; is the second 16 hex characters of the dataset id
+- &lt;uuid2&gt; is the second 16 hex characters of the dataset id
 - Following the &lt;uuid&gt; there is a series of stringified integers separated by underscores. The number of integers is equal to the rank (number of dimensions) of the dataset.
 - The coordinates &lt;i&gt;, &lt;j&gt;, &lt;k&gt;, etc. identify the coordinate of the chunk (fastest varying dimension last)
 
@@ -562,7 +562,7 @@ If the chunk is not compressed, the size of the object would be `10 * 10 * <item
 
 ### Variable Length Data
 
-For fixed length datatypes (or compound type composed of fixed length types), serialization of chunk data is straight forward. For variable
+For fixed length datatypes (or compound types composed of fixed length types), serialization of chunk data is straight forward. For variable
 length data, the data needs an additional field so the original data can be decoded again on read. This is done by adding a 4-byte element
 length in front of each element when writing to storage. The length describes the number of bytes used by that element. On read, the length
 field can be used to allocate heap memory to store the given element.
@@ -644,6 +644,7 @@ The specification for these borrows heavily from the HDF5/JSON specification, so
 - dataspace
 - attribute
 - creationProperties
+- link
 
 ### Type
 
@@ -754,6 +755,24 @@ The following example shows properties for "allocTime", "fillValue", and "layout
         "class": "H5D_CHUNKED",
         "dims": [10]
     }
+}
+```
+
+### Links
+
+Links are stored on group objects, and represent pointers to other HDF5 data model objects. Links may be hard, soft, or external.
+
+An example of JSON describing links within a group is given here: <https://hdf5-json.readthedocs.io/en/latest/examples/tgroup.html?highlight=links#a-few-hdf5-groups>.
+
+#### Link example
+
+The following example describes a hard link named "g1" which uses a UUID to point to a group.
+```json
+{
+    "collection": "groups",
+    "title": "g1",
+    "class": "H5L_TYPE_HARD",
+    "id": "a6c3f58c-7bf7-11e4-a370-3c15c2da029e"
 }
 ```
 
