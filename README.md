@@ -1,3 +1,6 @@
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/hdfgroup/hsds)
+
+
 # HSDS (Highly Scalable Data Service) - REST-based service for HDF5 data
 
 ## Introduction
@@ -7,9 +10,14 @@ Data can be stored in either a POSIX files system, or using object-based storage
 AWS S3, Azure Blob Storage, or [MinIO](https://min.io).
 HSDS can be run a single machine with or without Docker or on a cluster using Kubernetes (or AKS on Microsoft Azure).
 
-In addition, HSDS can be run in serverless mode with AWS Lambda or h5pyd local mode.
-
 ## Quick Start
+
+### With Github codespaces
+
+Launch a Codespaces environment by clicking the banner __["Open in GitHub Codespaces"](https://codespaces.new/HDFGroup/hsds)__.  Once the codespace is ready, type:
+`python testall.py` in the terminal window to run the test suite.
+
+### On your desktop/laptop
 
 Make sure you have Python 3 and Pip installed, then:
 
@@ -113,18 +121,6 @@ For general questions/feedback, please use the HSDS forum: <https://forum.hdfgro
 ## License
 
 HSDS is licensed under an APACHE 2.0 license. See LICENSE in this directory.
-
-## Integration with JupyterHub
-
-The HDF Group provides access to an HSDS instance that is integrated with JupyterLab: HDF Lab. HDF Lab is a hosted Jupyter environment with these features:
-
-- Connection to a HSDS instance
-- Dedicated Xeon core per user
-- 10 GB Posix Disk
-- 200 GB S3 storage for HDF data
-- Sample programs and data files
-
-Sign up for HDF Lab here: <https://www.hdfgroup.org/hdfkitalab/>.
 
 ## Azure Marketplace
 

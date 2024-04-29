@@ -66,8 +66,6 @@ jobs:
           BUCKET_NAME: hsdstest
           LOG_LEVEL: DEBUG
         run: |
-          mkdir data
-          mkdir data/hsdstest
           cp admin/config/groups.default admin/config/groups.txt
           cp admin/config/passwd.default admin/config/passwd.txt
           hsds --root_dir data --host localhost --port 5101 --password_file admin/config/passwd.txt --logfile hs.log   --loglevel DEBUG  --config_dir=admin/config --count=4 &
@@ -86,8 +84,6 @@ jobs:
           BUCKET_NAME: hsdstest
           LOG_LEVEL: DEBUG
         run: |
-          mkdir data
-          mkdir data/hsdstest
           cp admin/config/groups.default admin/config/groups.txt
           cp admin/config/passwd.default admin/config/passwd.txt
           ./build.sh --nolint

@@ -15,7 +15,6 @@ import json
 import numpy as np
 import helper
 import config
-from hsds.util.arrayUtil import arrayToBytes
 
 
 class PointSelTest(unittest.TestCase):
@@ -1834,7 +1833,7 @@ class PointSelTest(unittest.TestCase):
 
         # try to write to first field through binary request
         arr = np.array([(10000,) for i in range(num_elements)], dtype=np.int32)
-        data = arrayToBytes(arr)
+        data = arr.tobytes()
         req = self.endpoint + "/datasets/" + dset_id + "/value?fields=" + field_names[0]
         headers["Content-Type"] = "application/octet-stream"
         rsp = self.session.put(req, data=data, headers=headers)
