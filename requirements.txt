@@ -1,4 +1,4 @@
-aiohttp==3.9.3
+aiohttp==3.9.4
 aiobotocore==2.5.0
 aiohttp_cors
 aiofiles
