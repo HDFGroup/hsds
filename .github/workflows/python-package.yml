@@ -72,7 +72,15 @@ jobs:
   lint-openapi-yaml:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Run lint script
-        working-directory: ${{github.workspace}}/hsds/docs/restapi
+        working-directory: ${{github.workspace}}
         run: |
+          ls
+          cd docs
+          ls
+          cd restapi
+          ls
           ./openapi_lint.sh
