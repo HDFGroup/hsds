@@ -281,6 +281,123 @@ paths:
         '400': 
             description: Bad request. Domain name invalid
 
+  /{object_class}/{object_id}/{attribute_name}:
+    get:
+      summary: Get an attribute from an object.
+      description: >
+        Get the value of an attribute from a group, dataset, or committed datatype.
+      operationId: getAttribute
+      tags:
+        - Attribute
+      parameters:
+        - name: object_class
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The class of object to which the attribute belongs.
+            Must be one of `groups`, `datasets`, or `datatypes`.
+          example: groups
+
+        - name: object_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the object to which the attribute belongs.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+
+        - name: attribute_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The name of the attribute to retrieve.
+          example: "attr1"
+        - $ref: "#/components/parameters/authorization"
+      responses:
+        '200':
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: object
+                    description: >
+                      The value of the attribute. 
+                      Type is an array for non-scalar datasets, or a string/number for scalar datasets.
+                    
+                    example: [1, 2, 3]
+
+                  type:
+                    type: object
+                    description: A JSON object representing the type of the attribute.
+                  shape: 
+                    $ref: "#/components/schemas/shape"
+        '400': 
+            description: Bad request. Object class, object ID, or attribute name invalid.
+        '404':
+            description: Object or attribute not found.
+
+    delete:
+      summary: Delete an attribute from an object.
+      description: >
+        Delete an attribute from an object by name.
+      operationId: deleteAttribute
+      tags:
+        - Attribute
+      parameters:
+        - name: object_class
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The class of object to which the attribute belongs.
+            Must be one of `groups`, `datasets`, or `datatypes`.
+          example: groups
+        - name: object_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the object to which the attribute belongs.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+        - name: attribute_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The name of the attribute to delete.
+          example: "attr1"
+        - $ref: "#/components/parameters/authorization"
+      responses:
+        '200':
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hrefs:
+                    type: array
+                    description: An array of links to related resources.
+                    items:
+                      type: object
+        '400': 
+            description: Bad request. Object class, object ID, or attribute name invalid.
+        '404':
+            description: Object or attribute not found.
+    # put:
+      # ...
+
   # end '/'
 
 components:
@@ -345,7 +462,28 @@ components:
           type: number
           description: object last modified time
           example: 1710245213.8037271
-
+    shape:
+      type: object
+      description: >
+        A JSON object representing the dataspace of the attribute.
+      properties:
+        class:
+          type: string
+          description: The class of the dataspace.
+          enum:
+            - H5S_NULL
+            - H5S_SCALAR
+            - H5S_SIMPLE
+          example: H5S_SCALAR
+        dims:
+          type: array
+          description: >
+            An integer array whose length is equal to the number of dimensions (rank) of the dataspace. 
+            The value of each element gives the current size of each dimension. 
+            Dims is not returned for H5S_NULL or H5S_SCALAR dataspaces.
+          items:
+            type: number
+      example: [1]
   parameters:
     authorization:
       in: header
