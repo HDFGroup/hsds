@@ -781,7 +781,186 @@ paths:
                     that specifies the initial values for the attribute. 
                     The elements of the array must be compatible with the type of the attribute. 
                     Not valid to provide if the shape is `H5S_NULL`.
+    
+  /{object_class}/{object_id}/attributes/{attribute_name}/value:
+    get:
+      summary: Get the value of an attribute on an object.
+      description: >
+        Get the value of an attribute from a group, dataset, or committed datatype.
+        The attribute name must be url-encoded.
+      operationId: getAttributeValue
+      tags:
+        - Attribute
+      parameters:
+        - name: object_class
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The class of object to which the attribute belongs.
+            Must be one of `groups`, `datasets`, or `datatypes`.
+          example: groups
+        
+        - name: object_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the object to which the attribute belongs.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+        
+        - name: attribute_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The url-encoded name of the attribute to retrieve.
+          example: "attr1"
+        
+        - name: domain
+          in: query
+          required: false
+          schema:
+            type: string
+          description: > 
+            Domain containing the attribute's parent object.
+            This parameter is optional if the domain is specified in the request headers.
+        
+        - name: ignore_nan
+          in: query
+          required: false
+          schema:
+            type: number
+          description: >
+            If present and `1`, replace NaN values in retrieved data with None instances.
+            Defaults to false.
+
+        - name: encoding
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >
+            The encoding that the attribute is stored in.
+            Default is no encoding.
+
+        - $ref: "#/components/parameters/authorization"
+      
+      responses:
+        '200':
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: object
+                    description: >
+                      The value of the attribute. 
+                      Type is an array for non-scalar datasets, or a string/number for scalar datasets.
+                    example: [1, 2, 3]
+                  type:
+                    type: object
+                    description: A JSON object representing the type of the attribute.
+                  shape: 
+                    $ref: "#/components/schemas/shape"
+        '400': 
+            description: Bad request. Object class, object ID, or attribute name invalid.
+        '404':
+            description: Object or attribute not found.
+    
+    put:
+      summary: Update the value of an attribute.
+      description: >
+        Update the value of an attribute on a group, dataset, or committed datatype.
+        The attribute name must be url-encoded.
+      operationId: putAttributeValue
+      tags:
+        - Attribute
+      parameters:
+        - name: object_class
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The class of object to which the attribute belongs.
+            Must be one of `groups`, `datasets`, or `datatypes`.
+          example: groups
+        
+        - name: object_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the object to which the attribute belongs.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+        
+        - name: attribute_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The url-encoded name of the attribute to update.
+          example: "attr1"
+        
+        - name: domain
+          in: query
+          required: false
+          schema:
+            type: string
+          description: > 
+            Domain containing the attribute's parent object.
+            This parameter is optional if the domain is specified in the request headers.
+      
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: object
+                  description: >
+                    A JSON array (or number or string for scalar attributes with primitive types) 
+                    that specifies the initial values for the attribute. 
+                    The elements of the array must be compatible with the type of the attribute. 
+                    Not valid to provide if the shape is `H5S_NULL`.
                 
+                encoding:
+                  type: string
+                  description: >
+                    The encoding that the attribute is stored in.
+                    Potential values are 'base64'.
+                    Default is no encoding.
+      
+      responses:
+        '200':
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hrefs:
+                    type: array
+                    description: An array of links to related resources.
+                    items:
+                      type: object
+        '400': 
+            description: Bad request. Object class, object ID, or attribute name invalid.
+        '404':
+            description: Object or attribute not found.
+        '409':
+            description: Conflict. Attribute already exists.
+
 components:
   schemas:
     ACL:
