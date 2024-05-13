@@ -68,3 +68,11 @@ jobs:
           sleep 10 # let the nodes get ready &&
           pytest tests/integ/setup_test.py
           pytest tests/integ
+
+  lint-openapi-yaml:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run lint script
+        working-directory: ${{github.workspace}}/hsds/docs/restapi
+        run: |
+          ./openapi_lint.sh
