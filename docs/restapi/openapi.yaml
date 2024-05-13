@@ -706,8 +706,82 @@ paths:
         '404':
             description: Object or attribute not found.
 
-    # put
-    # post
+    put:
+      summary: Create new attributes on an object(s).
+      description: >
+        Create new attributes on a set of groups, datasets, or committed datatypes. 
+        
+        The request must provide at least one attribute to be created. This may be done
+        in one of three ways: By providing an array `attributes`, a dictionary `obj_ids`,
+        oer a single attribute item with a `type` and optional `shape`/`value` fields.
+        
+        The new attributes may replace any existing attributes with the same names,
+        depending on the 'replace' parameter.
+      operationId: putAttributes
+      tags:
+        - Attribute
+      parameters:
+        - name: object_class
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The class of the object to which the attributes will belong.
+            Must be one of `groups`, `datasets`, or `datatypes`.
+            If `obj_ids` is provided, this parameter is ignored.
+          example: groups
+
+        - name: object_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the object to which the attributes will belong.
+            If `obj_ids` is provided, this parameter is ignored.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+    
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                attributes:
+                  description: >
+                    An array of attribute objects to create.
+                    Exactly one of `attributes`, `obj_ids`, or `type` must be provided.
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/attribute'
+                
+                obj_ids:
+                  description: >
+                    A dictionary mapping object UUIDs to the attributes to create on them.
+                    Exactly one of `attributes`, `obj_ids`, or `type` must be provided.
+                  type: object
+                  additionalProperties:
+                    $ref: '#/components/schemas/attribute'
+                
+                type: 
+                  description: >
+                    A JSON object representing the type of a single attribute to create.
+                    Exactly one of `attributes`, `obj_ids`, or `type` must be provided.
+                  type: object
+                
+                shape:
+                  $ref: "#/components/schemas/shape"
+
+                value:
+                  type: object
+                  description: >
+                    A JSON array (or number or string for scalar attributes with primitive types) 
+                    that specifies the initial values for the attribute. 
+                    The elements of the array must be compatible with the type of the attribute. 
+                    Not valid to provide if the shape is `H5S_NULL`.
+                
 components:
   schemas:
     ACL:
@@ -773,7 +847,7 @@ components:
     shape:
       type: object
       description: >
-        A JSON object representing the dataspace of the attribute.
+        A JSON object representing the dataspace of an attribute or dataset.
       properties:
         class:
           type: string
