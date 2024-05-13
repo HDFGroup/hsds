@@ -581,7 +581,8 @@ paths:
           schema:
             type: string
           description: >
-            The encoding to use for the response. 
+            The encoding that the attribute is stored in.
+            Potential values are 'base64'.
             Default is no encoding.
 
         - name: CreateOrder
@@ -782,6 +783,149 @@ paths:
                     The elements of the array must be compatible with the type of the attribute. 
                     Not valid to provide if the shape is `H5S_NULL`.
     
+    post:
+      summary: Get a collection of attributes from an object(s).
+      description: >
+        Get a collection of attributes from a set of groups, datasets, or committed datatypes.
+        For each attribute the request returns the attribute's name, type, and shape.
+
+        If the same attributes are to be retrieved from each target object, the attributes names should
+        be provided under `attr_names`.
+
+        If each target object has a unique set of attributes to be retrieved, then the target attribute
+        nanes should be provided as a list associated with the object UUID under `obj_ids`.
+
+        To get the attribute data use the parameter `IncludeData`.
+      operationId: postAttributes
+      tags:
+        - Attribute
+      parameters:
+        - name: object_class
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The class of the object to which the attributes belong.
+            Must be one of `groups`, `datasets`, or `datatypes`.
+          example: groups
+      
+        - name: object_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the object to which the attributes belong.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+        
+        - name: domain
+          in: query
+          required: false
+          schema:
+            type: string
+          description: > 
+            Domain containing the attributes' parent object.
+            This parameter is optional if the domain is specified in the request headers.
+          
+        - name: Limit
+          in: query
+          required: false
+          schema:
+            type: number
+          description: >
+            The maximum number of attributes to return. 
+            If not provided, all attributes will be returned.
+          
+        - name: Marker
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >
+            Used in conjunction with the 'Limit' parameter to retrieve attributes in multiple requests.
+            The url-encoded name of an attribute. 
+            If provided, the response will start with the attribute that follows the marker.
+        
+        - name: ignore_nan
+          in: query
+          required: false
+          schema:
+            type: number
+          description: >
+            If present and `1`, replace NaN values in retrieved data with None instances.
+            Defaults to false.
+
+        - name: IncludeData
+          in: query
+          required: false
+          schema:
+            type: number
+          description: >
+            If present and `1`, include the data values of the attributes in the response.
+            Defaults to false.
+
+        - name: encoding
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >
+            The encoding that the attributes are stored in.
+            Potential values are 'base64'.
+            Default is no encoding.
+        
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                attr_names:
+                  type: array
+                  description: >
+                    An array of attribute names to retrieve from each target object.
+                    If `obj_ids` is provided, this parameter is ignored.
+                  items:
+                    type: string
+                  example: ["attr1", "attr2"]
+                
+                obj_ids:
+                  type: object
+                  description: >
+                    A dictionary mapping object UUIDs to the attributes to retrieve from them.
+                    If `attr_names` is provided, this parameter is ignored.
+                  additionalProperties:
+                    type: array
+                    items:
+                      type: string
+                  example: {"g-82da0346-2b9e-11e8-9391-0242ac110009": ["attr1", "attr2"]}
+      
+      responses:
+        '200':
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attributes:
+                    type: array
+                    description: >
+                      An array of attribute objects.
+                    items:
+                      $ref: '#/components/schemas/attribute'
+                  hrefs: 
+                    type: array
+                    description: An array of links to related resources.
+                    items:
+                      type: object
+        '400': 
+            description: Bad request. Object classm object ID, or other parameter(s) are invalid.
+        '404':
+            description: One or more attributes or parent objects not found.
+
   /{object_class}/{object_id}/attributes/{attribute_name}/value:
     get:
       summary: Get the value of an attribute on an object.
