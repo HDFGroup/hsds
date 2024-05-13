@@ -619,7 +619,93 @@ paths:
             description: Bad request. Object class or object ID invalid.
         '404':
             description: Object not found.
-    # delete
+    
+    delete:
+      summary: Delete multiple attributes from an object.
+      description: >
+        Delete multiple attributes from a group, dataset, or committed datatype.
+        The attributes to delete must be provided in the request body as a list of names.
+      operationId: deleteAttributes
+      tags:
+        - Attribute
+      parameters:
+        - name: object_class
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The class of object to which the attributes belong.
+            Must be one of `groups`, `datasets`, or `datatypes`.
+          example: groups
+
+        - name: object_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the object to which the attributes belong.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+        
+        - name: attr_names
+          in: query
+          required: true
+          schema:
+            type: string
+          description: >
+            The names of the attributes to delete, separated by a separater character.
+            The default separater is '/'.
+          example: attr1/attr2
+        
+        - name: separator
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >
+            The character used to separate the attribute names in the request.
+            Default is '/'.
+          example: ':'
+        
+        - name: domain
+          in: query
+          required: false
+          schema:
+            type: string
+          description: > 
+            Domain containing the attributes' parent object.
+            This parameter is optional if the domain is specified in the request headers.
+          
+        - name: encoding
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >
+            The encoding used for the provided attribute names.
+            Default is no encoding.
+
+        - $ref: "#/components/parameters/authorization"
+      
+      responses:
+        '200':
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hrefs:
+                    type: array
+                    description: An array of links to related resources.
+                    items:
+                      type: object
+        '400': 
+            description: Bad request. Object class, object ID, or attribute name(s) invalid.
+        '404':
+            description: Object or attribute not found.
+
     # put
     # post
 components:
