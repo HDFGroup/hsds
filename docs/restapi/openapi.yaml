@@ -280,7 +280,8 @@ paths:
                     example: /home/test_user1/test/tall.h5
         '400': 
             description: Bad request. Domain name invalid
-
+  # end '/'
+  
   /{object_class}/{object_id}/{attribute_name}:
     get:
       summary: Get an attribute from an object.
@@ -395,10 +396,92 @@ paths:
             description: Bad request. Object class, object ID, or attribute name invalid.
         '404':
             description: Object or attribute not found.
-    # put:
-      # ...
+    
+    put:
+      summary: Create a new attribute on an object.
+      description: >
+        Create a new attribute on a group, dataset, or committed datatype. 
+        The new attribute will replace any existing attribute with the same name.
+        The request body must include a JSON object with "type" key. 
+        Optionally a "shape" key can be provided to make a non-scalar attribute.
 
-  # end '/'
+      operationId: putAttribute
+      tags:
+        - Attribute
+      parameters:
+        - name: object_class
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The class of object to which the attribute belongs.
+            Must be one of `groups`, `datasets`, or `datatypes`.
+          example: groups
+
+        - name: object_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the object to which the attribute belongs.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+
+        - name: attribute_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The name of the attribute to create.
+          example: "attr1"
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: object
+                  description: >
+                    A JSON array (or number or string for scalar attributes with primitive types) 
+                    that specifies the initial values for the attribute. 
+                    The elements of the array must be compatible with the type of the attribute. 
+                    Not valid to provide if the shape is `H5S_NULL`.
+                  example: [1, 2, 3]
+                type:
+                  type: object
+                  description: >
+                    Either a string that is one of the predefined type values, 
+                    a UUID of a committed type, or a JSON object describing the type.
+                shape: 
+                  description: >
+                    Either a string with the value `H5S_NULL` or an integer array describing the 
+                    dimensions of the attribute. 
+                    
+                    If shape is not provided, a scalar attribute will be created.
+
+                    If a shape value of `H5S_NULL` is specified a null space attribute will be created. (Null space attributes can not contain any data values.)
+      responses:
+        '200':
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hrefs:
+                    type: array
+                    description: An array of links to related resources.
+                    items:
+                      type: object
+        '400': 
+            description: Bad request.
+        '404':
+            description: Parent object or folder not found.
 
 components:
   schemas:
