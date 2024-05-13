@@ -282,7 +282,7 @@ paths:
             description: Bad request. Domain name invalid
   # end '/'
   
-  /{object_class}/{object_id}/{attribute_name}:
+  /{object_class}/{object_id}/attributes/{attribute_name}:
     get:
       summary: Get an attribute from an object.
       description: >
@@ -327,6 +327,11 @@ paths:
               schema:
                 type: object
                 properties:
+                  name:
+                    type: string
+                    description: The name of the attribute.
+                    example: "attr1"
+
                   value:
                     type: object
                     description: >
@@ -340,6 +345,17 @@ paths:
                     description: A JSON object representing the type of the attribute.
                   shape: 
                     $ref: "#/components/schemas/shape"
+                  created:
+                    type: number
+                    description: >
+                      The UNIX time the attribute was created.
+                    example: 1708897794.5621212
+
+                  lastModified:
+                    type: number
+                    description: >
+                      The UNIX time the attribute was last modified.
+                    example: 1710245213.8037271
         '400': 
             description: Bad request. Object class, object ID, or attribute name invalid.
         '404':
@@ -483,6 +499,129 @@ paths:
         '404':
             description: Parent object or folder not found.
 
+  /{object_class}/{object_id}/attributes:
+    get:
+      summary: Get all attributes from an object.
+      description: >
+        Get all attributes from a group, dataset, or committed datatype.
+        For each attribute the request returns the attribute's name, type, and shape.
+        To get the attribute data use the parameter `IncludeData`.
+      operationId: getAttributes
+      tags:
+        - Attribute
+      parameters:
+        - name: object_class
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The class of the object to which the attributes belong.
+            Must be one of `groups`, `datasets`, or `datatypes`.
+          example: groups
+
+        - name: object_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the object to which the attributes belong.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+        
+        - name: domain
+          in: query
+          required: false
+          schema:
+            type: string
+          description: > 
+            Domain containing the attributes' parent object.
+            This parameter is optional if the domain is specified in the request headers.
+
+        - name: Limit
+          in: query
+          required: false
+          schema:
+            type: number
+          description: >
+            The maximum number of attributes to return. 
+            If not provided, all attributes will be returned.
+        
+        - name: Marker
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >
+            Used in conjunction with the 'Limit' parameter to retrieve attributes in multiple requests.
+            The url-encoded name of an attribute. 
+            If provided, the response will start with the attribute that follows the marker.
+        
+        - name: ignore_nan
+          in: query
+          required: false
+          schema:
+            type: number
+          description: >
+            If present and `1`, replace NaN values in retrieved data with None instances.
+            Defaults to false.
+          
+        - name: IncludeData
+          in: query
+          required: false
+          schema:
+            type: number
+          description: >
+            If present and `1`, include the data values of the attributes in the response.
+            Defaults to false.
+        
+        - name: encoding
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >
+            The encoding to use for the response. 
+            Default is no encoding.
+
+        - name: CreateOrder
+          in: query
+          required: false
+          schema:
+            type: number
+          description: >
+            If present and '1', return the attributes in creation order.
+            Otherwise, return the attributes in alphabetical order.
+
+        - $ref: "#/components/parameters/authorization"
+
+      responses:
+        '200':
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attributes:
+                    type: array
+                    description: >
+                      An array of attribute objects.
+                    items:
+                      $ref: '#/components/schemas/attribute'
+                  hrefs: 
+                    type: array
+                    description: An array of links to related resources.
+                    items:
+                      type: object
+
+        '400': 
+            description: Bad request. Object class or object ID invalid.
+        '404':
+            description: Object not found.
+    # delete
+    # put
+    # post
 components:
   schemas:
     ACL:
@@ -567,6 +706,31 @@ components:
           items:
             type: number
       example: [1]
+      
+    attribute:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the attribute.
+          example: "attr1"
+        type:
+          type: object
+          description: >
+            A JSON object representing the type of the attribute.
+        shape: 
+          $ref: "#/components/schemas/shape"
+        created:
+          type: number
+          description: >
+            The UNIX time the attribute was created.
+          example: 1708897794.5621212
+        lastModified:
+          type: number
+          description: >
+            The UNIX time the attribute was last modified.
+          example: 1710245213.8037271
+
   parameters:
     authorization:
       in: header
