@@ -71,12 +71,7 @@ paths:
       tags:
         - Domain
       parameters:
-        - name: domain 
-          in: query
-          schema:
-            type: string
-          description: the domain path (e.g. "/home/test_user1/tall.h5")
-          example: /home/test_user1/test/tall.h5
+        - $ref: "#/components/parameters/query_domain"
         - name: bucket
           in: query
           required: false
@@ -529,15 +524,8 @@ paths:
             The UUID of the object to which the attributes belong.
           example: g-82da0346-2b9e-11e8-9391-0242ac110009
         
-        - name: domain
-          in: query
-          required: false
-          schema:
-            type: string
-          description: > 
-            Domain containing the attributes' parent object.
-            This parameter is optional if the domain is specified in the request headers.
-
+        - $ref: "#/components/parameters/query_domain"
+        
         - name: Limit
           in: query
           required: false
@@ -669,14 +657,7 @@ paths:
             Default is '/'.
           example: ':'
         
-        - name: domain
-          in: query
-          required: false
-          schema:
-            type: string
-          description: > 
-            Domain containing the attributes' parent object.
-            This parameter is optional if the domain is specified in the request headers.
+        - $ref: "#/components/parameters/query_domain"
           
         - name: encoding
           in: query
@@ -819,14 +800,7 @@ paths:
             The UUID of the object to which the attributes belong.
           example: g-82da0346-2b9e-11e8-9391-0242ac110009
         
-        - name: domain
-          in: query
-          required: false
-          schema:
-            type: string
-          description: > 
-            Domain containing the attributes' parent object.
-            This parameter is optional if the domain is specified in the request headers.
+        - $ref: "#/components/parameters/query_domain"
           
         - name: Limit
           in: query
@@ -964,14 +938,7 @@ paths:
             The url-encoded name of the attribute to retrieve.
           example: "attr1"
         
-        - name: domain
-          in: query
-          required: false
-          schema:
-            type: string
-          description: > 
-            Domain containing the attribute's parent object.
-            This parameter is optional if the domain is specified in the request headers.
+        - $ref: "#/components/parameters/query_domain"
         
         - name: ignore_nan
           in: query
@@ -1054,15 +1021,9 @@ paths:
             The url-encoded name of the attribute to update.
           example: "attr1"
         
-        - name: domain
-          in: query
-          required: false
-          schema:
-            type: string
-          description: > 
-            Domain containing the attribute's parent object.
-            This parameter is optional if the domain is specified in the request headers.
-      
+        - $ref: "#/components/parameters/query_domain"
+
+        - $ref: "#/components/parameters/authorization"
       requestBody:
         required: true
         content:
@@ -1104,6 +1065,564 @@ paths:
             description: Object or attribute not found.
         '409':
             description: Conflict. Attribute already exists.
+
+  /groups/{group_id}/links/{link_title}:
+    get:
+      summary: Return information about a link
+      description: >
+        Return information about a link from a group to another object.
+      operationId: getLink
+      tags:
+        - Link
+
+      parameters:
+        - name: group_id 
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the group containing the link.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+
+        - name: link_title
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The title of the link to retrieve
+          example: "link1"
+
+        - $ref: "#/components/parameters/query_domain"
+      
+      responses:
+        '200':
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  link:
+                    type: object
+                    description: >
+                      A JSON object representing a link.
+                    properties:
+                      title:
+                        type: string
+                        description: >
+                          The title of the link.
+                      class:
+                        description: The class of the link.
+                        type: string
+                        enum:
+                          - H5L_TYPE_HARD
+                          - H5L_TYPE_SOFT
+                          - H5L_TYPE_EXTERNAL
+                      id: 
+                        type: string
+                        description: The UUID of the target object. Only present if the link is a hard link.
+                      h5path: 
+                        type: string
+                        description: Path to the target object. Only present if the link is a soft link.
+                      collection: 
+                        type: string
+                        description: The collection of the target object.
+                        enum:
+                          - groups
+                          - datasets
+                          - datatypes
+                    
+                  created: 
+                    type: number
+                    description: >
+                      The UNIX time the link was created.
+                    example: 1708897794.5621212
+
+                  lastModified:
+                    type: number
+                    description: >
+                      The UNIX time the link was last modified.
+                    example: 1710245213.8037271
+
+                  hrefs:
+                    type: array
+                    description: An array of links to related resources.
+                    items:
+                      type: object
+        '400': 
+            description: Bad request.
+        '404':
+            description: Object not found.
+        '409':
+            description: Conflict. Link with the same name already exists.
+  
+    put:
+      summary: Create a new link
+      description: >
+        Create a new link from a group to another object.
+      operationId: putLink
+      tags:
+        - Link
+
+      parameters:
+        - name: group_id 
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the group to which the link will be added.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+
+        - name: link_title
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The title of the link to create
+          example: "link1"
+
+        - $ref: "#/components/parameters/query_domain"
+      
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: >
+                    The UUID of the target object. Only present if the link is a hard link.
+                h5path:
+                  type: string
+                  description: >
+                    Path to the target object within the file's hierarchy. Only present if the link is a soft or external link.
+                h5domain:
+                  type: string
+                  description: >
+                    Domain containing the target object. Only present if the link is an external link.
+      responses:
+        '200':
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hrefs:
+                    type: array
+                    description: An array of links to related resources.
+                    items:
+                      type: object
+        '400': 
+            description: Bad request.
+        '404':
+            description: Object not found.
+        '409':
+            description: Conflict. Link with the same name already exists.        
+      
+    delete:
+      summary: Delete a link
+      description: >
+        Delete a link from a group to another object.
+      operationId: deleteLink
+      tags:
+        - Link
+
+      parameters:
+        - name: group_id 
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the group containing the link.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+
+        - name: link_title
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The title of the link to delete
+          example: "link1"
+
+        - $ref: "#/components/parameters/query_domain"
+      
+      responses:
+        '200':
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hrefs:
+                    type: array
+                    description: An array of links to related resources.
+                    items:
+                      type: object
+        '400': 
+            description: Bad request.
+        '404':
+            description: Object or link not found.
+        '410':
+            description: Gone. Link has already been deleted.
+
+  /groups/{group_id}/links:
+    get:
+      summary: Get a collection of multiple links
+      description: >
+        Get a collection of links from a set of groups.
+      operationId: getLinks
+      tags:
+        - Link
+
+      parameters:
+        - $ref: "#/components/parameters/query_domain"
+
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the group containing the links.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+
+        - name: Limit
+          in: query
+          required: false
+          schema:
+            type: number
+          description: >
+            The maximum number of links to return. 
+            If not provided, all links will be returned.
+          
+        - name: Marker
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >
+            Used in conjunction with the 'Limit' parameter to retrieve links in multiple requests.
+            The url-encoded title of a link. 
+            If provided, the response will start with the link that follows the marker.
+          
+        - name: CreateOrder
+          in: query
+          required: false
+          schema:
+            type: number
+          description: >
+            If present and '1', return the links in creation order.
+            Otherwise, return the links in alphabetical order.
+          
+        - name: follow_links
+          in: query
+          required: false
+          schema:
+            type: number
+          description: >
+            If present and '1', subgroups of the target group(s) 
+            will be recursively traversed and
+            the links they contain will be returned.
+          
+        - name: pattern
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >
+            A regular expression pattern to match against link titles.
+            If this parameter is provided, HSDS will only return links 
+            that match this pattern according to Unix pathname pattern expansion rules.
+          
+        - $ref: "#/components/parameters/authorization"
+      
+      responses:
+        '200':
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  links:
+                    type: array
+                    description: >
+                      An array of link objects.
+                    items:
+                      type: object
+                      properties:
+                        title:
+                          type: string
+                          description: >
+                            The title of the link.
+                        class:
+                          description: The class of the link.
+                          type: string
+                          enum:
+                            - H5L_TYPE_HARD
+                            - H5L_TYPE_SOFT
+                            - H5L_TYPE_EXTERNAL
+                        id: 
+                          type: string
+                          description: The UUID of the target object. Only present if the link is a hard link.
+                        h5path: 
+                          type: string
+                          description: Path to the target object. Only present if the link is a soft or external link.
+                        collection: 
+                          type: string
+                          description: The collection of the target object. Only present if the link is a hard link.
+                          enum:
+                            - groups
+                            - datasets
+                            - datatypes
+                        created:
+                          type: number
+                          description: >
+                            The UNIX time the link was created.
+                        target:
+                          type: string
+                          description: >
+                            Full URL of the target object
+                        href: 
+                          type: string
+                          description: >
+                            Full URL of the link
+                      example: 
+                        title: "link1"
+                        class: "H5L_TYPE_HARD"
+                        id: "g-82da0346-2b9e-11e8-9391-0242ac110009"
+                        collection: "groups"
+                        created: 1708897794.5621212
+                        target: "https://hsds.hdfgroup.org/groups/g-82da0346-2b9e-11e8-9391-0242ac110009"
+                        href: "https://hsds.hdfgroup.org/groups/g-aba449b2-92b57d6f-232c-c13a1a-3df5e7/links/link1"
+        '400': 
+            description: Bad request.
+        '404':
+            description: Target group not found.
+
+    delete:
+      summary: Delete multiple links
+      description: >
+        Delete multiple links from a group.
+      operationId: deleteLinks
+      tags:
+        - Link
+
+      parameters:
+        - name: group_id 
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the group containing the links.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+
+        - name: titles
+          in: query
+          required: true
+          schema:
+            type: string
+          description: >
+            The titles of the links to delete, separated by a separator character.
+            The default separater is '/'.
+          example: link1/link2
+        
+        - name: separator
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >
+            The character used to separate the link titles in the request.
+            Default is '/'.
+          example: ':'
+        
+        - $ref: "#/components/parameters/query_domain"
+        
+        - $ref: "#/components/parameters/authorization"
+      
+      responses:
+        '200':
+          description: Operation successful
+        '400': 
+            description: Bad request.
+        '404':
+            description: Object or link not found.
+    
+    post:
+      summary: Get information about multiple links
+      description: >
+        Get information about multiple links from a set of groups. the links to retrieve may 
+        be specified in one of three ways:
+
+        If the same links are to be retrieved from each target group, the link titles should
+        be provided with the 'titles' parameter.
+
+        If each target object has a unique set of links to be retrieved, then the target links
+        should be specified as a list associated with each group UUID under 'obj_ids'.
+
+        To instead return all links with titles that match a pattern, the 'pattern' parameter should be used.
+      operationId: postLinks
+      tags:
+        - Link
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the group containing the links.
+            This group is not searched if `group_ids` is provided.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+        
+        - $ref: "#/components/parameters/query_domain"
+        
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                titles:
+                  type: array
+                  description: >
+                    An array of link titles to retrieve from the target group(s).
+                  items:
+                    type: string
+                    description: >
+                      Name of a link to retrieve from each target group.
+
+                group_ids:
+                  type: object
+                  description: >
+                    If a unique set of links is to be retrieved from each group, 
+                    this is a dictionary mapping group UUIDs to the link titles to retrieve from them.
+
+                    If the same links are to be retrieved from each group, this is a list of group ids.
+                  
+                  additionalProperties:
+                    type: object
+                    properties:
+                      title:
+                        type: string
+                        description: >
+                          The title of the link to retrieve.
+                      class:
+                        type: string
+                        description: >
+                          The class of the link
+
+    put:
+      summary: Create multiple links
+      description: >
+        Create multiple links from a group to other objects.
+        At least one of `links` or `grp_ids` must be provided in the request body.
+
+        If the same set of links is to be created in all groups, `links` should be provided
+        as a object mapping link titles to link objects to create.
+
+        If a unique set of links is to be created in each target group, 
+        `grp_ids` should be an object mapping each target group UUID to 
+        a set of link objects to create.
+
+        If `grp_ids` is not provided, all links will be created in the group
+        specified by `group_id` from the path.
+      operationId: putLinks
+      tags:
+        - Link
+
+      parameters:
+        - name: group_id 
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >
+            The UUID of the group to which the links will be added.
+            If `grp_ids` is provided, this parameter is ignored.
+          example: g-82da0346-2b9e-11e8-9391-0242ac110009
+
+        - $ref: "#/components/parameters/query_domain"
+      
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                links:
+                  type: object
+                  description: >
+                    A dictionary mapping link titles to link objects, 
+                    which will all be created on each target group.
+                    If `grp_ids` is provided as an object, this parameter is ignored.
+                  
+                  additionalProperties:
+                    type: object
+                    properties:
+                      id: 
+                        type: string
+                        description: The UUID of the target object. Only present if the link is a hard link.
+                      
+                      h5path: 
+                        type: string
+                        description: Path to the target object. Only present if the link is a soft or external link.
+                      
+                      h5domain:
+                        type: string
+                        description: Domain containing the target object of the link. Only present for external links
+
+                grp_ids:
+                  type: object
+                  description: >
+                    A set of group UUIDs for groups that will contain the newly created links. 
+                    If it is an array, each link provided in 'links' will be written to each of these groups.
+                    If it is an object, it should map each group UUID to a object whose `links` key contains an object mapping each link title to its information.
+                    If it is not provided, each link will be created in the group from the request URL.
+                  
+                  additionalProperties:
+                    type: object
+                    properties:
+                      links:
+                        type: object
+                        additionalProperties:
+                          type: object
+                          properties:
+                            id: 
+                              type: string
+                              description: The UUID of the target object. Only present if the link is a hard link.
+                            
+                            h5path: 
+                              type: string
+                              description: Path to the target object. Only present if the link is a soft or external link.
+                            
+                            h5domain:
+                              type: string
+                              description: Domain containing the target object of the link. Only present for external links
+
+      responses:
+        '200':
+          description: Operation successful
+        '400': 
+          description: Bad request.
+        '404':
+          description: Parent object not found, or target of intended hard link not found.
+        '409':
+          description: Conflict. Link with the same name already exists.
 
 components:
   schemas:
