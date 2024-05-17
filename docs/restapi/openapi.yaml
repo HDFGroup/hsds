@@ -724,6 +724,16 @@ paths:
             If `obj_ids` is provided, this parameter is ignored.
           example: g-82da0346-2b9e-11e8-9391-0242ac110009
     
+        - name: replace
+          in: query
+          required: false
+          schema:
+            type: number
+          description: >
+            If present and `1`, replace any existing attributes with the same names.
+            Defaults to false.
+
+        - $ref: "#/components/parameters/query_domain"
       requestBody:
         required: true
         content:
