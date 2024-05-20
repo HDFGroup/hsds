@@ -1535,6 +1535,24 @@ paths:
                         description: >
                           The class of the link
 
+      responses:
+        '200':
+          description: Operation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  links:
+                    type: array
+                    description: >
+                      If a single group is targeted, then this is an array of link objects.
+                      If more than one group is targeted or searched, then this is an object mapping group UUIDs to arrays of link objects contained by those groups.
+        '400': 
+            description: Bad request.
+        '404':
+            description: Target group not found.
+
     put:
       summary: Create multiple links
       description: >
