@@ -49,6 +49,7 @@ dependencies = [
     "pyjwt",
     "pytz",
     "pyyaml",
+    "requests <= 2.31.0",
     "requests-unixsocket",
     "simplejson",
     "s3fs",
