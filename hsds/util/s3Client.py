@@ -374,7 +374,7 @@ class S3Client:
                 }
             except ClientError as ce:
                 response_code = ce.response["Error"]["Code"]
-                if response_code == "NoSuchBucket":
+                if response_code in ("NoSuchBucket", "PermanentRedirect"):
                     msg = f"s3_bucket: {bucket} not found"
                     log.warn(msg)
                     raise HTTPNotFound()
