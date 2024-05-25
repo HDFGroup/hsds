@@ -314,7 +314,7 @@ class S3Client:
                     msg = f"s3_key: {bucket}/{key} not found "
                     log.info(msg)
                     raise HTTPNotFound()
-                elif response_code == "NoSuchBucket":
+                elif response_code in ("NoSuchBucket", "PermanentRedirect"):
                     msg = f"s3_bucket: {bucket} not found"
                     log.info(msg)
                     raise HTTPNotFound()
