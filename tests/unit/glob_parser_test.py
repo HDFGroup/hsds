@@ -24,6 +24,7 @@ class GlobParserTest(unittest.TestCase):
     def testPatterns(self):
 
         self.assertTrue(globmatch("ab123", "ab*"))
+        self.assertFalse(globmatch("ab123", "abc*"))
         self.assertTrue(globmatch("abc123", "*123"))
         self.assertTrue(globmatch("abcxyz", "abc*xyz"))
         self.assertTrue(globmatch("abc123xyz", "abc*xyz"))

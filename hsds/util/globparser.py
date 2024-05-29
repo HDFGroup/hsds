@@ -116,7 +116,7 @@ def globmatch(item, pattern):
     asterix_index += 1
     glob_right = pattern[asterix_index:]
     index = _wildcharmatch(item, glob_left)
-    if glob_left and index == 0:
+    if glob_left and index < len(glob_left):
         return False
     item = item[index:]
     if not glob_right:
