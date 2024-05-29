@@ -29,18 +29,18 @@ _HELP_EPILOG = """Examples:
 
 - with POSIX-based storage and config settings and password file:
 
-  hsds --root_dir ~/hsdata --password-file ./admin/config/passwd.txt \
+  hsds --root_dir ~/hsdata --password_file ./admin/config/passwd.txt \
   --config_dir ./admin/config
 
 - with minio data storage:
 
   hsds --s3-gateway http://localhost:6007 --access-key-id demo:demo
-      --secret-access-key DEMO_PASS --password-file ./admin/config/passwd.txt
+      --secret-access-key DEMO_PASS --password_file ./admin/config/passwd.txt
 
 - with AWS S3 storage and a bucket in the us-west-2 region:
 
   hsds --s3-gateway http://s3.us-west-2.amazonaws.com --access-key-id ${AWS_ACCESS_KEY_ID} \
-      --secret-access-key ${AWS_SECRET_ACCESS_KEY} --password-file ./admin/config/passwd.txt
+      --secret-access-key ${AWS_SECRET_ACCESS_KEY} --password_file ./admin/config/passwd.txt
 
 """
 
