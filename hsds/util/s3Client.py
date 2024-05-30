@@ -27,8 +27,8 @@ from .. import hsds_logger as log
 from .. import config
 
 S3_URI = "s3://"
-
 S3_INVALID_ACCESS_CODES = ("AccessDenied", "InvalidAccessKeyId", "401", "403", 401, 403)
+
 
 class S3Client:
     """
@@ -320,7 +320,7 @@ class S3Client:
                     log.info(msg)
                     raise HTTPNotFound()
                 elif response_code in S3_INVALID_ACCESS_CODES:
-                    msg = f"access denied for s3_bucket: {bucket}"
+                    msg = f"access denied for s3_bucket: {bucket}, response code: {response_code}"
                     log.info(msg)
                     raise HTTPForbidden()
                 else:
@@ -380,7 +380,7 @@ class S3Client:
                     log.warn(msg)
                     raise HTTPNotFound()
                 elif response_code in S3_INVALID_ACCESS_CODES:
-                    msg = f"access denied for s3_bucket: {bucket}"
+                    msg = f"access denied for s3_bucket: {bucket}, response_code: {response_code}"
                     log.info(msg)
                     raise HTTPForbidden()
                 else:
