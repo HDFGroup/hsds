@@ -28,6 +28,7 @@ from .. import config
 
 S3_URI = "s3://"
 
+S3_INVALID_ACCESS_CODES = ("AccessDenied", "InvalidAccessKeyId", "401", "403", 401, 403)
 
 class S3Client:
     """
@@ -318,7 +319,7 @@ class S3Client:
                     msg = f"s3_bucket: {bucket} not found"
                     log.info(msg)
                     raise HTTPNotFound()
-                elif response_code in ("AccessDenied", "401", "403", 401, 403):
+                elif response_code in S3_INVALID_ACCESS_CODES:
                     msg = f"access denied for s3_bucket: {bucket}"
                     log.info(msg)
                     raise HTTPForbidden()
@@ -378,6 +379,10 @@ class S3Client:
                     msg = f"s3_bucket: {bucket} not found"
                     log.warn(msg)
                     raise HTTPNotFound()
+                elif response_code in S3_INVALID_ACCESS_CODES:
+                    msg = f"access denied for s3_bucket: {bucket}"
+                    log.info(msg)
+                    raise HTTPForbidden()
                 else:
                     self._s3_stats_increment("error_count")
                     msg = f"Error putting s3 obj {key}: {ce}"
