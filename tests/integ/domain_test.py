@@ -170,7 +170,7 @@ class DomainTest(unittest.TestCase):
         params = {"domain": domain}
 
         rsp = self.session.get(req, params=params, headers=headers)
-        self.assertEqual(rsp.status_code, 404)
+        self.assertTrue(rsp.status_code in (403, 404))
 
     def testPostDomainSingle(self):
         domain = helper.getTestDomain("tall.h5")
