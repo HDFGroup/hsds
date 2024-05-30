@@ -1188,7 +1188,7 @@ class DomainTest(unittest.TestCase):
 
         headers = helper.getRequestHeaders(domain=folder + "/")
         req = helper.getEndpoint() + "/domains"
-        rsp = self.session.get(req, headers=headers)  # , params=params)
+        rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
         rspJson = json.loads(rsp.text)

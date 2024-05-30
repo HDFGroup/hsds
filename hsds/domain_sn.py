@@ -18,9 +18,8 @@ import json
 import os.path as op
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
-from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPConflict, HTTPServiceUnavailable
-from aiohttp import ClientResponseError
 from aiohttp.web import json_response
 
 from .util.httpUtil import getObjectClass, http_post, http_put, http_delete
@@ -161,14 +160,13 @@ async def get_domains(request):
         raise HTTPServiceUnavailable()
 
     # allow domain with / to indicate a folder
-    prefix = None
-    try:
-        prefix = getDomainFromRequest(request, validate=False)
-    except ValueError:
-        pass  # igore
-    if not prefix:
+    folder_path = getDomainFromRequest(request, validate=False)
+
+    if not folder_path:
         # if there is no domain passed in, get a list of top level domains
-        prefix = "/"
+        folder_path = "/"
+
+    prefix = getPathForDomain(folder_path)  # don't include the bucket if any
 
     if "pattern" not in request.rel_url.query:
         pattern = None
@@ -191,11 +189,6 @@ async def get_domains(request):
 
     log.info(f"get_domains for: {prefix} verbose: {verbose}")
 
-    if not prefix.startswith("/"):
-        msg = "Prefix must start with '/'"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-
     limit = None
     if "Limit" in request.rel_url.query:
         try:
@@ -217,10 +210,13 @@ async def get_domains(request):
         bucket = params["bucket"]
     elif "X-Hdf-bucket" in request.headers:
         bucket = request.headers["X-Hdf-bucket"]
+    elif getBucketForDomain(folder_path):
+        bucket = getBucketForDomain(folder_path)
     elif "bucket_name" in app and app["bucket_name"]:
         bucket = app["bucket_name"]
     else:
         bucket = None
+
     if not bucket:
         msg = "no bucket specified for request"
         log.warn(msg)
@@ -473,21 +469,9 @@ async def GET_Domain(request):
         log.response(request, resp=resp)
         return resp
 
-    log.info(f"got domain: {domain}")
+    log.info(f"get domain: {domain}")
 
     domain_json = await getDomainJson(app, domain, reload=True)
-
-    if domain_json is None:
-        log.warn(f"domain: {domain} not found")
-        raise HTTPNotFound()
-
-    if "owner" not in domain_json:
-        log.error("No owner key found in domain")
-        raise HTTPInternalServerError()
-
-    if "acls" not in domain_json:
-        log.error("No acls key found in domain")
-        raise HTTPInternalServerError()
 
     log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
@@ -703,14 +687,6 @@ async def POST_Domain(request):
 
     domain_json = await getDomainJson(app, domain, reload=True)
 
-    if domain_json is None:
-        log.warn(f"domain: {domain} not found")
-        raise HTTPNotFound()
-
-    if "acls" not in domain_json:
-        log.error("No acls key found in domain")
-        raise HTTPInternalServerError()
-
     if "root" not in domain_json:
         msg = f"{domain} is a folder, not a domain"
         log.warn(msg)
@@ -845,17 +821,6 @@ async def PUT_Domain(request):
         domain_json = await getDomainJson(app, domain, reload=True)
         log.debug(f"got domain_json: {domain_json}")
 
-        if domain_json is None:
-            log.warn(f"domain: {domain} not found")
-            raise HTTPNotFound()
-
-        if "owner" not in domain_json:
-            log.error("No owner key found in domain")
-            raise HTTPInternalServerError()
-
-        if "acls" not in domain_json:
-            log.error("No acls key found in domain")
-            raise HTTPInternalServerError()
         # throws exception if not allowed
         aclCheck(app, domain_json, "update", username)
         rsp_json = None
@@ -980,22 +945,10 @@ async def PUT_Domain(request):
         log.warn(msg)
         raise HTTPForbidden()
 
-    parent_json = None
-    if not is_toplevel:
-        try:
-            parent_json = await getDomainJson(app, parent_domain, reload=True)
-        except ClientResponseError as ce:
-            if ce.code == 404:
-                msg = f"Parent domain: {parent_domain} not found"
-                log.warn(msg)
-                raise HTTPNotFound()
-            elif ce.code == 410:
-                msg = f"Parent domain: {parent_domain} removed"
-                log.warn(msg)
-                raise HTTPGone()
-            else:
-                log.error(f"Unexpected error: {ce.code}")
-                raise HTTPInternalServerError()
+    if is_toplevel:
+        parent_json = None
+    else:
+        parent_json = await getDomainJson(app, parent_domain, reload=True)
 
         log.debug(f"parent_json {parent_domain}: {parent_json}")
         if "root" in parent_json and parent_json["root"]:
@@ -1041,12 +994,8 @@ async def PUT_Domain(request):
         bucket = getBucketForDomain(domain)
         if bucket:
             post_params["bucket"] = bucket
-        try:
-            group_json = await http_post(app, req, data=group_json, params=post_params)
-        except ClientResponseError as ce:
-            msg = "Error creating root group for domain -- " + str(ce)
-            log.error(msg)
-            raise HTTPInternalServerError()
+        group_json = await http_post(app, req, data=group_json, params=post_params)
+
     else:
         log.debug("no root group, creating folder")
 
@@ -1094,12 +1043,7 @@ async def PUT_Domain(request):
         body["root"] = root_id
 
     log.debug(f"creating domain: {domain} with body: {body}")
-    try:
-        domain_json = await http_put(app, req, data=body)
-    except ClientResponseError as ce:
-        msg = "Error creating domain state -- " + str(ce)
-        log.error(msg)
-        raise HTTPInternalServerError()
+    domain_json = await http_put(app, req, data=body)
 
     # domain creation successful
     # mixin limits
@@ -1184,18 +1128,7 @@ async def DELETE_Domain(request):
         log.warn(msg)
         raise HTTPForbidden()
 
-    try:
-        domain_json = await getDomainJson(app, domain, reload=True)
-    except ClientResponseError as ce:
-        if ce.code == 404:
-            log.warn("domain not found")
-            raise HTTPNotFound()
-        elif ce.code == 410:
-            log.warn("domain has been removed")
-            raise HTTPGone()
-        else:
-            log.error(f"unexpected error: {ce.code}")
-            raise HTTPInternalServerError()
+    domain_json = await getDomainJson(app, domain, reload=True)
 
     # throws exception if not allowed
     aclCheck(app, domain_json, "delete", username)
@@ -1277,16 +1210,7 @@ async def GET_ACL(request):
         checkBucketAccess(app, bucket)
 
     # use reload to get authoritative domain json
-    try:
-        domain_json = await getDomainJson(app, domain, reload=True)
-    except ClientResponseError as ce:
-        if ce.code in (404, 410):
-            msg = "domain not found"
-            log.warn(msg)
-            raise HTTPNotFound()
-        else:
-            log.error(f"unexpected error: {ce.code}")
-            raise HTTPInternalServerError()
+    domain_json = await getDomainJson(app, domain, reload=True)
 
     # validate that the requesting user has permission to read ACLs
     # in this domain
@@ -1361,19 +1285,7 @@ async def GET_ACLs(request):
         checkBucketAccess(app, bucket)
 
     # use reload to get authoritative domain json
-    try:
-        domain_json = await getDomainJson(app, domain, reload=True)
-    except ClientResponseError:
-        log.warn("domain not found")
-        raise HTTPNotFound()
-
-    if "owner" not in domain_json:
-        log.error("No owner key found in domain")
-        raise HTTPInternalServerError()
-
-    if "acls" not in domain_json:
-        log.error("No acls key found in domain")
-        raise HTTPInternalServerError()
+    domain_json = await getDomainJson(app, domain, reload=True)
 
     acls = domain_json["acls"]
 
@@ -1498,28 +1410,7 @@ async def GET_Datasets(request):
     bucket = getBucketForDomain(domain)
 
     # verify the domain
-    try:
-        domain_json = await getDomainJson(app, domain)
-    except ClientResponseError as ce:
-        if ce.code == 404:
-            msg = f"Domain: {domain} not found"
-            log.warn(msg)
-            raise HTTPNotFound()
-        elif ce.code == 410:
-            msg = f"Domain: {domain} removed"
-            log.warn(msg)
-            raise HTTPGone()
-        else:
-            log.error(f"Unexpected error: {ce.code}")
-            raise HTTPInternalServerError()
-
-    if "owner" not in domain_json:
-        log.error("No owner key found in domain")
-        raise HTTPInternalServerError()
-
-    if "acls" not in domain_json:
-        log.error("No acls key found in domain")
-        raise HTTPInternalServerError()
+    domain_json = await getDomainJson(app, domain)
 
     log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
@@ -1588,24 +1479,7 @@ async def GET_Groups(request):
     bucket = getBucketForDomain(domain)
 
     # use reload to get authoritative domain json
-    try:
-        domain_json = await getDomainJson(app, domain, reload=True)
-    except ClientResponseError as ce:
-        if ce.code == 404:
-            msg = "domain not found"
-            log.warn(msg)
-            raise HTTPNotFound()
-        else:
-            log.error(f"Unexpected error: {ce.code}")
-            raise HTTPInternalServerError()
-
-    if "owner" not in domain_json:
-        log.error("No owner key found in domain")
-        raise HTTPInternalServerError()
-
-    if "acls" not in domain_json:
-        log.error("No acls key found in domain")
-        raise HTTPInternalServerError()
+    domain_json = await getDomainJson(app, domain, reload=True)
 
     log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
@@ -1673,24 +1547,7 @@ async def GET_Datatypes(request):
     bucket = getBucketForDomain(domain)
 
     # use reload to get authoritative domain json
-    try:
-        domain_json = await getDomainJson(app, domain, reload=True)
-    except ClientResponseError as ce:
-        if ce.code in (404, 410):
-            msg = "domain not found"
-            log.warn(msg)
-            raise HTTPNotFound()
-        else:
-            log.error(f"Unexpected Error: {ce.code})")
-            raise HTTPInternalServerError()
-
-    if "owner" not in domain_json:
-        log.error("No owner key found in domain")
-        raise HTTPInternalServerError()
-
-    if "acls" not in domain_json:
-        log.error("No acls key found in domain")
-        raise HTTPInternalServerError()
+    domain_json = await getDomainJson(app, domain, reload=True)
 
     log.debug(f"got domain_json: {domain_json}")
     # validate that the requesting user has permission to read this domain
