@@ -73,7 +73,7 @@ async def getDomainJson(app, domain, reload=False):
         log.warn(f"domain: {domain} has been removed")
         raise
     except ClientResponseError as ce:
-        # shouldn't get this if we are catching relevent exceptions
+        # shouldn't get this if we are catching relevant exceptions
         # in http_get...
         log.error(f"Unexpected ClientResponseError: {ce}")
 
