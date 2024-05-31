@@ -40,8 +40,9 @@ class SetupTest(unittest.TestCase):
         try:
             admin_username = config.get("admin_username")
             admin_passwd = config.get("admin_password")
-            print("using admin account:", admin_username, "admin_passwd: ",
-                  "*" * len(admin_passwd))
+            if admin_username and admin_passwd:
+                print("using admin account:", admin_username, "admin_passwd: ",
+                      "*" * len(admin_passwd))
             admin_headers = helper.getRequestHeaders(username=admin_username,
                                                      password=admin_passwd)
         except KeyError:

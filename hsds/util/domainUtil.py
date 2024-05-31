@@ -268,7 +268,7 @@ def validateDomainKey(domain_key):
 
 
 def getDomainFromRequest(request, validate=True):
-    # print("gotDomainFromRequest:", request, "validate=", validate)
+    # print(f"getDomainFromRequest: {request}, validate={validate}")
     app = request.app
     domain = None
     bucket = None
@@ -279,7 +279,6 @@ def getDomainFromRequest(request, validate=True):
         domain = request.headers["X-Hdf-domain"]
     else:
         return None
-
     if domain.startswith("hdf5:/"):
         # strip off the prefix to make following logic easier
         domain = domain[6:]
@@ -297,8 +296,8 @@ def getDomainFromRequest(request, validate=True):
     else:
         pass  # no bucket specified
 
-    if bucket and validate:
-        if not isValidBucketName(bucket):
+    if bucket:
+        if validate and not isValidBucketName(bucket):
             raise ValueError(f"bucket name: {bucket} is not valid")
         if domain[0] == "/":
             domain = bucket + domain

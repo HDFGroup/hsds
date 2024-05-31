@@ -223,7 +223,7 @@ class GroupTest(unittest.TestCase):
         # try POST with user who doesn't have create permission on this domain
         test_user2 = config.get("user2_name")  # some tests will be skipped if not set
         if not test_user2:
-            print("test_user2 not set")
+            print("user2_name not set")
             return
 
         headers = helper.getRequestHeaders(
@@ -511,7 +511,7 @@ class GroupTest(unittest.TestCase):
             rsp = self.session.delete(req, headers=headers)
             self.assertEqual(rsp.status_code, 403)  # forbidden
         else:
-            print("test_user2 not set")
+            print("user2_name not set")
 
         # try to do a DELETE with a different domain (should fail)
         another_domain = helper.getParentDomain(self.base_domain)

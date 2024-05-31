@@ -19,6 +19,7 @@ import json
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPGone, HTTPConflict
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from aiohttp.client_exceptions import ClientOSError, ClientError
+from aiohttp import ClientResponseError
 
 from .util.authUtil import getAclKeys
 from .util.arrayUtil import encodeData
@@ -63,7 +64,33 @@ async def getDomainJson(app, domain, reload=False):
 
     log.debug(f"sending dn req: {req} params: {params}")
 
-    domain_json = await http_get(app, req, params=params)
+    try:
+        domain_json = await http_get(app, req, params=params)
+    except HTTPNotFound:
+        log.warn(f"domain: {domain} not found")
+        raise
+    except HTTPGone:
+        log.warn(f"domain: {domain} has been removed")
+        raise
+    except ClientResponseError as ce:
+        # shouldn't get this if we are catching relevant exceptions
+        # in http_get...
+        log.error(f"Unexpected ClientResponseError: {ce}")
+
+        if ce.code == 404:
+            log.warn("domain not found")
+            raise HTTPNotFound()
+        elif ce.code == 410:
+            log.warn("domain has been removed")
+            raise HTTPGone()
+        else:
+            log.error(f"unexpected error: {ce.code}")
+            raise HTTPInternalServerError()
+
+    if not domain_json:
+        msg = f"nothing returned (and no exceptionraised) for domain: {domain}"
+        log.error(msg)
+        raise HTTPInternalServerError()
 
     if "owner" not in domain_json:
         log.warn("No owner key found in domain")
