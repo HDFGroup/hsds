@@ -669,6 +669,10 @@ class S3Client:
             msg += f"but got {len(key_names)}"
             log.warning(msg)
 
+        if not include_stats:
+            # list_keys_v2 does not return keys in lexographic order, so sort here
+            key_names.sort()
+
         return key_names
 
     async def releaseClient(self):
