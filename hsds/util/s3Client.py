@@ -627,8 +627,10 @@ class S3Client:
         session = self._app["session"]
         self._renewToken()
         kwargs = self._get_client_kwargs()
+        if prefix and prefix[-1] != "/":
+            prefix += "/"  # list_v2 requires prefix end with slash
         async with session.create_client("s3", **kwargs) as _client:
-            paginator = _client.get_paginator("list_objects")
+            paginator = _client.get_paginator("list_objects_v2")
 
             # use a dictionary to hold return values if stats are needed
             key_names = {} if include_stats else []
