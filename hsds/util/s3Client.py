@@ -113,8 +113,10 @@ class S3Client:
         except KeyError:
             pass
 
-        self._aio_config = AioConfig(max_pool_connections=max_pool_connections,
-                                     signature_version=signature_version)
+        kwargs = {"max_pool_connections": max_pool_connections}
+        if signature_version:
+            kwargs["signature_version"] = signature_version
+        self._aio_config = AioConfig(**kwargs)
 
         log.debug(f"S3Client init - aws_region {self._aws_region}")
 
@@ -144,9 +146,15 @@ class S3Client:
         kwargs["region_name"] = self._aws_region
         kwargs["aws_secret_access_key"] = self._aws_secret_access_key
         kwargs["aws_access_key_id"] = self._aws_access_key_id
-        kwargs["aws_session_token"] = self._aws_session_token
-        kwargs["endpoint_url"] = self._s3_gateway
-        kwargs["use_ssl"] = self._use_ssl
+        if self._aws_session_token:
+            kwargs["aws_session_token"] = self._aws_session_token
+        if self._s3_gateway and not self._s3_gateway.endswith("amazonaws.com"):
+            # let boto sort out the endpoint if it's on aws
+            # for third party s3 compatible services (e.g. minio), set it here
+            kwargs["endpoint_url"] = self._s3_gateway
+        if self._use_ssl:
+            kwargs["use_ssl"] = self._use_ssl
+
         kwargs["config"] = self._aio_config
         # log.debug(f"s3 kwargs: {kwargs}")
         return kwargs
