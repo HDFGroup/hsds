@@ -17,6 +17,7 @@ import subprocess
 import datetime
 import json
 import time
+from urllib.parse import urlparse
 from aiobotocore.config import AioConfig
 from aiobotocore.session import get_session
 from botocore.exceptions import ClientError
@@ -148,10 +149,12 @@ class S3Client:
         kwargs["aws_access_key_id"] = self._aws_access_key_id
         if self._aws_session_token:
             kwargs["aws_session_token"] = self._aws_session_token
-        if self._s3_gateway and not self._s3_gateway.endswith("amazonaws.com"):
-            # let boto sort out the endpoint if it's on aws
-            # for third party s3 compatible services (e.g. minio), set it here
-            kwargs["endpoint_url"] = self._s3_gateway
+        if self._s3_gateway:
+            host = urlparse(self._s3_gateway).hostname
+            if not host.endswith("amazonaws.com"):
+                # let boto sort out the endpoint if it's on aws
+                # for third party s3 compatible services (e.g. minio), set it here
+                kwargs["endpoint_url"] = self._s3_gateway
         if self._use_ssl:
             kwargs["use_ssl"] = self._use_ssl
 
