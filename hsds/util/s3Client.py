@@ -151,7 +151,7 @@ class S3Client:
             kwargs["aws_session_token"] = self._aws_session_token
         if self._s3_gateway:
             host = urlparse(self._s3_gateway).hostname
-            if not host.endswith("amazonaws.com"):
+            if not host.endswith(".amazonaws.com"):
                 # let boto sort out the endpoint if it's on aws
                 # for third party s3 compatible services (e.g. minio), set it here
                 kwargs["endpoint_url"] = self._s3_gateway
