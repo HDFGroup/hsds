@@ -17,6 +17,7 @@ import subprocess
 import datetime
 import json
 import time
+from urllib.parse import urlparse
 from aiobotocore.config import AioConfig
 from aiobotocore.session import get_session
 from botocore.exceptions import ClientError
@@ -113,8 +114,10 @@ class S3Client:
         except KeyError:
             pass
 
-        self._aio_config = AioConfig(max_pool_connections=max_pool_connections,
-                                     signature_version=signature_version)
+        kwargs = {"max_pool_connections": max_pool_connections}
+        if signature_version:
+            kwargs["signature_version"] = signature_version
+        self._aio_config = AioConfig(**kwargs)
 
         log.debug(f"S3Client init - aws_region {self._aws_region}")
 
@@ -144,9 +147,17 @@ class S3Client:
         kwargs["region_name"] = self._aws_region
         kwargs["aws_secret_access_key"] = self._aws_secret_access_key
         kwargs["aws_access_key_id"] = self._aws_access_key_id
-        kwargs["aws_session_token"] = self._aws_session_token
-        kwargs["endpoint_url"] = self._s3_gateway
-        kwargs["use_ssl"] = self._use_ssl
+        if self._aws_session_token:
+            kwargs["aws_session_token"] = self._aws_session_token
+        if self._s3_gateway:
+            host = urlparse(self._s3_gateway).hostname
+            if not host.endswith(".amazonaws.com"):
+                # let boto sort out the endpoint if it's on aws
+                # for third party s3 compatible services (e.g. minio), set it here
+                kwargs["endpoint_url"] = self._s3_gateway
+        if self._use_ssl:
+            kwargs["use_ssl"] = self._use_ssl
+
         kwargs["config"] = self._aio_config
         # log.debug(f"s3 kwargs: {kwargs}")
         return kwargs
@@ -627,8 +638,10 @@ class S3Client:
         session = self._app["session"]
         self._renewToken()
         kwargs = self._get_client_kwargs()
+        if prefix and prefix[-1] != "/":
+            prefix += "/"  # list_v2 requires prefix end with slash
         async with session.create_client("s3", **kwargs) as _client:
-            paginator = _client.get_paginator("list_objects")
+            paginator = _client.get_paginator("list_objects_v2")
 
             # use a dictionary to hold return values if stats are needed
             key_names = {} if include_stats else []
@@ -666,6 +679,10 @@ class S3Client:
             msg = f"expected {count} keys in return list "
             msg += f"but got {len(key_names)}"
             log.warning(msg)
+
+        if not include_stats:
+            # list_keys_v2 does not return keys in lexographic order, so sort here
+            key_names.sort()
 
         return key_names
 
