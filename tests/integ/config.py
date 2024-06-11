@@ -16,8 +16,8 @@ cfg = {
     # or 'http+unix://%2Ftmp%2Fhs%2Fsn_1.sock' for socket
     "user_name": "test_user1",
     "user_password": "test",
-    "user2_name": "test_user2",
-    "user2_password": "test",
+    "user2_name": "",
+    "user2_password": "",
     "admin_username": "",
     "admin_password": "",
     "test_noauth": True,
