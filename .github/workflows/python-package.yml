@@ -186,13 +186,14 @@ jobs:
       HDF5_VOL_CONNECTOR: REST
       ROOT_DIR: ${{github.workspace}}/hsdsdata
       BUCKET_NAME: hsdstest
-    
+
     name: Test HSDS with socket
-    runs-on: ubuntu-latest
     strategy:
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.12"]
 
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
@@ -213,9 +214,9 @@ jobs:
           pip install -e .
 
       # Requests 2.32.0 breaks requests-unixsocket, used by HSDS for socket connections
-      - name: Fix requests version
-        run: |
-          pip install requests==2.31.0
+      # - name: Fix requests version
+      #  run: |
+      #    pip install requests==2.31.0
 
       - name: Run HSDS unit tests
         shell: bash
