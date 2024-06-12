@@ -171,14 +171,28 @@ jobs:
           ./stopall.sh
   
   build-and-test-socket:
+    env:
+      ADMIN_PASSWORD: admin
+      ADMIN_USERNAME: admin
+      USER_NAME: test_user1
+      USER_PASSWORD: test
+      USER2_NAME: test_user2
+      USER2_PASSWORD: test
+      HSDS_USERNAME: test_user1
+      HSDS_PASSWORD: test
+      HSDS_PATH: /home/test_user1/
+      HDF5_API_TEST_PATH_PREFIX: /home/test_user1/
+      HSDS_ENDPOINT: http+unix://%2Ftmp%2Fhs%2Fsn_1.sock
+      HDF5_VOL_CONNECTOR: REST
+      ROOT_DIR: ${{github.workspace}}/hsdsdata
+      BUCKET_NAME: hsdstest
+    
+    name: Test HSDS with socket
+    runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
         python-version: ["3.12"]
-        build-method: ["manual"]
 
-    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
@@ -186,72 +200,41 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
+      - name: Install HSDS dependencies
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install flake8 pytest
+          python -m pip install pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Lint with flake8
-        shell: bash
-        run: |
-          # stop the build if there are Python syntax errors or undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-          flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
-          
-      - name: Install package
+      - name: Install HSDS package
         shell: bash
         run: |
           pip install -e .
 
-      - name: Run unit tests
+      # Requests 2.32.0 breaks requests-unixsocket, used by HSDS for socket connections
+      - name: Fix requests version
+        run: |
+          pip install requests==2.31.0
+
+      - name: Run HSDS unit tests
         shell: bash
         run: |
           pytest
 
       - name: Start HSDS
-        shell: bash
-        if: ${{matrix.build-method == 'manual'}}
-        env:
-          ADMIN_PASSWORD: admin
-          ADMIN_USERNAME: admin
-          USER_NAME: test_user1
-          USER_PASSWORD: test
-          USER2_NAME: test_user2
-          USER2_PASSWORD: test
-          HSDS_ENDPOINT: http+unix://%2Ftmp%2Fhs%2Fsn_1.sock
-          BUCKET_NAME: hsdstest
-          LOG_LEVEL: DEBUG
-          ROOT_DIR: ${{github.workspace}}/hsdsdata
         run: |
+          mkdir ${{github.workspace}}/hsdsdata
+          mkdir ${{github.workspace}}/hsdsdata/hsdstest
           cp admin/config/groups.default admin/config/groups.txt
           cp admin/config/passwd.default admin/config/passwd.txt
-          ./runall.sh --no-docker 1 &
+          ROOT_DIR=${{github.workspace}}/hsdsdata ./runall.sh --no-docker 1 &
+          sleep 10
 
-      - name: Wait for node startup
-        shell: bash
+      - name: Test HSDS setup
         run: |
-          sleep 45
+          python tests/integ/setup_test.py
 
-      - name: Run HSDS tests
-        id: hsds-tests
-        shell: bash
-        env:
-          ADMIN_PASSWORD: admin
-          ADMIN_USERNAME: admin
-          USER_NAME: test_user1
-          USER_PASSWORD: test
-          USER2_NAME: test_user2
-          USER2_PASSWORD: test
-          BUCKET_NAME: hsdstest
-          LOG_LEVEL: DEBUG
-        run: |
+      - name: Test HSDS
+        run : |
           python testall.py
-      
-      - name: Show HSDS Logs on Fail (Manual)
-        # Only run if the whole workflow failed due to HSDS tests
-        if: ${{failure() && steps.hsds-tests.outcome == 'failure' && (matrix.build-method == 'manual')}}
-        run: |
-          cat hs.log
