@@ -16,8 +16,8 @@ jobs:
     steps:
       - name: 'Checkout Repository'
         uses: actions/checkout@v3
+
       - name: 'Dependency Review'
-        uses: actions/dependency-review-action@v1
+        uses: actions/dependency-review-action@v4
         with:
-          # verify=False is never used in HSDS
-          allow-ghsas: ["GHSA-9wx4-h78v-vm56"]
+          allow-ghsas: GHSA-9wx4-h78v-vm56

@@ -169,3 +169,73 @@ jobs:
         if: ${{matrix.build-method == 'docker' && matrix.os != 'windows-latest'}}
         run: |
           ./stopall.sh
+  
+  build-and-test-socket:
+    env:
+      ADMIN_PASSWORD: admin
+      ADMIN_USERNAME: admin
+      USER_NAME: test_user1
+      USER_PASSWORD: test
+      USER2_NAME: test_user2
+      USER2_PASSWORD: test
+      HSDS_USERNAME: test_user1
+      HSDS_PASSWORD: test
+      HSDS_PATH: /home/test_user1/
+      HDF5_API_TEST_PATH_PREFIX: /home/test_user1/
+      HSDS_ENDPOINT: http+unix://%2Ftmp%2Fhs%2Fsn_1.sock
+      HDF5_VOL_CONNECTOR: REST
+      ROOT_DIR: ${{github.workspace}}/hsdsdata
+      BUCKET_NAME: hsdstest
+
+    name: Test HSDS with socket
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.12"]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install HSDS dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Install HSDS package
+        shell: bash
+        run: |
+          pip install -e .
+
+      # Requests 2.32.0 breaks requests-unixsocket, used by HSDS for socket connections
+      # - name: Fix requests version
+      #  run: |
+      #    pip install requests==2.31.0
+
+      - name: Run HSDS unit tests
+        shell: bash
+        run: |
+          pytest
+
+      - name: Start HSDS
+        run: |
+          mkdir ${{github.workspace}}/hsdsdata
+          mkdir ${{github.workspace}}/hsdsdata/hsdstest
+          cp admin/config/groups.default admin/config/groups.txt
+          cp admin/config/passwd.default admin/config/passwd.txt
+          ROOT_DIR=${{github.workspace}}/hsdsdata ./runall.sh --no-docker 1 &
+          sleep 10
+
+      - name: Test HSDS setup
+        run: |
+          python tests/integ/setup_test.py
+
+      - name: Test HSDS
+        run : |
+          python testall.py
