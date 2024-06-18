@@ -7,7 +7,7 @@ bitshuffle
 cryptography
 h5py>=3.6.0
 numcodecs
-numpy
+numpy<2.0.0
 psutil
 pyjwt
 pytz
