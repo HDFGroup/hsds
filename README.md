@@ -91,10 +91,6 @@ Authorization, ACLs, and Role Based Access Control (RBAC):
 
 - See [docs/authorization.md](docs/authorization.md)
 
-Running serverless with h5pyd:
-
-- See <https://github.com/HDFGroup/h5pyd/blob/master/README.rst>
-
 ## Writing Client Applications
 
 As a REST service, clients be developed using almost any programming language. The
