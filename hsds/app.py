@@ -262,33 +262,39 @@ def main():
     except OSError:
         pass  # ignore
 
-    # set username based on command line, .hscfg, or login user
-    if args.hs_username:
-        username = args.hs_username
-    elif "HS_USERNAME" in userConfig:
-        username = userConfig["HS_USERNAME"]
-    elif not args.password_file:
-        # no password file, add the login name as user
-        username = login_username
-    else:
-        username = None
+    username = None
+    password = None
 
-    # get password based on command line or .hscfg
-    if args.hs_password:
-        password = args.hs_password
-    elif "HS_PASSWORD" in userConfig:
-        password = userConfig["HS_PASSWORD"]
-    else:
-        password = login_username
-
-    if username:
-        kwargs["username"] = username
-        kwargs["password"] = password
-
+    # validate password_file arg if used
     if args.password_file:
         if not os.path.isfile(args.password_file):
             sys.exit(f"password file: {args.password_file} not found")
         kwargs["password_file"] = args.password_file
+
+        if args.hs_username:
+            sys.exit("username arg cannot be used if password_file is set")
+        if args.hs_password:
+            sys.exit("password arg cannot be used if password_file is set")
+    else:
+        if args.hs_username:
+            username = args.hs_username
+        elif "HS_USERNAME" in userConfig:
+            # can set username based on HS_USERNAME environment variable
+            username = userConfig["HS_USERNAME"]
+        else:
+            username = login_username
+
+        if args.hs_password:
+            password = args.hs_password
+        elif "HS_PASSWORD" in userConfig:
+            # can set password based on HS_PASSWORD environment variable
+            password = userConfig["HS_PASSWORD"]
+        else:
+            password = login_username
+
+    if username and password:
+        kwargs["username"] = username
+        kwargs["password"] = password
 
     # use unix domain socket if a socket dir is set
     if args.socket_dir:
