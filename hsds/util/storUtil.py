@@ -183,7 +183,7 @@ def _uncompress(data, compressor=None, shuffle=0, level=None, dtype=None, chunk_
         msg += f", level: {level}"
     log.debug(msg)
     start_time = time.time()
-    if compressor:
+    if compressor and compressor != "scaleoffset":
         if compressor in ("gzip", "deflate"):
             # blosc referes to this as zlib
             compressor = "zlib"
@@ -239,6 +239,7 @@ def _compress(data, compressor=None, level=5, shuffle=0, dtype=None, chunk_shape
     log.debug(f"_compress(compressor={compressor}, shuffle={shuffle})")
     start_time = time.time()
     data_size = len(data)
+    cdata = None
     if shuffle == 2:
         # bit shuffle the data before applying the compressor
         log.debug("bitshuffling data")
@@ -248,7 +249,7 @@ def _compress(data, compressor=None, level=5, shuffle=0, dtype=None, chunk_shape
             log.error(f"got exception using bitshuffle: {e}")
         shuffle = 0  # don't do any blosc shuffling
 
-    if compressor:
+    if compressor and compressor != "scaleoffset":
         if compressor in ("gzip", "deflate"):
             # blosc referes to this as zlib
             compressor = "zlib"
