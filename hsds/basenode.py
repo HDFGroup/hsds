@@ -243,6 +243,16 @@ async def docker_update_dn_info(app):
 
     if rsp_json is not None:
         log.debug(f"register response: {rsp_json}")
+        dn_urls = rsp_json["dn_urls"]
+        dn_ids = rsp_json["dn_ids"]
+        if len(dn_urls) != len(dn_ids):
+            log.error(f"unexpected register response (dn_urls len != dn_ids_len): {rsp_json}")
+        elif not dn_urls:
+            log.warn("no dn_urls returned from register request")
+        old_count = len(app["dn_urls"])
+        new_count = len(dn_urls)
+        if old_count != new_count:
+            log.info(f"dn count changed from {old_count} to {new_count}")
         app["dn_urls"] = rsp_json["dn_urls"]
         app["dn_ids"] = rsp_json["dn_ids"]
 
