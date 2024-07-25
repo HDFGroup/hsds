@@ -1677,7 +1677,7 @@ class ValueTest(unittest.TestCase):
         dset1_uuid = self.getUUIDByPath(domain, "/g1/g1.1/dset1.1.1")
 
         # read fancy selection
-        params = {"select": "[0:4, [2,4,7]]"}
+        params = {"select": "[0:4, [7,4,2]]"}
         req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)

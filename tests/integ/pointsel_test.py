@@ -220,7 +220,7 @@ class PointSelTest(unittest.TestCase):
         points = []
         for i in range(3):
             for j in range(5):
-                pt = [i * 5 + 5, j * 5 + 5]
+                pt = [i * 5 + 5, 25 - j * 5]
                 points.append(pt)
         body = {"points": points}
         # read a selected points
@@ -228,21 +228,21 @@ class PointSelTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         expected_result = [
-            50005,
-            50010,
-            50015,
-            50020,
             50025,
-            100005,
-            100010,
-            100015,
-            100020,
+            50020,
+            50015,
+            50010,
+            50005,
             100025,
-            150005,
-            150010,
-            150015,
-            150020,
+            100020,
+            100015,
+            100010,
+            100005,
             150025,
+            150020,
+            150015,
+            150010,
+            150005,
         ]
         self.assertTrue("value" in rspJson)
         values = rspJson["value"]

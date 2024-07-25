@@ -745,6 +745,7 @@ async def POST_Dataset(request):
     dims = None
     shape_json = {}
     rank = 0
+    chunk_size = None
 
     if "shape" not in body:
         shape_json["class"] = "H5S_SCALAR"
@@ -858,19 +859,21 @@ async def POST_Dataset(request):
     else:
         creationProperties = {}
 
+    # TBD: check for invalid layout class...
     if layout_props:
-        if layout_props["class"] in ("H5D_COMPACT", "H5D_CONTIGUOUS"):
-            # treat compact and contiguous as chunked
+        if layout_props["class"] == "H5D_CONTIGUOUS":
+            # treat contiguous as chunked
             layout_class = "H5D_CHUNKED"
         else:
             layout_class = layout_props["class"]
-
     elif shape_json["class"] != "H5S_NULL":
         layout_class = "H5D_CHUNKED"
     else:
         layout_class = None
 
-    if layout_class:
+    if layout_class == "H5D_COMPACT":
+        layout = {"class": "H5D_COMPACT"}
+    elif layout_class:
         # initialize to H5D_CHUNKED
         layout = {"class": "H5D_CHUNKED"}
     else:
@@ -1033,6 +1036,12 @@ async def POST_Dataset(request):
             if not isinstance(f_in, list):
                 msg = "Expected filters in creationProperties to be a list"
                 log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            
+            if f_in and chunk_size:
+                # filters can only be used with chunked datasets
+                msg = "Filters can only be used with chunked datasets"
+                log.warning(msg)
                 raise HTTPBadRequest(reason=msg)
 
             f_out = []
