@@ -1037,8 +1037,8 @@ async def POST_Dataset(request):
                 msg = "Expected filters in creationProperties to be a list"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-            
-            if f_in and chunk_size:
+
+            if f_in and chunk_size is None:
                 # filters can only be used with chunked datasets
                 msg = "Filters can only be used with chunked datasets"
                 log.warning(msg)

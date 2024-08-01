@@ -36,8 +36,9 @@ class PointSelTest(unittest.TestCase):
         # Test selecting points in a dataset using POST value
         print("testPost1DDataset", self.base_domain)
 
+        # create a list of points (note: not required to be increasing)
         points = [
-            2,
+            98,
             3,
             5,
             7,
@@ -61,7 +62,7 @@ class PointSelTest(unittest.TestCase):
             79,
             83,
             97,
-            98,
+            2,
         ]
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -80,9 +81,7 @@ class PointSelTest(unittest.TestCase):
         data["creationProperties"] = {
             "layout": {
                 "class": "H5D_CHUNKED",
-                "dims": [
-                    20,
-                ],
+                "dims": [20,],
             }
         }
 
@@ -138,7 +137,7 @@ class PointSelTest(unittest.TestCase):
         ret_value = rspJson["value"]
         self.assertEqual(len(ret_value), len(points))
         expected_result = [
-            97,
+            1,
             96,
             94,
             92,
@@ -162,7 +161,7 @@ class PointSelTest(unittest.TestCase):
             20,
             16,
             2,
-            1,
+            97,
         ]
         self.assertEqual(ret_value, expected_result)
 

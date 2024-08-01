@@ -605,9 +605,8 @@ class DsetUtilTest(unittest.TestCase):
         try:
             # out of bounds - coordinate list non-increasing
             getSelectionList("[2, [1,2,2]]", dims)
-            self.assertTrue(False)
         except ValueError:
-            pass  # expected
+            self.assertTrue(False)  # supported now
 
         try:
             # missing key

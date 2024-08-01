@@ -305,6 +305,7 @@ def getNumChunks(selection, layout):
             # coordinate list
             last_chunk = None
             count = 0
+            s = list(s)
             s.sort()  # coordinates may not be sorted
             for x in s:
                 this_chunk = x // c
@@ -484,6 +485,7 @@ def getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
     else:
         # coordinate list
         last_chunk_index = None
+        s = list(s)
         s.sort()  # coordinates may not be in order
         for coord in s:
             chunk_index = coord // c
