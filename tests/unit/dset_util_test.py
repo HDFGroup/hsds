@@ -28,9 +28,7 @@ class DsetUtilTest(unittest.TestCase):
     def testGetHyperslabSelection(self):
         # getHyperslabSelection(dsetshape, start, stop, step)
         # 1-D case
-        datashape = [
-            100,
-        ]
+        datashape = [100,]
         slices = getHyperslabSelection(datashape)
         self.assertEqual(len(slices), 1)
         self.assertEqual(slices[0], slice(0, 100, 1))
@@ -69,79 +67,61 @@ class DsetUtilTest(unittest.TestCase):
         self.assertEqual(slices[1], slice(20, 30, 2))
 
     def testGetSelectionShape(self):
-        sel = [
-            slice(3, 7, 1),
-        ]
+        sel = [slice(3, 7, 1),]
         shape = getSelectionShape(sel)
-        self.assertEqual(
-            shape,
-            [
-                4,
-            ],
-        )
+        self.assertEqual(shape, [4,],)
 
-        sel = [
-            slice(3, 7, 3),
-        ]  # select points 3, 6
+        sel = [slice(3, 7, 3),]  # select points 3, 6
         shape = getSelectionShape(sel)
-        self.assertEqual(
-            shape,
-            [
-                2,
-            ],
-        )
+        self.assertEqual(shape, [2,],)
 
         sel = [slice(44, 52, 1), slice(48, 52, 1)]
         shape = getSelectionShape(sel)
         self.assertEqual(shape, [8, 4])
 
-        sel = [
-            slice(0, 4, 2),
-        ]  # select points 0, 2
+        sel = [slice(0, 4, 2),]  # select points 0, 2
         shape = getSelectionShape(sel)
-        self.assertEqual(
-            shape,
-            [
-                2,
-            ],
-        )
+        self.assertEqual(shape, [2,],)
 
-        sel = [
-            slice(0, 5, 2),
-        ]  # select points 0, 2, 4
+        sel = [slice(0, 5, 2),]  # select points 0, 2, 4
         shape = getSelectionShape(sel)
-        self.assertEqual(
-            shape,
-            [
-                3,
-            ],
-        )
+        self.assertEqual(shape, [3,],)
 
         sel = [[2, 3, 5, 7, 11]]  # coordinate list
         shape = getSelectionShape(sel)
-        self.assertEqual(
-            shape,
-            [
-                5,
-            ],
-        )
+        self.assertEqual(shape, [5,],)
 
         sel = [slice(0, 100, 1), slice(50, 51, 1), [23, 35, 56]]
         shape = getSelectionShape(sel)
         self.assertEqual(shape, [100, 1, 3])
+
+        sel = [slice(0, 100, 1), [2, 3, 5, 7, 11]]
+        shape = getSelectionShape(sel)
+        self.assertEqual(shape, [100, 5])
+
+        sel = [[1, 2, 5, 9], [11, 3, 5, 7]]
+        shape = getSelectionShape(sel)
+        self.assertEqual(shape, [4,])
+
+        sel = [(0, 1, 3), (7, 4, 2)]
+        shape = getSelectionShape(sel)
+        self.assertEqual(shape, [3,])
+
+        try:
+            sel = [(0, 1, 3), (7, 4,)]
+            shape = getSelectionShape(sel)
+            self.assertTrue(False)
+        except Exception:
+            pass  # expected
 
     def testGetSelectionPagination(self):
         itemsize = 4  # will use 4 for most tests
 
         # 1D case
 
-        datashape = [
-            200,
-        ]
+        datashape = [200,]
         max_request_size = 120
-        select = [
-            (slice(20, 40)),
-        ]  # 80 byte selection
+        select = [(slice(20, 40)),]  # 80 byte selection
         # should return one page equivalent to original selection
         pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
         self.assertEqual(len(pages), 1)
@@ -151,9 +131,7 @@ class DsetUtilTest(unittest.TestCase):
         self.assertEqual(s.start, 20)
         self.assertEqual(s.stop, 40)
 
-        select = [
-            (slice(0, 200)),
-        ]  # 800 byte selection
+        select = [(slice(0, 200)),]  # 800 byte selection
         # should create 7 pages
         pages = getSelectionPagination(select, datashape, itemsize, max_request_size)
         self.assertEqual(len(pages), 8)
@@ -309,9 +287,7 @@ class DsetUtilTest(unittest.TestCase):
 
     def testItemIterator(self):
         # 1-D case
-        datashape = [
-            10,
-        ]
+        datashape = [10,]
         slices = getHyperslabSelection(datashape)
         it = ItemIterator(slices)
 
@@ -350,9 +326,7 @@ class DsetUtilTest(unittest.TestCase):
         self.assertEqual(count, 20)
 
     def testSelectionList1D(self):
-        dims = [
-            100,
-        ]
+        dims = [100,]
 
         for select in ("", []):
             selection = getSelectionList(select, dims)
@@ -363,9 +337,7 @@ class DsetUtilTest(unittest.TestCase):
 
         for select in (
             "[5]",
-            [
-                5,
-            ],
+            [5,],
         ):
             selection = getSelectionList(select, dims)
             self.assertEqual(len(selection), 1)
@@ -375,9 +347,7 @@ class DsetUtilTest(unittest.TestCase):
 
         for select in (
             "[:]",
-            [
-                ":",
-            ],
+            [":",],
         ):
             selection = getSelectionList(select, dims)
             self.assertEqual(len(selection), 1)
@@ -387,9 +357,7 @@ class DsetUtilTest(unittest.TestCase):
 
         for select in (
             "[3:7]",
-            [
-                "3:7",
-            ],
+            ["3:7",],
         ):
             selection = getSelectionList(select, dims)
             self.assertEqual(len(selection), 1)
@@ -399,9 +367,7 @@ class DsetUtilTest(unittest.TestCase):
 
         for select in (
             "[:4]",
-            [
-                ":4",
-            ],
+            [":4",],
         ):
             selection = getSelectionList(select, dims)
             self.assertEqual(len(selection), 1)
@@ -411,9 +377,7 @@ class DsetUtilTest(unittest.TestCase):
 
         for select in (
             "[0:100]",
-            [
-                "0:100",
-            ],
+            ["0:100",],
         ):
             selection = getSelectionList(select, dims)
             self.assertEqual(len(selection), 1)
@@ -430,9 +394,7 @@ class DsetUtilTest(unittest.TestCase):
 
         for select in (
             "[30:70:5]",
-            [
-                "30:70:5",
-            ],
+            ["30:70:5",],
         ):
             selection = getSelectionList(select, dims)
             self.assertEqual(len(selection), 1)
@@ -455,10 +417,7 @@ class DsetUtilTest(unittest.TestCase):
         self.assertEqual(s1, slice(30, 70, 5))
 
     def testSelectionList2D(self):
-        dims = [
-            50,
-            100,
-        ]
+        dims = [50, 100, ]
 
         for select in ("", []):
             selection = getSelectionList(select, dims)
@@ -499,6 +458,26 @@ class DsetUtilTest(unittest.TestCase):
             s2 = selection[1]
             self.assertTrue(isinstance(s2, list))
             self.assertEqual(s2, [3, 4, 7])
+
+        for select in ("[[2, 5, 8],[3,4,7]]", ["[2, 5, 8]", "[3,4,7]"], [[2, 5, 8], [3, 4, 7]]):
+            selection = getSelectionList(select, dims)
+            self.assertEqual(len(selection), 2)
+            s1 = selection[0]
+            self.assertTrue(isinstance(s1, list))
+            self.assertEqual(s1, [2, 5, 8])
+            s2 = selection[1]
+            self.assertTrue(isinstance(s2, list))
+            self.assertEqual(s2, [3, 4, 7])
+
+        for select in ("[[2,5,8],[7,4,3]]", ["[2, 5, 8]", "[7,4,3]"], [[2, 5, 8], [7, 4, 3]]):
+            selection = getSelectionList(select, dims)
+            self.assertEqual(len(selection), 2)
+            s1 = selection[0]
+            self.assertTrue(isinstance(s1, list))
+            self.assertEqual(s1, [2, 5, 8])
+            s2 = selection[1]
+            self.assertTrue(isinstance(s2, list))
+            self.assertEqual(s2, [7, 4, 3])
 
         for select in ("[1:20, 30:70:5]", ["1:20", "30:70:5"]):
             selection = getSelectionList(select, dims)
@@ -541,10 +520,7 @@ class DsetUtilTest(unittest.TestCase):
         self.assertEqual(s2, slice(30, 70, 5))
 
     def testInvalidSelectionList(self):
-        dims = [
-            50,
-            100,
-        ]
+        dims = [50, 100,]
 
         try:
             # no bracket

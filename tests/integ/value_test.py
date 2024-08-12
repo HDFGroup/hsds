@@ -1689,6 +1689,17 @@ class ValueTest(unittest.TestCase):
         self.assertTrue(data[2], [4, 8, 14])
         self.assertTrue(data[3], [6, 12, 21])
 
+        # read fancy selection with two index lists
+        params = {"select": "[[0,1,3], [7,4,2]]"}
+        req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]  # should be 3 element array
+        self.assertEqual(len(data), 3)
+        self.assertTrue(data, [0, 4, 6])
+
         # read all the dataset values
         req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
         rsp = self.session.get(req, headers=headers)
@@ -1839,6 +1850,17 @@ class ValueTest(unittest.TestCase):
         self.assertTrue(len(data), 2)
         self.assertTrue(data[0], [2, 4, 7])
         self.assertTrue(data[1], [4, 8, 14])
+
+        # read fancy selection with two coordinates
+        params = {"select": "[[0,3,7], [6,4,2]]"}
+        req = helper.getEndpoint() + "/datasets/" + dset1_uuid + "/value"
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        data = rspJson["value"]  # should be 3 element array
+        self.assertTrue(len(data), 3)
+        self.assertEqual(data, [0, 12, 14])
 
     def testResizable1DValue(self):
         # test read/write to resizable dataset
