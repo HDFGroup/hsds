@@ -294,7 +294,7 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
                 kwargs = {"chunk_index": chunk_index, "factors": table_factors}
                 _get_arr_pts(arr_points, arr_index, pt, **kwargs)
 
-        msg = f"got chunktable - {len(arr_points)} entries, calling getSelectionData"
+        msg = f"got chunktable - {len(arr_points)} entries, calling getChunkLocations"
         log.debug(msg)
         # this call won't lead to a circular loop of calls since we've checked
         # that the chunktable layout is not H5D_CHUNKED_REF_INDIRECT

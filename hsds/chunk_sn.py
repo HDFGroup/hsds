@@ -17,6 +17,7 @@
 import base64
 import math
 import numpy as np
+
 from json import JSONDecodeError
 from asyncio import IncompleteReadError
 from aiohttp.web_exceptions import HTTPException, HTTPBadRequest

@@ -36,8 +36,9 @@ class PointSelTest(unittest.TestCase):
         # Test selecting points in a dataset using POST value
         print("testPost1DDataset", self.base_domain)
 
+        # create a list of points (note: not required to be increasing)
         points = [
-            2,
+            98,
             3,
             5,
             7,
@@ -61,7 +62,7 @@ class PointSelTest(unittest.TestCase):
             79,
             83,
             97,
-            98,
+            2,
         ]
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -80,9 +81,7 @@ class PointSelTest(unittest.TestCase):
         data["creationProperties"] = {
             "layout": {
                 "class": "H5D_CHUNKED",
-                "dims": [
-                    20,
-                ],
+                "dims": [20,],
             }
         }
 
@@ -138,7 +137,7 @@ class PointSelTest(unittest.TestCase):
         ret_value = rspJson["value"]
         self.assertEqual(len(ret_value), len(points))
         expected_result = [
-            97,
+            1,
             96,
             94,
             92,
@@ -162,7 +161,7 @@ class PointSelTest(unittest.TestCase):
             20,
             16,
             2,
-            1,
+            97,
         ]
         self.assertEqual(ret_value, expected_result)
 
@@ -220,7 +219,7 @@ class PointSelTest(unittest.TestCase):
         points = []
         for i in range(3):
             for j in range(5):
-                pt = [i * 5 + 5, j * 5 + 5]
+                pt = [i * 5 + 5, 25 - j * 5]
                 points.append(pt)
         body = {"points": points}
         # read a selected points
@@ -228,21 +227,21 @@ class PointSelTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         expected_result = [
-            50005,
-            50010,
-            50015,
-            50020,
             50025,
-            100005,
-            100010,
-            100015,
-            100020,
+            50020,
+            50015,
+            50010,
+            50005,
             100025,
-            150005,
-            150010,
-            150015,
-            150020,
+            100020,
+            100015,
+            100010,
+            100005,
             150025,
+            150020,
+            150015,
+            150010,
+            150005,
         ]
         self.assertTrue("value" in rspJson)
         values = rspJson["value"]

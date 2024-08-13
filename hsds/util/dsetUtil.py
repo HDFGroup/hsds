@@ -340,6 +340,7 @@ def getSelectionShape(selection):
     """
     shape = []
     rank = len(selection)
+    coordinate_extent = None
     for i in range(rank):
         s = selection[i]
         if isinstance(s, slice):
@@ -354,10 +355,21 @@ def getSelectionShape(selection):
                 extent = extent // step
             if (s.stop - s.start) % step != 0:
                 extent += 1
+            shape.append(extent)
         else:
             # coordinate list
             extent = len(s)
-        shape.append(extent)
+            if coordinate_extent is None:
+                coordinate_extent = extent
+                shape.append(extent)
+            elif coordinate_extent != extent:
+                msg = "shape mismatch: indexing arrays could not be broadcast together "
+                msg += f"with shapes ({coordinate_extent},) ({extent},)"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            else:
+                pass
+
     return shape
 
 
@@ -577,7 +589,6 @@ def getSelectionList(select, dims):
             else:
                 fields = element
             coords = []
-            last_coord = None
             for field in fields:
                 try:
                     coord = int(field)
@@ -587,9 +598,6 @@ def getSelectionList(select, dims):
                     msg = f"out of range coordinate for dim {dim}, {coord} "
                     msg += f"not in range: 0-{extent - 1}"
                     raise ValueError(msg)
-                if last_coord is not None and coord <= last_coord:
-                    raise ValueError("coordinates must be increasing")
-                last_coord = coord
                 coords.append(coord)
             select_list.append(coords)
         elif element == ":":

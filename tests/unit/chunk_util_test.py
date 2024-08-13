@@ -405,9 +405,7 @@ class ChunkUtilTest(unittest.TestCase):
         # getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
         dset_id = "d-12345678-1234-1234-1234-1234567890ab"
 
-        datashape = [
-            1,
-        ]
+        datashape = [1,]
         layout = (1,)
         selection = getHyperslabSelection(datashape)
         chunk_ids = getChunkIds(dset_id, selection, layout)
@@ -419,9 +417,7 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(len(chunk_id), 2 + 36 + 2)
         self.assertEqual(getDatasetId(chunk_id), dset_id)
 
-        datashape = [
-            100,
-        ]
+        datashape = [100,]
         layout = (10,)
         selection = getHyperslabSelection(datashape)
         chunk_ids = getChunkIds(dset_id, selection, layout)
@@ -493,9 +489,7 @@ class ChunkUtilTest(unittest.TestCase):
             self.assertEqual(chunk_id[2:-2], dset_id[2:])
             self.assertEqual(len(chunk_id), 2 + 36 + 2)
 
-        datashape = [
-            3207353,
-        ]
+        datashape = [3207353,]
         layout = (60000,)
         selection = getHyperslabSelection(datashape, 1234567, 1234568)
         chunk_ids = getChunkIds(dset_id, selection, layout)
@@ -618,9 +612,7 @@ class ChunkUtilTest(unittest.TestCase):
         index = getChunkIndex(chunk_id)
         self.assertEqual(
             index,
-            [
-                64,
-            ],
+            [64,],
         )
 
     def testGetChunkSelection(self):
@@ -718,18 +710,18 @@ class ChunkUtilTest(unittest.TestCase):
         # test with coordinate
         selection = ((12, 13, 33),)
         chunk_ids = getChunkIds(dset_id, selection, layout)
+
         self.assertEqual(len(chunk_ids), 2)
-        chunk_id = chunk_ids[0]
+        print("x:", chunk_ids)
+        chunk_id = f"c-{dset_id[2:]}_1"
+        self.assertTrue(chunk_id in chunk_ids)
+
         sel = getChunkSelection(chunk_id, selection, layout)
         self.assertEqual(sel[0], [12, 13])
-        chunk_id = chunk_ids[1]
+        chunk_id = f"c-{dset_id[2:]}_3"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getChunkSelection(chunk_id, selection, layout)
-        self.assertEqual(
-            sel[0],
-            [
-                33,
-            ],
-        )
+        self.assertEqual(sel[0], [33,],)
 
         # 2-d test
         datashape = [100, 100]
@@ -738,7 +730,8 @@ class ChunkUtilTest(unittest.TestCase):
         chunk_ids = getChunkIds(dset_id, selection, layout)
         self.assertEqual(len(chunk_ids), 4)
 
-        chunk_id = chunk_ids[0]
+        chunk_id = f"c-{dset_id[2:]}_4_4"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getChunkSelection(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 42)
         self.assertEqual(sel[0].stop, 50)
@@ -747,7 +740,8 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].stop, 50)
         self.assertEqual(sel[1].step, 1)
 
-        chunk_id = chunk_ids[1]
+        chunk_id = f"c-{dset_id[2:]}_4_5"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getChunkSelection(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 42)
         self.assertEqual(sel[0].stop, 50)
@@ -756,7 +750,8 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].stop, 58)
         self.assertEqual(sel[1].step, 1)
 
-        chunk_id = chunk_ids[2]
+        chunk_id = f"c-{dset_id[2:]}_5_4"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getChunkSelection(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 50)
         self.assertEqual(sel[0].stop, 52)
@@ -765,7 +760,8 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].stop, 50)
         self.assertEqual(sel[1].step, 1)
 
-        chunk_id = chunk_ids[3]
+        chunk_id = f"c-{dset_id[2:]}_5_5"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getChunkSelection(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 50)
         self.assertEqual(sel[0].stop, 52)
@@ -781,37 +777,30 @@ class ChunkUtilTest(unittest.TestCase):
         )
         chunk_ids = getChunkIds(dset_id, selection, layout)
         self.assertEqual(len(chunk_ids), 4)
-        chunk_id = chunk_ids[0]
+        chunk_id = f"c-{dset_id[2:]}_3_1"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getChunkSelection(chunk_id, selection, layout)
         self.assertEqual(sel[0], slice(35, 40, 1))
         self.assertEqual(sel[1], [12, 13])
-        chunk_id = chunk_ids[1]
+
+        chunk_id = f"c-{dset_id[2:]}_3_3"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getChunkSelection(chunk_id, selection, layout)
         self.assertEqual(sel[0], slice(35, 40, 1))
-        self.assertEqual(
-            sel[1],
-            [
-                33,
-            ],
-        )
-        chunk_id = chunk_ids[2]
+        self.assertEqual(sel[1], [33,])
+        chunk_id = f"c-{dset_id[2:]}_4_1"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getChunkSelection(chunk_id, selection, layout)
         self.assertEqual(sel[0], slice(40, 45, 1))
         self.assertEqual(sel[1], [12, 13])
-        chunk_id = chunk_ids[3]
+        chunk_id = f"c-{dset_id[2:]}_4_3"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getChunkSelection(chunk_id, selection, layout)
         self.assertEqual(sel[0], slice(40, 45, 1))
-        self.assertEqual(
-            sel[1],
-            [
-                33,
-            ],
-        )
+        self.assertEqual(sel[1], [33,],)
 
         # 1-d test with fractional chunks
-        datashape = [
-            104,
-        ]
+        datashape = [104,]
         layout = (10,)
         selection = getHyperslabSelection(datashape, 92, 102)
         chunk_ids = getChunkIds(dset_id, selection, layout)
@@ -864,27 +853,27 @@ class ChunkUtilTest(unittest.TestCase):
     def testGetChunkCoverage(self):
         # 1-d test
         dset_id = "d-12345678-1234-1234-1234-1234567890ab"
-        datashape = [
-            100,
-        ]
+        datashape = [100,]
         layout = (10,)
         selection = getHyperslabSelection(datashape, 42, 62)
         chunk_ids = getChunkIds(dset_id, selection, layout)
         self.assertEqual(len(chunk_ids), 3)
-
-        chunk_id = chunk_ids[0]
+        chunk_id = f"c-{dset_id[2:]}_4"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getChunkCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 2)
         self.assertEqual(sel[0].stop, 10)
         self.assertEqual(sel[0].step, 1)
 
-        chunk_id = chunk_ids[1]
+        chunk_id = f"c-{dset_id[2:]}_5"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getChunkCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 0)
         self.assertEqual(sel[0].stop, 10)
         self.assertEqual(sel[0].step, 1)
 
-        chunk_id = chunk_ids[2]
+        chunk_id = f"c-{dset_id[2:]}_6"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getChunkCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 0)
         self.assertEqual(sel[0].stop, 2)
@@ -894,8 +883,10 @@ class ChunkUtilTest(unittest.TestCase):
         selection = ((32, 39, 61),)
         chunk_ids = getChunkIds(dset_id, selection, layout)
         self.assertEqual(len(chunk_ids), 2)
-        chunk_id = chunk_ids[0]
+        chunk_id = f"c-{dset_id[2:]}_3"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getChunkCoverage(chunk_id, selection, layout)
+        print("sel:", sel)
         self.assertEqual(sel[0], (2, 9))
 
         # 1-d with step
@@ -1014,9 +1005,7 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1], (2, 9))
 
         # 1-d test with fractional chunks
-        datashape = [
-            104,
-        ]
+        datashape = [104,]
         layout = (10,)
         selection = getHyperslabSelection(datashape, 92, 102)
         chunk_ids = getChunkIds(dset_id, selection, layout)
@@ -1039,51 +1028,62 @@ class ChunkUtilTest(unittest.TestCase):
     def testGetDataCoverage(self):
         # 1-d test
         dset_id = "d-12345678-1234-1234-1234-1234567890ab"
-        datashape = [
-            100,
-        ]
+        datashape = [100,]
         layout = (10,)
         selection = getHyperslabSelection(datashape, 42, 62)
         chunk_ids = getChunkIds(dset_id, selection, layout)
         self.assertEqual(len(chunk_ids), 3)
 
-        chunk_id = chunk_ids[0]
+        chunk_id = f"c-{dset_id[2:]}_4"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(len(sel), 1)
         self.assertEqual(sel[0].start, 0)
         self.assertEqual(sel[0].stop, 8)
         self.assertEqual(sel[0].step, 1)
 
-        chunk_id = chunk_ids[1]
+        chunk_id = f"c-{dset_id[2:]}_5"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(len(sel), 1)
         self.assertEqual(sel[0].start, 8)
         self.assertEqual(sel[0].stop, 18)
         self.assertEqual(sel[0].step, 1)
 
-        chunk_id = chunk_ids[2]
+        chunk_id = f"c-{dset_id[2:]}_6"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(len(sel), 1)
         self.assertEqual(sel[0].start, 18)
         self.assertEqual(sel[0].stop, 20)
         self.assertEqual(sel[0].step, 1)
 
         # test with step
         selection = getHyperslabSelection(datashape, 42, 68, 4)
+        self.assertEqual(len(sel), 1)
         chunk_ids = getChunkIds(dset_id, selection, layout)
         self.assertEqual(len(chunk_ids), 3)
 
-        chunk_id = chunk_ids[0]
+        chunk_id = f"c-{dset_id[2:]}_4"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(len(sel), 1)
         self.assertEqual(sel[0].start, 0)
         self.assertEqual(sel[0].stop, 2)
         self.assertEqual(sel[0].step, 1)
 
-        chunk_id = chunk_ids[1]
+        chunk_id = f"c-{dset_id[2:]}_5"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(len(sel), 1)
         self.assertEqual(sel[0].start, 2)
         self.assertEqual(sel[0].stop, 5)
         self.assertEqual(sel[0].step, 1)
 
-        chunk_id = chunk_ids[2]
+        chunk_id = f"c-{dset_id[2:]}_6"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(len(sel), 1)
         self.assertEqual(sel[0].start, 5)
         self.assertEqual(sel[0].stop, 7)
         self.assertEqual(sel[0].step, 1)
@@ -1093,11 +1093,11 @@ class ChunkUtilTest(unittest.TestCase):
         chunk_ids = getChunkIds(dset_id, selection, layout)
         self.assertEqual(len(chunk_ids), 1)
 
-        chunk_id = chunk_ids[0]
+        chunk_id = f"c-{dset_id[2:]}_2"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
-        self.assertEqual(sel[0].start, 0)
-        self.assertEqual(sel[0].stop, 2)
-        self.assertEqual(sel[0].step, 1)
+        self.assertEqual(len(sel), 1)
+        self.assertEqual(sel[0], [0, 1])
 
         # 2-d test
         dset_id = "d-12345678-1234-1234-1234-1234567890ab"
@@ -1107,7 +1107,8 @@ class ChunkUtilTest(unittest.TestCase):
         chunk_ids = getChunkIds(dset_id, selection, layout)
         self.assertEqual(len(chunk_ids), 4)
 
-        chunk_id = chunk_ids[0]
+        chunk_id = f"c-{dset_id[2:]}_4_4"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 0)
         self.assertEqual(sel[0].stop, 8)
@@ -1116,7 +1117,8 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].stop, 4)
         self.assertEqual(sel[1].step, 1)
 
-        chunk_id = chunk_ids[1]
+        chunk_id = f"c-{dset_id[2:]}_4_5"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 0)
         self.assertEqual(sel[0].stop, 8)
@@ -1125,7 +1127,8 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].stop, 12)
         self.assertEqual(sel[1].step, 1)
 
-        chunk_id = chunk_ids[2]
+        chunk_id = f"c-{dset_id[2:]}_5_4"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 8)
         self.assertEqual(sel[0].stop, 10)
@@ -1134,7 +1137,8 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].stop, 4)
         self.assertEqual(sel[1].step, 1)
 
-        chunk_id = chunk_ids[3]
+        chunk_id = f"c-{dset_id[2:]}_5_5"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 8)
         self.assertEqual(sel[0].stop, 10)
@@ -1151,23 +1155,41 @@ class ChunkUtilTest(unittest.TestCase):
         chunk_ids = getChunkIds(dset_id, selection, layout)
         self.assertEqual(len(chunk_ids), 2)
 
-        chunk_id = chunk_ids[0]
+        chunk_id = f"c-{dset_id[2:]}_4_2"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 0)
         self.assertEqual(sel[0].stop, 5)
         self.assertEqual(sel[0].step, 1)
-        self.assertEqual(sel[1].start, 0)
-        self.assertEqual(sel[1].stop, 2)
-        self.assertEqual(sel[1].step, 1)
+        self.assertEqual(sel[1], [0, 1])
 
-        chunk_id = chunk_ids[1]
+        chunk_id = f"c-{dset_id[2:]}_5_2"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 5)
         self.assertEqual(sel[0].stop, 10)
         self.assertEqual(sel[0].step, 1)
-        self.assertEqual(sel[1].start, 0)
-        self.assertEqual(sel[1].stop, 2)
-        self.assertEqual(sel[1].step, 1)
+        self.assertEqual(sel[1], [0, 1])
+
+        # test with two coordinates
+        selection = (
+            (1, 5, 55),
+            (23, 28, 57),
+        )
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 2)
+
+        chunk_id = f"c-{dset_id[2:]}_5_5"
+        self.assertTrue(chunk_id in chunk_ids)
+        self.assertTrue(chunk_id in chunk_ids)
+        sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(sel[0], [2,])
+
+        chunk_id = f"c-{dset_id[2:]}_0_2"
+        self.assertTrue(chunk_id in chunk_ids)
+        sel = getDataCoverage(chunk_id, selection, layout)
+        self.assertEqual(len(sel), 1)
+        self.assertEqual(sel[0], [0, 1])
 
         # 2-d test, non-regular chunks
         dset_id = "d-12345678-1234-1234-1234-1234567890ab"
@@ -1177,7 +1199,9 @@ class ChunkUtilTest(unittest.TestCase):
         chunk_ids = getChunkIds(dset_id, selection, layout)
         self.assertEqual(len(chunk_ids), 6)
 
-        chunk_id = chunk_ids[0]
+        chunk_id = f"c-{dset_id[2:]}_2_0"
+        self.assertTrue(chunk_id in chunk_ids)
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 0)
         self.assertEqual(sel[0].stop, 1)
@@ -1186,7 +1210,9 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].stop, 8)
         self.assertEqual(sel[1].step, 1)
 
-        chunk_id = chunk_ids[1]
+        chunk_id = f"c-{dset_id[2:]}_2_1"
+        self.assertTrue(chunk_id in chunk_ids)
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 0)
         self.assertEqual(sel[0].stop, 1)
@@ -1195,7 +1221,9 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].stop, 18)
         self.assertEqual(sel[1].step, 1)
 
-        chunk_id = chunk_ids[5]
+        chunk_id = f"c-{dset_id[2:]}_2_5"
+        self.assertTrue(chunk_id in chunk_ids)
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0].start, 0)
         self.assertEqual(sel[0].stop, 1)
@@ -1205,22 +1233,25 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].step, 1)
 
         # 1-d test with fractional chunks
-        datashape = [
-            104,
-        ]
+        datashape = [104,]
         layout = (10,)
         selection = getHyperslabSelection(datashape, 92, 102)
+        print("selection:", selection)
         chunk_ids = getChunkIds(dset_id, selection, layout)
+
         self.assertEqual(len(chunk_ids), 2)
 
-        chunk_id = chunk_ids[0]
+        chunk_id = f"c-{dset_id[2:]}_9"
+        self.assertTrue(chunk_id in chunk_ids)
+
         sel = getDataCoverage(chunk_id, selection, layout)
         sel = sel[0]
         self.assertEqual(sel.start, 0)
         self.assertEqual(sel.stop, 8)
         self.assertEqual(sel.step, 1)
 
-        chunk_id = chunk_ids[1]
+        chunk_id = f"c-{dset_id[2:]}_10"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
         sel = sel[0]
         self.assertEqual(sel.start, 8)
@@ -1232,7 +1263,9 @@ class ChunkUtilTest(unittest.TestCase):
         layout = (66, 89, 93)
         selection = (slice(0, 792, 1), slice(520, 521, 1), slice(1401, 1540, 1))
         chunk_ids = getChunkIds(dset_id, selection, layout)
-        chunk_id = chunk_ids[1]
+        chunk_id = f"c-{dset_id[2:]}_0_5_16"
+        self.assertTrue(chunk_id in chunk_ids)
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0], slice(0, 66, 1))
         self.assertEqual(sel[1], slice(0, 1, 1))
@@ -1240,11 +1273,13 @@ class ChunkUtilTest(unittest.TestCase):
 
         selection = (slice(0, 792, 1), slice(520, 521, 1), [1401, 1501, 1540])
         chunk_ids = getChunkIds(dset_id, selection, layout)
-        chunk_id = chunk_ids[1]
+        self.assertEqual(len(chunk_ids), 24)
+        chunk_id = f"c-{dset_id[2:]}_0_5_16"
+        self.assertTrue(chunk_id in chunk_ids)
         sel = getDataCoverage(chunk_id, selection, layout)
         self.assertEqual(sel[0], slice(0, 66, 1))
         self.assertEqual(sel[1], slice(0, 1, 1))
-        self.assertEqual(sel[2], slice(1, 3, 1))
+        self.assertEqual(sel[2], [1, 2])
 
     def testGetChunkId(self):
         # getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
@@ -1294,9 +1329,7 @@ class ChunkUtilTest(unittest.TestCase):
     def testChunkIterator1d(self):
         dset_id = "d-12345678-1234-1234-1234-1234567890ab"
         dims = [100]
-        layout = [
-            10,
-        ]
+        layout = [10,]
 
         selection = getHyperslabSelection(dims)
         it = ChunkIterator(dset_id, selection, layout)
@@ -1315,10 +1348,7 @@ class ChunkUtilTest(unittest.TestCase):
 
     def testChunkIterator2d(self):
         dset_id = "d-12345678-1234-1234-1234-1234567890ab"
-        dims = [
-            100,
-            100,
-        ]
+        dims = [100, 100,]
         layout = [50, 50]
         selection = getHyperslabSelection(dims)
         it = ChunkIterator(dset_id, selection, layout)
