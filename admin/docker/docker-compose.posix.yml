@@ -1,5 +1,6 @@
 services:
   head:
+    platform: "linux/amd64"
     image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
     mem_limit: ${HEAD_RAM}
@@ -16,6 +17,7 @@ services:
       - ${PWD}/admin/config/:/config/
 
   dn:
+    platform: "linux/amd64"
     image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
     mem_limit: ${DN_RAM}
@@ -33,6 +35,7 @@ services:
     links:
       - head
   sn:
+    platform: "linux/amd64"
     image: hdfgroup/hsds
     restart: ${RESTART_POLICY}
     mem_limit: ${SN_RAM}
