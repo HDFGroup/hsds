@@ -134,6 +134,8 @@ async def PUT_Domain(request):
     now = getNow(app)
     domain_json["created"] = now
     domain_json["lastModified"] = now
+    #if "class" in body_json:
+    #    domain_json["class"] = body_json["class"]
 
     # write the domain json to S3 immediately so it will show up in a get
     # domains S3 scan
