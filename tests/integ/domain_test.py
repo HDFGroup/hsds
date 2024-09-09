@@ -531,7 +531,7 @@ class DomainTest(unittest.TestCase):
         compressors = rspJson["compressors"]
         for compressor in EXPECTED_COMPRESSORS:
             self.assertTrue(compressor in compressors)
- 
+
         # do a get on the new domain
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
