@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: sn
-          image: hdfgroup/hsds:0.7.0
+          image: hdfgroup/hsds:sha-be36e5c
           imagePullPolicy: IfNotPresent
           resources:
             requests:
@@ -59,7 +59,7 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 60
         - name: dn
-          image: hdfgroup/hsds:0.7.0
+          image: hdfgroup/hsds:sha-be36e5c
           imagePullPolicy: IfNotPresent
           lifecycle:
             preStop:
@@ -107,3 +107,6 @@ spec:
         - name: config
           configMap:
             name: hsds-config
+        - name: override
+          configMap:
+            name: hsds-override

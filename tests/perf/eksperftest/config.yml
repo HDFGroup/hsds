@@ -1,0 +1,8 @@
+# bucket loader configuration
+inventory_domain: /home/mdsplus/eksperftest/shots.h5  # the HSDS domain used to store the list of domains
+hs_username: null  # This value should be supplied by a Kubernetes secret or environment variable
+hs_password: null  # This value should be supplied by a Kubernetes secret or environment variable
+public_read: true  # make new domains public read, if false, only the hs_username user will have access
+hsds_global: http://10.100.32.2:5101  # run: set the IP here to the CLUSTER_IP you get when running kubectl get service hsds
+hsds_local: http://localhost:5101  # this is the pod-local address, set to null if running loader outside of kubernetes
+log_level: DEBUG

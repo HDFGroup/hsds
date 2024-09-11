@@ -14,7 +14,7 @@ metadata:
 subjects:
 - kind: ServiceAccount
   name: default
-  namespace: default
+  namespace: hsds 
 roleRef:
   kind: ClusterRole
   name: pods-list

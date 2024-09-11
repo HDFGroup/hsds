@@ -1,0 +1,195 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hsds-perftest
+  name: hsds-perftest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hsds-perftest
+  template:
+    metadata:
+      labels:
+        app: hsds-perftest
+    spec:
+      containers:
+        -
+          name: perftest
+          image: hdfgroup/hsds_perftest:v0.1
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "256M"
+            limits:
+              memory: "512M"
+          volumeMounts:
+          - name: bucket-config
+            mountPath: "/config/config.yml"
+            subPath: config.yml
+          env:
+          - name: RUN_COMMAND
+            value: load
+          - name: PASSWORD_FILE
+            value: /config/passwd.txt
+          - name: HS_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: hs-loader-keys
+                key: hs_username
+          - name: HS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: hs-loader-keys
+                key: hs_password
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_access_key_id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_secret_access_key
+        -
+          name: head
+          image: hdfgroup/hsds:master
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "128M"
+            limits:
+              memory: "256M"
+          volumeMounts:
+          - name: accounts
+            mountPath: "/config/passwd.txt"
+            subPath: passwd.txt
+          - name: hsds-config
+            mountPath: "/config/config.yml"
+            subPath: config.yml
+          - name: hsds-override
+            mountPath: "/config/override.yml"
+            subPath: override.yml
+          ports:
+            -
+              containerPort: 5101
+          env:
+          - name: NODE_TYPE
+            value: head_node
+          - name: TARGET_SN_COUNT
+            value: "1"
+          - name: TARGET_DN_COUNT
+            value: "1"
+          - name: K8S_APP_LABEL
+            value: null
+          - name: PASSWORD_FILE
+            value: /config/passwd.txt
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_access_key_id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_secret_access_key
+        -
+          name: sn
+          image: hdfgroup/hsds:master
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "1024M"
+            limits:
+              memory: "1024M"
+          volumeMounts:
+          - name: accounts
+            mountPath: "/config/passwd.txt"
+            subPath: passwd.txt
+          - name: hsds-config
+            mountPath: "/config/config.yml"
+            subPath: config.yml
+          - name: hsds-override
+            mountPath: "/config/override.yml"
+            subPath: override.yml
+          ports:
+            -
+              containerPort: 5101
+          env:
+          - name: NODE_TYPE
+            value: sn
+          - name: HEAD_ENDPOINT
+            value: http://localhost:5100
+          - name: K8S_APP_LABEL
+            value: null
+          - name: PASSWORD_FILE
+            value: /config/passwd.txt
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_access_key_id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_secret_access_key
+        -
+          name: dn
+          image: hdfgroup/hsds:master
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: "1024M"
+            limits:
+              memory: "1024M"
+          volumeMounts:
+          - name: accounts
+            mountPath: "/config/passwd.txt"
+            subPath: passwd.txt
+          - name: hsds-config
+            mountPath: "/config/config.yml"
+            subPath: config.yml
+          - name: hsds-override
+            mountPath: "/config/override.yml"
+            subPath: override.yml
+          ports:
+            -
+              containerPort: 6101
+          env:
+          - name: NODE_TYPE
+            value: dn
+          - name: HEAD_ENDPOINT
+            value: http://localhost:5100
+          - name: K8S_APP_LABEL
+            value: null
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_access_key_id
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aws-auth-keys
+                key: aws_secret_access_key
+      volumes:
+      - name: accounts
+        secret:
+          secretName: user-password
+      - name: hsds-perftest-config
+        configMap:
+          name: hsds-perftest-config
+      - name: hsds-config
+        configMap:
+          name: hsds-config
+      - name: hsds-override
+        configMap:
+          name: hsds-override
