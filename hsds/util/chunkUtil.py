@@ -445,8 +445,7 @@ def getChunkIdForPartition(chunk_id, dset_json):
 
 def getChunkIds(dset_id, selection, layout, prefix=None):
     """Get the all the chunk ids for chunks that lie in the
-    selection of the
-    given dataset.
+    selection of the given dataset.
     """
 
     def chunk_index_to_id(indices):
@@ -598,10 +597,29 @@ def getChunkSelection(chunk_id, slices, layout):
     Return the intersection of the chunk with the given slices
     selection of the array.
     """
-    # print("getChunkSelection - chunk_id:", chunk_id, "slices:", slices)
     chunk_index = getChunkIndex(chunk_id)
     rank = len(layout)
     sel = []
+
+    coord_mask = None
+    # compute a boolean mask for the coordinates that apply to the given chunk_id
+    for dim in range(rank):
+        s = slices[dim]
+        c = layout[dim]
+        n = chunk_index[dim] * c
+        if isinstance(s, slice):
+            continue
+        if coord_mask is None:
+            coord_mask = [True,] * len(s)
+        if len(s) != len(coord_mask):
+            raise ValueError("mismatched number of coordinates for fancy selection")
+
+        for i in range(len(s)):
+            if not coord_mask[i]:
+                continue
+            if s[i] < n or s[i] >= n + c:
+                coord_mask[i] = False
+
     for dim in range(rank):
         s = slices[dim]
         c = layout[dim]
@@ -629,9 +647,9 @@ def getChunkSelection(chunk_id, slices, layout):
         else:
             # coord list
             coords = []
-            for j in s:
-                if j >= n and j < n + c:
-                    coords.append(j)
+            for i in range(len(s)):
+                if coord_mask[i]:
+                    coords.append(s[i])
             sel.append(coords)
 
     return sel
@@ -646,6 +664,7 @@ def getChunkCoverage(chunk_id, slices, layout):
     if not chunk_sel:
         log.warn(f"slices: {slices} does intersect chunk: {chunk_id}")
         return None
+
     rank = len(layout)
     if len(slices) != rank:
         raise ValueError(f"invalid slices value for dataset of rank: {rank}")
@@ -670,16 +689,8 @@ def getChunkCoverage(chunk_id, slices, layout):
             sel.append(slice(start, stop, step))
         else:
             coord = []
-            for j in s:
-                if j - offset < 0:
-                    msg = "Unexpected chunk selection"
-                    log.error(msg)
-                    raise ValueError(msg)
-                elif j - offset >= w:
-                    msg = "Unexpected chunk selection"
-                    log.error(msg)
-                    raise ValueError(msg)
-                coord.append(j - offset)
+            for i in range(len(s)):
+                coord.append(s[i] - offset)
             sel.append(tuple(coord))
 
     return sel
