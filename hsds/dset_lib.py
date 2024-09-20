@@ -355,33 +355,6 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
     return chunkinfo_map
 
 
-def get_chunkmap_selections(chunk_map, chunk_ids, slices, dset_json):
-    """ Update chunk_map with chunk and data selections for the
-    given set of slices
-    """
-    log.debug(f"get_chunkmap_selections - {len(chunk_ids)} chunk_ids")
-    if not slices:
-        log.debug("no slices set, returning")
-        return  # nothing to do
-    log.debug(f"slices: {slices}")
-    layout = getChunkLayout(dset_json)
-    for chunk_id in chunk_ids:
-        if chunk_id in chunk_map:
-            item = chunk_map[chunk_id]
-        else:
-            item = {}
-            chunk_map[chunk_id] = item
-
-        chunk_sel = getChunkCoverage(chunk_id, slices, layout)
-        log.debug(
-            f"get_chunk_selections - chunk_id: {chunk_id}, chunk_sel: {chunk_sel}"
-        )
-        item["chunk_sel"] = chunk_sel
-        data_sel = getDataCoverage(chunk_id, slices, layout)
-        log.debug(f"get_chunk_selections - data_sel: {data_sel}")
-        item["data_sel"] = data_sel
-
-
 def get_chunk_selections(chunk_map, chunk_ids, slices, dset_json):
     """Update chunk_map with chunk and data selections for the
     given set of slices
