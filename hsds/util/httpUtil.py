@@ -377,7 +377,7 @@ async def http_post(app, url, data=None, params=None, client=None):
             elif rsp.status == 204:  # no data
                 return None
             elif rsp.status == 400:
-                msg = f"POST  request HTTPBadRequest error for url: {url}"
+                msg = f"POST request HTTPBadRequest error for url: {url}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason="Bad Request")
             elif rsp.status == 404:
@@ -445,6 +445,10 @@ async def http_put(app, url, data=None, params=None, client=None):
             log.info(f"http_put status: {rsp.status}")
             if rsp.status in (200, 201):
                 pass  # expected
+            elif rsp.status == 400:
+                msg = f"PUT request HTTPBadRequest error for url: {url}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason="Bad Request")
             elif rsp.status == 404:
                 # can come up for replace ops
                 log.info(f"HTTPNotFound for: {url}")

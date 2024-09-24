@@ -496,6 +496,8 @@ def bytesToArray(data, dt, shape, encoding=None):
     """
     Create numpy array based on byte representation
     """
+    print(f"bytesToArray -- dt: {dt}, dt.metadata: {dt.metadata} shape: {shape}, encoding: {encoding}")
+    print(f"data: {data}")
     if encoding:
         # decode the data
         # will raise ValueError if non-decodeable
@@ -549,7 +551,7 @@ def getNumpyValue(value, dt=None, encoding=None):
             # convert to tuple
             value = tuple(value)
         elif dt.kind == "f" and isinstance(value, str) and value == "nan":
-            value = np.NaN
+            value = np.nan
         else:
             # use as is
             pass

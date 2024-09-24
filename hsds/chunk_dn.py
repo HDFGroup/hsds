@@ -15,6 +15,7 @@
 #
 
 import numpy as np
+import traceback
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web import json_response, StreamResponse
@@ -283,7 +284,10 @@ async def PUT_Chunk(request):
             input_arr = bytesToArray(input_bytes, select_dt, [num_elements, ])
         except ValueError as ve:
             log.error(f"bytesToArray threw ValueError: {ve}")
-            raise HTTPInternalServerError()
+            tb = traceback.format_exc()
+            log.error(f"traceback: {tb}")
+
+            raise HTTPBadRequest(reason="unable to decode bytestring")
 
         if bcshape:
             input_arr = input_arr.reshape(bcshape)

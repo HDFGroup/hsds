@@ -688,9 +688,7 @@ class ChunkCrawler:
                 raise KeyError(msg)
             chunk_status = self._status_map[chunk_id]
             if chunk_status not in (200, 201):
-                log.info(
-                    f"returning chunk_status: {chunk_status} for chunk: {chunk_id}"
-                )
+                log.info(f"returning chunk_status: {chunk_status} for chunk: {chunk_id}")
                 return chunk_status
 
         return 200  # all good
@@ -870,7 +868,14 @@ class ChunkCrawler:
                 log.warn(f"CancelledError for {self._action}({chunk_id}): {cle}")
             except HTTPBadRequest as hbr:
                 status_code = 400
-                log.error(f"HTTPBadRequest for {self._action}({chunk_id}): {hbr}")
+                msg = f"HTTPBadRequest for {self._action}({chunk_id}): {hbr}"
+                if self._action.startswith("write_"):
+                    # treat an 400 on write as a warn
+                    log.warn(msg)
+                else:
+                    log.error(msg)
+                break  # no retry on 400's
+                
             except HTTPNotFound as nfe:
                 status_code = 404
                 log.info(f"HTTPNotFoundRequest for {self._action}({chunk_id}): {nfe}")

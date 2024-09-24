@@ -1572,7 +1572,7 @@ class AttributeTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create attr
-        value = [np.NaN, ] * 6
+        value = [np.nan, ] * 6
         data = {"type": "H5T_IEEE_F32LE", "shape": 6, "value": value}
         attr_name = "nan_arr_attr"
         req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
