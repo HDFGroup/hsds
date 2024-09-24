@@ -496,8 +496,6 @@ def bytesToArray(data, dt, shape, encoding=None):
     """
     Create numpy array based on byte representation
     """
-    print(f"bytesToArray -- dt: {dt}, dt.metadata: {dt.metadata} shape: {shape}, encoding: {encoding}")
-    print(f"data: {data}")
     if encoding:
         # decode the data
         # will raise ValueError if non-decodeable

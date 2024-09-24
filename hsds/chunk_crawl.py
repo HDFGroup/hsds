@@ -875,7 +875,6 @@ class ChunkCrawler:
                 else:
                     log.error(msg)
                 break  # no retry on 400's
-                
             except HTTPNotFound as nfe:
                 status_code = 404
                 log.info(f"HTTPNotFoundRequest for {self._action}({chunk_id}): {nfe}")

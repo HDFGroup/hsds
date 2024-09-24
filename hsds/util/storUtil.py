@@ -139,7 +139,7 @@ def _shuffle(codec, data, chunk_shape=None, dtype=None):
 
 def _unshuffle(codec, data, dtype=None, chunk_shape=None):
     item_size = dtype.itemsize
-    #chunk_size = int(np.prod(chunk_shape)) * item_size
+    # chunk_size = int(np.prod(chunk_shape)) * item_size
 
     if codec == 1:
         # byte shuffle, use numcodecs Shuffle
