@@ -472,6 +472,10 @@ async def getStorBytes(app,
     log.info(f"read: {len(data)} bytes for key: {key}")
     if length > 0 and len(data) != length:
         log.warn(f"requested {length} bytes but got {len(data)} bytes")
+        # extend data to expected length
+        buffer = bytearray(length)
+        buffer[:(len(data))]
+        data = bytes(buffer)
     if chunk_locations:
         log.debug(f"getStorBytes - got {len(chunk_locations)} chunk locations")
         # uncompress chunks within the fetched data and store to

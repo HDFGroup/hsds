@@ -53,8 +53,6 @@ class CompressionUtilTest(unittest.TestCase):
             self.assertEqual(data, data_copy)
 
     def testBitShuffle(self):
-        print("skipping bitshuffle test")
-        return
         shape = (1_000_000, )
         dt = np.dtype("<i4")
         arr = np.random.randint(0, 200, shape, dtype=dt)
