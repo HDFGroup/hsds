@@ -69,7 +69,7 @@ def getCompressors():
 def getSupportedFilters(include_compressors=True):
     """return list of other supported filters"""
     filters = [
-        "bitshuffle",
+        # "bitshuffle",
         "shuffle",
         "fletcher32",
         "nbit",        # No-op
@@ -172,6 +172,9 @@ def _unshuffle(codec, data, dtype=None, chunk_shape=None):
         except Exception as e:
             log.error(f"except using bitshuffle.decompress_lz4: {e}")
             raise HTTPInternalServerError()
+    else:
+        log.error(f"Unexpected codec: {codec} for _shuffle")
+        raise ValueError()
 
     return arr.tobytes()
 

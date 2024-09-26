@@ -549,7 +549,7 @@ def getNumpyValue(value, dt=None, encoding=None):
             # convert to tuple
             value = tuple(value)
         elif dt.kind == "f" and isinstance(value, str) and value == "nan":
-            value = np.NaN
+            value = np.nan
         else:
             # use as is
             pass

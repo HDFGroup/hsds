@@ -1442,7 +1442,7 @@ class ValueTest(unittest.TestCase):
         # create the dataset
         req = self.endpoint + "/datasets"
         payload = {"type": "H5T_IEEE_F32LE", "shape": 10}
-        creation_props = {"fillValue": np.NaN}
+        creation_props = {"fillValue": np.nan}
         payload["creationProperties"] = creation_props
 
         req = self.endpoint + "/datasets"

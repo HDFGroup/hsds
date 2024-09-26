@@ -1381,12 +1381,12 @@ class DatasetTest(unittest.TestCase):
         # create the dataset
         req = self.endpoint + "/datasets"
 
-        payload = get_payload("H5T_STD_I32LE", fillValue=np.NaN)
+        payload = get_payload("H5T_STD_I32LE", fillValue=np.nan)
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 400)  # NaN not compatible with integer type
 
-        payload = get_payload("H5T_IEEE_F32LE", fillValue=np.NaN)
+        payload = get_payload("H5T_IEEE_F32LE", fillValue=np.nan)
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # Dataset created
@@ -1409,7 +1409,7 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("fillValue" in creationProps)
         self.assertTrue(np.isnan(creationProps["fillValue"]))
 
-        # get data json returning "nan" for fillValue rather than np.Nan
+        # get data json returning "nan" for fillValue rather than np.nan
         # the latter works with the Python JSON package, but is not part
         # of the formal JSON standard
         params = {"ignore_nan": 1}
