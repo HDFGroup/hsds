@@ -948,9 +948,7 @@ async def get_chunk_bytes(
         log.error(msg)
         raise HTTPInternalServerError()
 
-    msg = "get_chunk_bytes done for hyperchunks "
-    msg += f"arr min: {chunk_arr.min()}, arr_max: {chunk_arr.max()}"
-    log.debug(msg)
+    log.debug("get_chunk_bytes done for hyperchunks")
 
     return chunk_arr
 
