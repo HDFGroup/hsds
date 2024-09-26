@@ -12,7 +12,7 @@
 import os
 import sys
 import yaml
-from pkg_resources import resource_filename
+from importlib_resources import files
 
 cfg = {}
 
@@ -99,10 +99,11 @@ def _load_cfg():
             break
     if not yml_file:
         # use yaml file embedded in package
-        yml_file = resource_filename("admin", "config/config.yml")
+        yml_file = files('admin.config').joinpath('config.yml')
 
         if not yml_file:
             raise FileNotFoundError("unable to load config.yml")
+    #
     debug(f"_load_cfg with '{yml_file}'")
     try:
         with open(yml_file, "r") as f:

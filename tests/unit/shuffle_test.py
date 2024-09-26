@@ -41,8 +41,6 @@ class ShuffleUtilTest(unittest.TestCase):
             self.assertEqual(data[i], unshuffled[i])
 
     def testBitShuffle(self):
-        print("skipping bitshuffle test")
-        return
         arr = np.array(list(range(100)), dtype="<u2")
         data = arr.tobytes()
         # Bit Shuffle

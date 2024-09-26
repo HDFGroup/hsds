@@ -19,7 +19,7 @@ import time
 import zlib
 import numpy as np
 import numcodecs as codecs
-# import bitshuffle
+import bitshuffle
 from json import JSONDecodeError
 from aiohttp.web_exceptions import HTTPInternalServerError
 
@@ -104,16 +104,12 @@ def _shuffle(codec, data, chunk_shape=None, dtype=None):
         # bit shuffle, use bitshuffle package
         # bitshufle is expecting numpy array
         # todo - enable block size to be set as part of the filter options
-        log.error("bitshuffle codec is not currently supportd")
-        raise ValueError()
-        """
         block_size = config.get("bit_shuffle_default_blocksize", default=2048)
 
         data = np.frombuffer(data, dtype=dtype)
         data = data.reshape(chunk_shape)
         log.debug(f"bitshuffle.compress_lz4 - chunk_size: {chunk_size} block_size: {block_size}")
         arr = bitshuffle.compress_lz4(data, block_size)
-        """
 
     else:
         log.error(f"Unexpected codec: {codec} for _shuffle")
@@ -139,7 +135,7 @@ def _shuffle(codec, data, chunk_shape=None, dtype=None):
 
 def _unshuffle(codec, data, dtype=None, chunk_shape=None):
     item_size = dtype.itemsize
-    # chunk_size = int(np.prod(chunk_shape)) * item_size
+    chunk_size = int(np.prod(chunk_shape)) * item_size
 
     if codec == 1:
         # byte shuffle, use numcodecs Shuffle
@@ -148,9 +144,6 @@ def _unshuffle(codec, data, dtype=None, chunk_shape=None):
     elif codec == 2:
         # bit shuffle, use bitshuffle
         # bitshufle is expecting numpy array
-        log.error("bitshuffle codec currently unsupported")
-        raise ValueError()
-        """
         data = np.frombuffer(data, dtype=np.dtype("uint8"))
         if len(data) < 12:
             # there should be at least 12 bytes for the header
@@ -179,7 +172,6 @@ def _unshuffle(codec, data, dtype=None, chunk_shape=None):
         except Exception as e:
             log.error(f"except using bitshuffle.decompress_lz4: {e}")
             raise HTTPInternalServerError()
-        """
     else:
         log.error(f"Unexpected codec: {codec} for _shuffle")
         raise ValueError()
