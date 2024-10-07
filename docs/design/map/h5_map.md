@@ -38,7 +38,7 @@ Request Elements:
 
 Returns: id for object
 
-### Get a map
+### Get map metadata
 
 This request returns information on a map object
 
@@ -65,7 +65,7 @@ Returns: HTTP Status Code
 
 This request adds a key to a map
 
-Request PUT /maps/&lt;map_id&gt;/maps/&lt;key&gt;
+Request PUT /maps/&lt;map_id&gt;/key/&lt;key&gt;
 
 Request Elements:
   value: value for the given key
@@ -74,7 +74,7 @@ Request Elements:
 
 This request returns value for given key
 
-Request GET /maps/&lt;map_id&gt;/maps/&lt;key&gt;
+Request GET /maps/&lt;map_id&gt;/key/&lt;key&gt;
 
 Request Elements:
   None
@@ -86,7 +86,7 @@ TBD: Support returning 410 (Gone) for recently removed keys
 
 ### Get values for a set of keys
 
-Request POST /maps/&lt;map_id&gt;/maps
+Request POST /maps/&lt;map_id&gt;/keys
 
 Request Elements:
   Body as a list of keys
@@ -98,7 +98,7 @@ Returns:
 
 Returns all key/value pairs for give map object
 
-Request: /maps/&lt;map_id&gt;/maps
+Request: /maps/&lt;map_id&gt;/keys
 
 Request Elements:
    Limit If provided, a positive integer value specifying the maximum number of key/value pairs to return.
@@ -113,7 +113,7 @@ TBD: support binary responses
 
 This request removes a given key an its associatted value
 
-Request: DELETE /maps/&lt;map_id&gt;/map/&lt;key_value&gt;
+Request: DELETE /maps/&lt;map_id&gt;/key/&lt;key_value&gt;
 
 Request Elements:
   None
@@ -124,7 +124,7 @@ RETURN: HTTP Status code.  404 if key does not exist
 
 This request removes a set of key and their associatted values
 
-Request: DELETE /maps/&lt;map_id&gt;/map
+Request: DELETE /maps/&lt;map_id&gt;/keys
 
 Request Elements:
   None
@@ -134,7 +134,6 @@ RETURN: HTTP Status code.  404 if key does not exist
 ### Attribute methods
 
   GET, PUT, DELETE requests for attribute operations.  Follow same schema as attributes for other objects (Groups, Datasets, Commited Data Types)
-
 
 
 ## 2. Design/Architecture
