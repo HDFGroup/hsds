@@ -19,10 +19,14 @@ Goals:
 * Compatibility with common dataset methods (e.g. compression)
 * Allow natural extension of the REST VOL to HSDS methods to support H5M interface
 
+The proposed mapping opertions are similar in concept to operations on attributes or links (both of which can be viewed as a map).  The primary difference
+is in terms of implementation.  In HSDS, links and attributes are stored as JSON objects.  As the number of links or attributes increased problems would arise
+wheen there wasn't sufficient memory to decode and encode the set of objects.  Also, the decode/encode operations would eventually become quite costly in terms of performance (akin to storing a large dataset as CSV).  This design for map support will avoid these issues via the use of chunking and binary representation of the map data (the later is made easier due to the fact that map values in HDF5 share a common type).
+
 
 ## 2. HDF REST Extensions
 
-In this section additions to the HDF REST API will be examped
+In this section additions to the HDF REST API will be examined.  
 
 ### Create new map
 
