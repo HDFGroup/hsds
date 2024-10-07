@@ -113,7 +113,7 @@ TBD: support binary responses
 
 This request removes a given key an its associatted value
 
-Request: DELETE /maps/&lt;map_id&gt;/key/&lt;key_value&gt;
+Request: DELETE /maps/&lt;map_id&gt;/map/&lt;key_value&gt;
 
 Request Elements:
   None
@@ -124,7 +124,7 @@ RETURN: HTTP Status code.  404 if key does not exist
 
 This request removes a set of key and their associatted values
 
-Request: DELETE /maps/&lt;map_id&gt;/key
+Request: DELETE /maps/&lt;map_id&gt;/map
 
 Request Elements:
   None
