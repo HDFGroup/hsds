@@ -52,7 +52,7 @@ Request Elements:
 
 * verbose: provide additional information in the respose
 
-Returns: JSON describing map object.  If verbose is set, additional daa will be returned (e.g. number oF KV pairs)
+Returns: JSON describing map object.  If verbose is set, additional daa will be returned (e.g. number of KV pairs)
 
 ### Delete a map
 
@@ -84,7 +84,7 @@ Request Elements:
   None
 
 Returns:
-  Value for gieven key as JSON or binary blob.  Or 404 if not found
+  Value for given key as JSON or binary blob.  Or 404 if not found
 
 TBD: Support returning 410 (Gone) for recently removed keys
 
@@ -115,7 +115,7 @@ TBD: support binary responses
 
 ### Delete a key
 
-This request removes a given key an its associatted value
+This request removes a given key and its associated value
 
 Request: DELETE /maps/&lt;map_id&gt;/key/&lt;key_value&gt;
 
