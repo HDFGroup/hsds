@@ -126,7 +126,7 @@ RETURN: HTTP Status code.  404 if key does not exist
 
 ### Delete set of keys
 
-This request removes a set of key and their associatted values
+This request removes a set of key and their associated values
 
 Request: DELETE /maps/&lt;map_id&gt;/keys
 
