@@ -4037,7 +4037,7 @@ class ValueTest(unittest.TestCase):
         array_dims = [5]
         num_arrays = 3
 
-        datatype = {
+        array_datatype = {
             "class": "H5T_ARRAY",
             "base": {
                 "class": "H5T_INTEGER",
@@ -4045,6 +4045,12 @@ class ValueTest(unittest.TestCase):
             },
             "dims": array_dims
         }
+
+        fields = (
+            {"name": "temp", "type": array_datatype},
+            {"name": "pressure", "type": "H5T_IEEE_F16LE"},
+        )
+        datatype = {"class": "H5T_COMPOUND", "fields": fields}
 
         payload = {
             "type": datatype,
@@ -4067,6 +4073,98 @@ class ValueTest(unittest.TestCase):
         shape = rspJson["shape"]
         self.assertEqual(shape["class"], "H5S_SIMPLE")
         self.assertEqual(shape["dims"], [num_arrays])
+
+        # write dataset values
+        value = []
+        for i in range(num_arrays):
+            value.append([[i * 10, i * 10 + 1, i * 10 + 2, i * 10 + 3, i * 10 + 4], i + 0.5])
+        payload = {"value": value}
+        req = self.endpoint + "/datasets/" + array_dset_uuid + "/value"
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # read the dataset values back
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], value)
+
+    def testCreateArrayDatasetBinary(self):
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_req = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_req["Content-Type"] = "application/octet-stream"
+        headers_bin_rsp = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_rsp["accept"] = "application/octet-stream"
+
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        array_dims = [5]
+        num_arrays = 3
+
+        array_datatype = {
+            "class": "H5T_ARRAY",
+            "base": {
+                "class": "H5T_INTEGER",
+                "base": "H5T_STD_I64LE"
+            },
+            "dims": array_dims
+        }
+
+        fields = (
+            {"name": "temp", "type": array_datatype},
+            {"name": "pressure", "type": "H5T_IEEE_F16LE"},
+        )
+        datatype = {"class": "H5T_COMPOUND", "fields": fields}
+
+        payload = {
+            "type": datatype,
+            "shape": num_arrays,
+        }
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+
+        rspJson = json.loads(rsp.text)
+        array_dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(array_dset_uuid))
+
+        # verify the shape of the dataset
+        req = self.endpoint + "/datasets/" + array_dset_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # get dataset
+        rspJson = json.loads(rsp.text)
+        shape = rspJson["shape"]
+        self.assertEqual(shape["class"], "H5S_SIMPLE")
+        self.assertEqual(shape["dims"], [num_arrays])
+
+        # create equivalent numpy dtype
+        dt = np.dtype([("temp", ("<i8", array_dims)), ("pressure", "<f2"),])
+        # create numpy array
+        arr = np.zeros((num_arrays,), dtype=dt)
+        for i in range(num_arrays):
+            row = arr[i]
+            for j in range(len(array_dims)):
+                row["temp"][j] = i * 10 + j
+                row["pressure"] = i + 0.5
+        data = arr.tobytes()
+        req = self.endpoint + "/datasets/" + array_dset_uuid + "/value"
+        rsp = self.session.put(req, data=data, headers=headers_bin_req)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # read the dataset values back
+        rsp = self.session.get(req, headers=headers_bin_rsp)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.content, data)
 
     def testCreateNestedArrayDataset(self):
         headers = helper.getRequestHeaders(domain=self.base_domain)
