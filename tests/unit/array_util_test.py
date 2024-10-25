@@ -273,6 +273,35 @@ class ArrayUtilTest(unittest.TestCase):
         self.assertTrue(isinstance(e, tuple))
         self.assertEqual(e, (id0, id1, id2))
 
+        # compound type with array field
+        dt = np.dtype([("a", ("i4", 3)), ("b", "S5")])
+        shape = [2, ]
+        data = [[[4, 8, 12], "four"], [[5, 10, 15], "five"]]
+        out = jsonToArray(shape, dt, data)
+        self.assertTrue(isinstance(out, np.ndarray))
+
+        self.assertEqual(out.shape, (2,))
+        self.assertTrue(isinstance(out[0], np.void))
+        e0 = out[0]
+        self.assertEqual(len(e0), 2)
+        e0a = e0[0]
+        self.assertTrue(isinstance(e0a, np.ndarray))
+        self.assertEqual(e0a[0], 4)
+        self.assertEqual(e0a[1], 8)
+        self.assertEqual(e0a[2], 12)
+        e0b = e0[1]
+        self.assertEqual(e0b, b"four")
+        self.assertTrue(isinstance(out[1], np.void))
+        e1 = out[1]
+        self.assertEqual(len(e1), 2)
+        e1a = e1[0]
+        self.assertTrue(isinstance(e1a, np.ndarray))
+        self.assertEqual(e1a[0], 5)
+        self.assertEqual(e1a[1], 10)
+        self.assertEqual(e1a[2], 15)
+        e1b = e1[1]
+        self.assertEqual(e1b, b"five")
+
     def testToBytes(self):
         # Simple array
         dt = np.dtype("<i4")
