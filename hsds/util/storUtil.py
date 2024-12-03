@@ -21,7 +21,7 @@ import numpy as np
 import numcodecs as codecs
 import bitshuffle
 from json import JSONDecodeError
-from aiohttp.web_exceptions import HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNotFound
 
 from .. import hsds_logger as log
 from .s3Client import S3Client
@@ -424,6 +424,13 @@ async def getStorJSONObj(app, key, bucket=None):
     log.info(f"getStorJSONObj({bucket})/{key}")
 
     data = await client.get_object(key, bucket=bucket)
+
+    if len(data) == 0:
+        # treat a zero-byte file as not found for JSON
+        # seems with posix drivers we can sometimes get a file result
+        # before any data gets written to it
+        log.warn(f"zero bytes returned for key: {key} bucket:{bucket}")
+        raise HTTPNotFound()
 
     try:
         json_dict = json.loads(data.decode("utf8"))
