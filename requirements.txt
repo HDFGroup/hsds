@@ -6,7 +6,7 @@ azure-storage-blob
 cryptography
 h5py>=3.6.0
 numcodecs
-numpy
+numpy>=2.0.0rc1
 psutil
 pyjwt
 pytz
