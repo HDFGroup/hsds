@@ -216,7 +216,7 @@ class HsdsApp:
             if p.poll() is not None:
                 result = p.communicate()
                 msg = f"process {pname} ended, result: {result}"
-                self.log.warn(msg)
+                self.log.warning(msg)
                 # TBD - restart failed process
 
     def run(self):
