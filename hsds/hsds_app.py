@@ -36,7 +36,7 @@ def _enqueue_output(out, queue, loglevel):
         logging.debug("_enqueue_output close()")
         out.close()
     except ValueError as ve:
-        logging.warn(f"_enqueue_output - ValueError (handle closed?): {ve}")
+        logging.warning(f"_enqueue_output - ValueError (handle closed?): {ve}")
     except Exception as e:
         logging.error(f"_enqueue_output - Unexpected exception {type(e)}: {e}")
 
