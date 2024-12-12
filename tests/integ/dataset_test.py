@@ -1023,6 +1023,90 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(shape["dims"][0], 15)  # increased to 15
         self.assertEqual(shape["dims"][1], 30)  # increased to 30
 
+    def testExtend3DDataset(self):
+        # test extending dataset with three dimension
+        domain = self.base_domain + "/testExtend3DDataset.h5"
+        helper.setupDomain(domain)
+        print("testExtend3DDataset", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        # get domain
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset
+        req = self.endpoint + "/datasets"
+        payload = {"type": "H5T_STD_I32LE", "shape": [0, 3, 0], "maxdims": [0, 3, 0]}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'extendable'
+        name = "extendable"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # verify type and shape
+        req = helper.getEndpoint() + "/datasets/" + dset_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        type_json = rspJson["type"]
+        self.assertEqual(type_json["class"], "H5T_INTEGER")
+        self.assertEqual(type_json["base"], "H5T_STD_I32LE")
+        shape = rspJson["shape"]
+        self.assertEqual(shape["class"], "H5S_SIMPLE")
+
+        self.assertEqual(len(shape["dims"]), 3)
+        self.assertEqual(shape["dims"], [0, 3, 0])
+        self.assertTrue("maxdims" in shape)
+        self.assertEqual(shape["maxdims"], [0, 3, 0])
+
+        # verify shape using the GET shape request
+        req = req + "/shape"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("type" not in rspJson)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson["shape"]
+        self.assertEqual(shape["class"], "H5S_SIMPLE")
+        self.assertEqual(len(shape["dims"]), 3)
+        self.assertEqual(shape["dims"], [0, 3, 0])
+        self.assertTrue("maxdims" in shape)
+        self.assertEqual(shape["maxdims"], [0, 3, 0])
+
+        # extend the dataset by 5 elements in first dimension
+        payload = {"extend": 5, "extend_dim": 0}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("selection" in rspJson)
+        self.assertEqual(rspJson["selection"], "[0:5,:,:]")
+
+        # verify updated-shape using the GET shape request
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("shape" in rspJson)
+        shape = rspJson["shape"]
+        self.assertEqual(shape["class"], "H5S_SIMPLE")
+        self.assertEqual(len(shape["dims"]), 3)
+        self.assertEqual(shape["dims"], [5, 3, 0])
+
+        # extend the dataset by 10 elements in second dimension
+        payload = {"extend": 10, "extend_dim": 1}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 409)  # tried to extend a non-extensible dimension
+
     def testCreationPropertiesLayoutDataset(self):
         # test Dataset with creation property list
         domain = self.base_domain + "/testCreationPropertiesLayoutDataset.h5"
