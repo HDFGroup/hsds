@@ -13,14 +13,9 @@ import requests
 import requests_unixsocket
 import json
 import os.path as op
-from datetime import datetime
-import time
+import random
+import string
 import base64
-try:
-    import pytz
-    USE_UTC = True
-except ModuleNotFoundError:
-    USE_UTC = False
 
 import config
 
@@ -74,11 +69,6 @@ def getActiveNodeCount(session=None):
 
 def getTestDomainName(name):
     """Get base domain to use for test_cases"""
-    now = time.time()
-    if USE_UTC:
-        dt = datetime.fromtimestamp(now, pytz.utc)
-    else:
-        dt = datetime.fromtimestamp(now)
     domain = "/home/"
     domain += config.get('user_name')
     domain += '/'
@@ -86,8 +76,8 @@ def getTestDomainName(name):
     domain += '/'
     domain += name.lower()
     domain += '/'
-    domain += "{:04d}{:02d}{:02d}T{:02d}{:02d}{:02d}_{:06d}Z".format(
-        dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond)
+    random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+    domain += random_str
     return domain
 
 
