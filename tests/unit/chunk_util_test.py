@@ -83,6 +83,7 @@ class ChunkUtilTest(unittest.TestCase):
 
         shape = {"class": "H5S_SIMPLE", "dims": [100, 100, 100]}
         layout = guessChunk(shape, typesize)
+        print("layout:", layout)
         self.assertTrue(len(layout), 3)
         for i in range(3):
             self.assertTrue(layout[i] >= 1)

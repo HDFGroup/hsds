@@ -95,7 +95,7 @@ def verifyBearerToken(app, token):
         log.warn(msg)
         raise HTTPInternalServerError()
     if res.status_code != 200:
-        log.warn("Bad response from {openid_url}: {res.status_code}")
+        log.warn(f"Bad response from {openid_url}: {res.status_code}")
         if res.status_code == 404:
             raise HTTPNotFound()
         elif res.status_code == 401:
@@ -183,6 +183,11 @@ def verifyBearerToken(app, token):
             log.debug(f"got value: {value} for claim: {name}")
             if name == "unique_name":
                 username = value
+            elif name == "preferred_username":
+                if username:
+                    log.debug(f"ignoring {name} since preferred_username is set")
+                else:
+                    username = value
             elif name == "appid":
                 pass  # tbd
             elif name == "roles":
