@@ -18,7 +18,7 @@ the DNS name and port for the Keycloak server.  Replace "keycloak_realm" with th
 in Keycloak.
 
     openid_provider: keycloak  # Use "keycloak" as the authentication provider
-    openid_url: http://<server_dns>:<server_port>/auth/realms/<keycloak_realm>/.well-known/openid-configuration   # update to use your Keycloak location and realm
+    openid_url: http://<server_dns>:<server_port>/realms/<keycloak_realm>/.well-known/openid-configuration   # update to use your Keycloak location and realm
     openid_audience: account # OpenID audience.  Keycloak client id.
     openid_claims: preferred_username,appid   # Comma seperated list of claims to resolve to usernames.
 
