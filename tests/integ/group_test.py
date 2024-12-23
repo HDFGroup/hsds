@@ -435,7 +435,7 @@ class GroupTest(unittest.TestCase):
         req = endpoint + "/groups"
 
         # create a new group
-        creation_props = {"link_creation_order": True, "rdcc_nbytes": 1024}
+        creation_props = {"CreateOrder": True, "rdcc_nbytes": 1024}
         payload = {"creationProperties": creation_props}
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -457,7 +457,7 @@ class GroupTest(unittest.TestCase):
         self.assertTrue("domain" in rspJson)
         self.assertTrue("creationProperties" in rspJson)
         cprops = rspJson["creationProperties"]
-        for k in ("link_creation_order", "rdcc_nbytes"):
+        for k in ("CreateOrder", "rdcc_nbytes"):
             self.assertTrue(k in cprops)
             self.assertEqual(cprops[k], creation_props[k])
         self.assertEqual(rspJson["domain"], self.base_domain)

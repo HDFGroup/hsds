@@ -1037,7 +1037,7 @@ class LinkTest(unittest.TestCase):
 
     def testRootH5Path(self):
         # test that root group can be found by h5path
-        creation_props = {"link_creation_order": True, "rdcc_nbytes": 1024}
+        creation_props = {"CreateOrder": True, "rdcc_nbytes": 1024}
         domain = self.base_domain + "/testRootH5Path.h5"
         print("testRootH5Path", domain)
         helper.setupDomain(domain, root_gcpl=creation_props)
@@ -1067,7 +1067,7 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspJson["class"], "group")
 
         cprops = rspJson["creationProperties"]
-        for k in ("link_creation_order", "rdcc_nbytes"):
+        for k in ("CreateOrder", "rdcc_nbytes"):
             self.assertTrue(k in cprops)
             self.assertEqual(cprops[k], creation_props[k])
 
