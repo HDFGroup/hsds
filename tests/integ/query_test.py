@@ -80,7 +80,7 @@ class QueryTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_uuid))
 
         # link new dataset as 'dset1'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -388,7 +388,7 @@ class QueryTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_id))
 
         # link new dataset as 'dset'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -459,7 +459,7 @@ class QueryTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_uuid))
 
         # link new dataset as 'dset1'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)

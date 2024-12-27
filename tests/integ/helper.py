@@ -81,6 +81,12 @@ def getTestDomainName(name):
     return domain
 
 
+def getRandomName():
+    """Return a random name"""
+    random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+    return random_str
+
+
 def getRequestHeaders(domain=None, username=None, bucket=None, password=None, **kwargs):
     """Get default request headers for domain"""
     if username is None:
