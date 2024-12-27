@@ -93,7 +93,7 @@ class PointSelTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_id))
 
         # link new dataset as 'dset1d'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -287,7 +287,7 @@ class PointSelTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_id))
 
         # link new dataset as 'dset1d'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -685,7 +685,7 @@ class PointSelTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_id))
 
         # link new dataset as 'dset'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -836,7 +836,7 @@ class PointSelTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_id))
 
         # link new dataset as 'dset'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -895,7 +895,7 @@ class PointSelTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_id))
 
         # link new dataset as 'dset1d'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -1062,7 +1062,7 @@ class PointSelTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_id))
 
         # link new dataset as 'dset1d'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -1171,7 +1171,7 @@ class PointSelTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_id))
 
         # link new dataset as 'dset1d'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -1729,7 +1729,7 @@ class PointSelTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_id))
 
         # link new dataset as 'dset_compound'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_id}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)

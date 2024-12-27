@@ -74,7 +74,7 @@ class FilterTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_uuid))
 
         # link new dataset as 'dset'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -129,7 +129,7 @@ class FilterTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_uuid))
 
         # link new dataset as 'dset'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -191,7 +191,7 @@ class FilterTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_uuid))
 
         # link new dataset as 'dset'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -246,7 +246,7 @@ class FilterTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_uuid))
 
         # link new dataset as 'dset'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -308,7 +308,7 @@ class FilterTest(unittest.TestCase):
         self.assertTrue(helper.validateId(dset_uuid))
 
         # link new dataset as 'dset'
-        name = "dset"
+        name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
@@ -493,7 +493,7 @@ class FilterTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson["id"]
         self.assertTrue(helper.validateId(dset_uuid))
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + "dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + "dset" + helper.getRandomName()
         payload = {"id": dset_uuid}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201, rsp.text)
