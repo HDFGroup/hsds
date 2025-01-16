@@ -35,6 +35,7 @@ async def GET_Links(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
+    log.debug(f"GET_Links params: {params}")
 
     group_id = request.match_info.get("id")
 
