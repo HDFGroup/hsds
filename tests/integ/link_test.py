@@ -1717,11 +1717,26 @@ class LinkTest(unittest.TestCase):
         grp_id = rspJson["id"]
         self.assertTrue(helper.validateId(grp_id))
 
+        link_names = [
+            "first",
+            "second",
+            "third",
+            "fourth",
+            "fifth",
+            "sixth",
+            "seventh",
+            "eighth",
+            "ninth",
+            "tenth",
+            "eleventh",
+            "twelfth",
+        ]
+
         # create soft links under the group in sequence
-        link_count = 10
+        link_count = len(link_names)
 
         for i in range(link_count):
-            title = f"link_{i}"
+            title = link_names[i]
             req = helper.getEndpoint() + f"/groups/{grp_id}/links/{title}"
             body = {"h5path": f"some_path_{i}"}
             rsp = self.session.put(req, data=json.dumps(body), headers=headers)
@@ -1740,10 +1755,43 @@ class LinkTest(unittest.TestCase):
             prev_link = links_json[i]
             link = links_json[i + 1]
 
-            self.assertEqual(prev_link['title'], f"link_{i}")
-            self.assertEqual(link['title'], f"link_{i + 1}")
+            self.assertEqual(prev_link['title'], link_names[i])
+            self.assertEqual(link['title'], link_names[i + 1])
 
             self.assertTrue(prev_link["created"] < link["created"])
+
+        # retrieve all links in grp in alphanumeric order
+        req = helper.getEndpoint() + f"/groups/{grp_id}/links"
+        params = {}  # default should be alphanumeric
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        links_json = rspJson["links"]
+        print("params:", params)
+
+        # verify the links are in order
+        for i in range(link_count - 1):
+            prev_link = links_json[i]
+            link = links_json[i + 1]
+
+            self.assertEqual(prev_link['title'], sorted(link_names)[i])
+            self.assertEqual(link['title'], sorted(link_names)[i + 1])
+
+        # retrieve all links in grp in alphanumeric order
+        req = helper.getEndpoint() + f"/groups/{grp_id}/links"
+        params = {"CreateOrder": 0}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        links_json = rspJson["links"]
+
+        # verify the links are in order
+        for i in range(link_count - 1):
+            prev_link = links_json[i]
+            link = links_json[i + 1]
+
+            self.assertEqual(prev_link['title'], sorted(link_names)[i])
+            self.assertEqual(link['title'], sorted(link_names)[i + 1])
 
 
 if __name__ == "__main__":
