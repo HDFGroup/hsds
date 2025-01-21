@@ -263,7 +263,11 @@ def _getSelectDtype(params, dset_dtype, body=None):
             msg = f"invalid fields selection: {te}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        log.debug(f"using select dtype: {select_dtype}")
+        if select_dtype:
+            if len(select_dtype) < 10:
+                log.debug(f"using select dtype: {select_dtype}")
+            else:
+                log.debug(f"using select_dtype with {len(select_dtype)} fields")
     else:
         select_dtype = dset_dtype  # return all fields
 
@@ -873,7 +877,7 @@ async def PUT_Value(request):
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
 
-        msg = f"PUT value - numpy array shape: {arr.shape} dtype: {arr.dtype}"
+        msg = f"PUT value - numpy array shape: {arr.shape}"
         log.debug(msg)
 
     elif request_type == "json":
@@ -1012,7 +1016,8 @@ async def GET_Value(request):
     select_dtype = _getSelectDtype(params, dset_dtype)
 
     log.debug(f"GET Value selection: {slices}")
-    log.debug(f"dset_dtype: {dset_dtype}, select_dtype: {select_dtype}")
+    if len(dset_dtype) < 10:
+        log.debug(f"dset_dtype: {dset_dtype}, select_dtype: {select_dtype}")
 
     limit = _getLimit(params)
 
@@ -1317,7 +1322,6 @@ async def POST_Value(request):
 
     slices = _getSelect(params, dset_json, body=body)
     select_dtype = _getSelectDtype(params, dset_dtype, body=body)
-    log.debug(f"got select_dtype: {select_dtype}")
 
     if request_type == "json":
         if "points" in body:

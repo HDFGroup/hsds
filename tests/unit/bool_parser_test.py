@@ -22,6 +22,13 @@ class BooleanParserTest(unittest.TestCase):
         # main
 
     def testExpressions(self):
+        p = BooleanParser("x1 < 42")
+        variables = p.getVariables()
+        self.assertEqual(len(variables), 1)
+        self.assertTrue("x1" in variables)
+        self.assertTrue(p.evaluate({"x1": 24}))
+        eval_str = p.getEvalStr()
+        self.assertEqual(eval_str, "x1 < 42.0")
 
         p = BooleanParser("x1 < 42")
         variables = p.getVariables()

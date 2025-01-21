@@ -546,6 +546,7 @@ async def GET_Chunk(request):
             msg = f"chunk {chunk_id} no results for query: {query}"
             log.debug(msg)
             raise HTTPNotFound()
+        log.debug(f"test - got output_arr: {output_arr}")
     else:
         # read selected data from chunk
         output_arr = chunkReadSelection(chunk_arr, slices=selection, select_dt=select_dt)

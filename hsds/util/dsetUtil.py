@@ -162,7 +162,7 @@ def getFilterOps(app, dset_id, filters, dtype=None, chunk_shape=None):
 
     try:
         if dset_id in filter_map:
-            log.debug(f"returning filter from filter_map {filter_map[dset_id]}")
+            log.debug(f"returning filter from filter_map for dset: {dset_id}")
             return filter_map[dset_id]
     except TypeError:
         log.error(f"getFilterOps TypeError - dset_id: {dset_id} filter_map: {filter_map}")
@@ -204,7 +204,7 @@ def getFilterOps(app, dset_id, filters, dtype=None, chunk_shape=None):
         # save the chunk shape and dtype
         filter_ops["chunk_shape"] = chunk_shape
         filter_ops["dtype"] = dtype
-        log.debug(f"save filter ops: {filter_ops} for {dset_id}")
+        log.debug(f"save filter ops for {dset_id}")
         filter_map[dset_id] = filter_ops  # save
 
         return filter_ops

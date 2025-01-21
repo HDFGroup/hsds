@@ -532,7 +532,11 @@ async def doReadSelection(
         log.debug(f"chunk_ids: {chunk_ids}")
     else:
         log.debug(f"chunk_ids: {chunk_ids[:10]} ...")
-    log.debug(f"doReadSelection - select_dtype: {select_dtype}")
+    if select_dtype:
+        if len(select_dtype) < 10:
+            log.debug(f"doReadSelection - select_dtype: {select_dtype}")
+        else:
+            log.debug(f"doReadSelection - select_dtype: {len(select_dtype)} fields")
 
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
@@ -545,7 +549,11 @@ async def doReadSelection(
     else:
         log.debug(f"query: {query} limit: {limit}")
         query_dtype = getQueryDtype(select_dtype)
-        log.debug(f"query_dtype: {query_dtype}")
+        if query_dtype:
+            if len(query_dtype) < 10:
+                log.debug(f"query_dtype: {query_dtype}")
+            else:
+                log.debug(f"query_dtype {len(query_dtype)}")
 
     # create array to hold response data
     arr = None

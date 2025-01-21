@@ -393,7 +393,6 @@ async def read_chunk_hyperslab(
         else:
             # convert binary data to numpy array
             try:
-                log.debug(f"np_arr.dtype: {np_arr.dtype}")
                 log.debug(f"chunk_shape: {chunk_shape}")
                 chunk_arr = bytesToArray(array_data, np_arr.dtype, chunk_shape)
             except ValueError as ve:
@@ -408,7 +407,7 @@ async def read_chunk_hyperslab(
                 raise HTTPInternalServerError()
             chunk_arr = chunk_arr.reshape(chunk_shape)
 
-            log.debug(f"chunk_arr shape: {chunk_arr.shape}, dtype: {chunk_arr.dtype}")
+            log.debug(f"chunk_arr shape: {chunk_arr.shape}")
             log.debug(f"data_sel: {data_sel}")
             log.debug(f"np_arr shape: {np_arr.shape}")
 
