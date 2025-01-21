@@ -1022,7 +1022,6 @@ async def get_chunk(
     filters = getFilters(dset_json)
     dset_id = dset_json["id"]
     filter_ops = getFilterOps(app, dset_id, filters, dtype=dt, chunk_shape=chunk_dims)
-    log.debug(f"filter_ops: {filter_ops}")
 
     if s3path:
         if s3path.startswith("s3://"):

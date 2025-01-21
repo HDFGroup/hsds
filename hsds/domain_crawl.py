@@ -290,7 +290,6 @@ class DomainCrawler:
         self._obj_dict[obj_id] = {"status": status}
 
         log.debug(f"DomainCrawler - got json for {obj_id}")
-        log.debug(f"obj_json: {obj_json}")
 
         log.debug("store obj json")
         self._obj_dict[obj_id] = obj_json  # store the obj_json
@@ -432,7 +431,6 @@ class DomainCrawler:
         status = None
         for obj_id in self._obj_dict:
             item = self._obj_dict[obj_id]
-            log.debug(f"item: {item}")
             if "status" in item:
                 item_status = item["status"]
                 if status is None or item_status > status:
@@ -564,4 +562,4 @@ class DomainCrawler:
         msg = f"DomainCrawler - fetch complete obj_id: {obj_id}, "
         msg += f"{len(self._obj_dict)} objects found"
         log.debug(msg)
-        log.debug(f"obj_dict: {self._obj_dict}")
+        log.debug(f"obj_dict: {len(self._obj_dict)} items")

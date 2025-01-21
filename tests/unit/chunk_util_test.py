@@ -1408,6 +1408,7 @@ class ChunkUtilTest(unittest.TestCase):
     def testGetEvalStr(self):
         queries = {}
         queries["date == 23"] = "rows['date'] == 23"
+        queries["tgt123 == 456"] = "rows['tgt123'] == 456"
         queries["wind == b'W 5'"] = "rows['wind'] == b'W 5'"
         queries["temp > 61"] = "rows['temp'] > 61"
         queries["(date >= 22) & (date <= 24)"] = "(rows['date'] >= 22) & (rows['date'] <= 24)"
@@ -1419,7 +1420,7 @@ class ChunkUtilTest(unittest.TestCase):
         queries["date >= 22 where 'temp' in (61, 68, 72)"] = "rows['date'] >= 22"
         queries["date >= 22 where 'temp F' in (61, 68, 72)"] = "rows['date'] >= 22"
 
-        fields = ["date", "wind", "temp"]
+        fields = ["date", "wind", "temp", "tgt123"]
 
         for query in queries.keys():
             eval_str = _getEvalStr(query, "rows", fields)

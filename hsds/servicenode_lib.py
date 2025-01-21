@@ -343,7 +343,7 @@ async def getObjectJson(app,
             continue
         cache_obj[k] = obj_json[k]
     meta_cache[obj_id] = cache_obj
-    log.debug(f"stored {cache_obj} in meta_cache")
+    log.debug(f"stored {obj_id} in meta_cache")
 
     return obj_json
 
@@ -1199,7 +1199,6 @@ async def createObjectByPath(app,
             # create a link to the new object
             await putHardLink(app, parent_id, link_title, tgt_id=obj_id, bucket=bucket)
             parent_id = obj_id  # new parent
-    log.info(f"createObjectByPath {h5path} done")
-    log.debug(f"  returning obj_json: {obj_json}")
+    log.info(f"createObjectByPath {h5path} done, returning obj_json")
 
     return obj_json

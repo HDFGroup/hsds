@@ -433,11 +433,11 @@ def _getValueFromRequest(body, data_type, data_shape):
 
             # check to see if this works with our shape and type
             try:
+                arr = bytesToArray(data, arr_dtype, np_dims)
+            except ValueError as e:
                 log.debug(f"data: {data}")
                 log.debug(f"type: {arr_dtype}")
                 log.debug(f"np_dims: {np_dims}")
-                arr = bytesToArray(data, arr_dtype, np_dims)
-            except ValueError as e:
                 msg = f"Bad Request: encoded input data doesn't match shape and type: {e}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
@@ -1405,7 +1405,10 @@ async def DELETE_Attributes(request):
     # the query string
     attr_names = attr_names_query_string.split(separator)
     log.info(f"delete {len(attr_names)} attributes for {obj_id}")
-    log.debug(f"attr_names: {attr_names}")
+    if len(attr_names) < 10:
+        log.debug(f"attr_names: {attr_names}")
+    else:
+        log.debug(f"attr_names: deleting {len(attr_names)} attributes")
 
     username, pswd = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)

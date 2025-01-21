@@ -891,14 +891,17 @@ def chunkReadSelection(chunk_arr, slices=None, select_dt=None):
         raise ValueError(msg)
 
     dt = chunk_arr.dtype
-    log.debug(f"dtype: {dt}")
 
     # get requested data
     output_arr = chunk_arr[slices]
 
     if len(select_dt) < len(dt):
         # do a field selection
-        log.debug(f"select_dtype: {select_dt}")
+        if select_dt:
+            if len(select_dt) < 10:
+                log.debug(f"select_dtype: {select_dt}")
+            else:
+                log.debug(f"select_dtype: {len(select_dt)} from {len(dt)} fields")
         # create an array with just the given fields
         arr = np.zeros(output_arr.shape, select_dt)
         # slot in each of the given fields
@@ -1069,7 +1072,8 @@ def chunkWritePoints(chunk_id=None,
     dset_dtype = chunk_arr.dtype
     if select_dt is None:
         select_dt = dset_dtype  # no field selection
-    log.debug(f"dtype: {dset_dtype}")
+    else:
+        log.debug(f"select dtype: {dset_dtype}")
 
     # point_arr should have the following type:
     #       (coord1, coord2, ...) | select_dtype
@@ -1255,7 +1259,7 @@ def _getEvalStr(query, arr_name, field_names):
     for item in black_list:
         if item in field_names:
             msg = "invalid field name"
-            log.warn("Bad query: " + msg)
+            log.warn(f"Bad query: {msg}")
             raise ValueError(msg)
 
     if query.startswith("where "):
@@ -1283,7 +1287,6 @@ def _getEvalStr(query, arr_name, field_names):
             if var_name not in field_names:
                 # invalid
                 msg = f"query variable: {var_name}"
-                log.debug(f"field_names: {field_names}")
                 log.warn("Bad query: " + msg)
                 raise ValueError(msg)
             eval_str += arr_name + "['" + var_name + "']"
@@ -1298,11 +1301,14 @@ def _getEvalStr(query, arr_name, field_names):
         elif ch in ("'", '"'):
             end_quote_char = ch
             eval_str += ch
-        elif ch.isalpha() or ch == "_":
+        elif ch.isalnum() or ch == "_":
             if ch == "b" and ch_next in ("'", '"'):
                 eval_str += "b"  # start of a byte string literal
             elif var_name is None:
-                var_name = ch  # start of a variable
+                if ch.isalpha():
+                    var_name = ch  # start of a variable
+                else:
+                    eval_str += ch  # assume a numeric value
             else:
                 var_name += ch
         elif ch == "(" and end_quote_char is None:
@@ -1366,8 +1372,7 @@ def chunkQuery(
     """
     Run query on chunk and selection
     """
-    msg = f"chunkQuery - chunk_id: {chunk_id} query: [{query}] slices: {slices}, "
-    msg += f"limit: {limit} select_dt: {select_dt}"
+    msg = f"chunkQuery - chunk_id: {chunk_id} query: [{query}] slices: {slices}, limit: {limit}"
     log.debug(msg)
 
     if not isinstance(chunk_arr, np.ndarray):
