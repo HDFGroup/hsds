@@ -128,7 +128,8 @@ setup a Azure instance with HSDS. See: <https://azuremarketplace.microsoft.com/e
 - Main website: <https://www.hdfgroup.org/solutions/highly-scalable-data-service-hsds/>
 - Source code: <https://github.com/HDFGroup/hsds>
 - Forum: <https://forum.hdfgroup.org/c/hsds>
-- Documentation: <http://hsds.readthedocs.org> (For REST API)
+- Documentation: <https://h5serv.readthedocs.org> (For REST API)
+- Documentation: <https://hsds.readthedocs.org> (For hsds)
 
 ## Other useful resources
 
