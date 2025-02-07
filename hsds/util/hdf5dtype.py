@@ -37,7 +37,14 @@ class Reference:
         self._objref = weakref.ref(bind)
 
     def __repr__(self):
-        return "<HDF5 object reference>"
+        # TBD: this is not consistent with hsds or h5py...
+        if not isinstance(self._id.id, str):
+            raise TypeError("Expected string id")
+        item = None
+
+        collection_type = self._id.collection_type
+        item = f"{collection_type}/{self._id.id}"
+        return item
 
     def tolist(self):
         if type(self._id.id) is not str:
