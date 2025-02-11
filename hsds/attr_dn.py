@@ -149,7 +149,7 @@ async def GET_Attributes(request):
     if "bucket" in params:
         bucket = params["bucket"]
     else:
-        msg = "POST Attributes without bucket param"
+        msg = "GET Attributes without bucket param"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
