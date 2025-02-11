@@ -155,7 +155,7 @@ def createObjId(obj_type, rootid=None):
         token = list(hashlib.sha256(salt.encode()).hexdigest())
 
         if rootid:
-            # replace first 16 chars of token with first 16 chars of rootid
+            # replace first 16 chars of token with first 16 chars of root id
             root_hex = getIdHexChars(rootid)
             token[0:16] = root_hex[0:16]
         else:
@@ -184,7 +184,7 @@ def getS3Key(id):
         "db/id[0:16]/d/id[16:32]/x_y_z
 
     For domain id's:
-        Return a key with the .domain suffix and no preceeding slash.
+        Return a key with the .domain suffix and no preceding slash.
         For non-default buckets, use the format: <bucket_name>/s3_key
         If the id has a storage specifier ("s3://", "file://", etc.)
         include that along with the bucket name. e.g.: "s3://mybucket/a_folder/a_file.h5"
