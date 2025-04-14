@@ -192,7 +192,7 @@ def _uncompress(data, compressor=None, shuffle=0, level=None, dtype=None, chunk_
             compressor = "zlib"
         # first check if this was compressed with blosc
         # returns typesize, isshuffle, and memcopied
-        blosc_metainfo = codecs.blosc.cbuffer_metainfo(data)
+        blosc_metainfo = codecs.blosc._cbuffer_metainfo(data)
         if blosc_metainfo[0] > 0:
             log.info(f"blosc compressed data for {len(data)} bytes")
             try:
