@@ -1,6 +1,8 @@
 import numpy as np
+
+from h5json.array_util import ndarray_compare
+
 from .. import hsds_logger as log
-from .arrayUtil import ndarray_compare
 
 CHUNK_BASE = 16 * 1024  # Multiplier by which chunks are adjusted
 CHUNK_MIN = 512 * 1024  # Soft lower limit (512k)
