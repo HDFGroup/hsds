@@ -43,7 +43,7 @@ dependencies = [
     "cryptography",
     "h5py >= 3.6.0",
     "importlib_resources",
-    "numcodecs == 0.15.1",
+    "numcodecs <= 0.15.1",
     "numpy >=2.0.0rc1; python_version>='3.9'",
     "psutil",
     "pyjwt",
