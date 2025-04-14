@@ -15,9 +15,8 @@ import helper
 import numpy as np
 import sys
 
-sys.path.append("../..")
-from hsds.util.arrayUtil import arrayToBytes, bytesToArray
-from hsds.util.hdf5dtype import createDataType
+from h5json.hdf5dtype import createDataType
+from h5json.array_util import arrayToBytes, bytesToArray
 
 
 class VlenTest(unittest.TestCase):
@@ -646,7 +645,12 @@ class VlenTest(unittest.TestCase):
 
         # write as binary data
         data = arrayToBytes(arr)
+        print("data:", data)
+        for i in range(len(data)):
+            print(f"{i:04d}: {data[i]}")
         self.assertEqual(len(data), 192)  # will vary based on count
+        arr_copy = bytesToArray(data, dt_compound, (count,))
+        print("arr_copy:", arr_copy)
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = self.session.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)

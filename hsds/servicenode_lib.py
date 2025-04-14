@@ -21,8 +21,9 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from aiohttp.client_exceptions import ClientOSError, ClientError
 from aiohttp import ClientResponseError
 
+from h5json.array_util import encodeData
+
 from .util.authUtil import getAclKeys
-from .util.arrayUtil import encodeData
 from .util.idUtil import getDataNodeUrl, getCollectionForId, createObjId, getRootObjId
 from .util.idUtil import isSchema2Id, getS3Key, isValidUuid
 from .util.linkUtil import h5Join, validateLinkName, getLinkClass

@@ -16,6 +16,9 @@
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
 from json import JSONDecodeError
+
+from h5json.hdf5dtype import validateTypeItem, getBaseTypeJson
+
 from .util.httpUtil import getHref, respJsonAssemble, getBooleanParam
 from .util.httpUtil import jsonResponse
 from .util.idUtil import isValidUuid
@@ -24,7 +27,6 @@ from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
-from .util.hdf5dtype import validateTypeItem, getBaseTypeJson
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction
 from .servicenode_lib import getObjectIdByPath, getPathForObjectId
 from .servicenode_lib import createObject, createObjectByPath, deleteObject

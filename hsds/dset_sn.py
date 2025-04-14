@@ -18,11 +18,13 @@ import math
 from json import JSONDecodeError
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
 
+from h5json.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
+from h5json.array_util import getNumElements, getNumpyValue
+
 from .util.httpUtil import getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse, getBooleanParam
 from .util.idUtil import isValidUuid, isSchema2Id
 from .util.dsetUtil import getPreviewQuery, getFilterItem, getShapeDims
-from .util.arrayUtil import getNumElements, getNumpyValue
 from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
 from .util.chunkUtil import getContiguousLayout
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
@@ -30,8 +32,6 @@ from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.storUtil import getSupportedFilters
-from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson
-from .util.hdf5dtype import getItemSize
 from .util.linkUtil import validateLinkName
 from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
 from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo

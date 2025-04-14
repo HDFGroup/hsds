@@ -5,7 +5,9 @@ import s3fs
 import numpy as np
 from . import config
 from . import hsds_logger as log
-from .util.arrayUtil import bytesArrayToList, getNumElements
+
+from h5json.array_util import bytesArrayToList, getNumElements
+
 from .util.dsetUtil import getSelectionList, getSelectionShape
 
 

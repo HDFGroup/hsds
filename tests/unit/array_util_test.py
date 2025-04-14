@@ -16,6 +16,10 @@ import numpy as np
 import sys
 import base64
 
+from h5json.hdf5dtype import special_dtype
+from h5json.hdf5dtype import check_dtype
+from h5json.hdf5dtype import createDataType
+
 sys.path.append("../..")
 from hsds.util.arrayUtil import (
     bytesArrayToList,
@@ -30,9 +34,6 @@ from hsds.util.arrayUtil import (
     getNumpyValue,
     getBroadcastShape
 )
-from hsds.util.hdf5dtype import special_dtype
-from hsds.util.hdf5dtype import check_dtype
-from hsds.util.hdf5dtype import createDataType
 
 
 class ArrayUtilTest(unittest.TestCase):
@@ -401,6 +402,11 @@ class ArrayUtilTest(unittest.TestCase):
 
         # convert back to array
         arr_copy = bytesToArray(buffer, dt, (5,))
+        print("arr_copy bytes:", arrayToBytes(arr_copy))
+        print("arr_copy:", arr_copy)
+        print("arr_copy dt:", arr_copy.dtype)
+        print("arr_copy metadata:", arr_copy.dtype.metadata)
+        print("arr_copy kind:", arr_copy.dtype.kind)
         self.assertTrue(ndarray_compare(arr, arr_copy))
         # VLEN of bytes
         dt = np.dtype("O", metadata={"vlen": bytes})

@@ -915,6 +915,7 @@ class AttributeTest(unittest.TestCase):
             value.append(i * 0.5)
         payload = {"type": dtype_uuid, "shape": 10, "value": value}
         req = self.endpoint + "/groups/" + root_id + "/attributes/" + attr_name
+        print("req:", req)
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create attribute
 

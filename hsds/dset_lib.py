@@ -16,7 +16,10 @@ import numpy as np
 
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPInternalServerError
-from .util.arrayUtil import getNumpyValue
+
+from h5json.hdf5dtype import createDataType, getItemSize
+from h5json.array_util import getNumpyValue
+
 from .util.boolparser import BooleanParser
 from .util.dsetUtil import isNullSpace, getDatasetLayout, getDatasetLayoutClass, get_slices
 from .util.dsetUtil import getChunkLayout, getSelectionShape, getShapeDims
@@ -24,7 +27,6 @@ from .util.chunkUtil import getChunkCoordinate, getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getQueryDtype, get_chunktable_dims
-from .util.hdf5dtype import createDataType, getItemSize
 from .util.httpUtil import http_delete, http_put
 from .util.idUtil import getDataNodeUrl, isSchema2Id, getS3Key, getObjId
 from .util.rangegetUtil import getHyperChunkFactors

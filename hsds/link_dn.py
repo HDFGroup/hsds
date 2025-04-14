@@ -378,7 +378,6 @@ async def PUT_Links(request):
     if new_links:
         # update the group lastModified
         group_json["lastModified"] = create_time
-        log.debug(f"tbd: group_json: {group_json}")
 
         # write back to S3, save to metadata cache
         await save_metadata_obj(app, group_id, group_json, bucket=bucket)

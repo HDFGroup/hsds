@@ -24,16 +24,17 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPServiceUnav
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.client_exceptions import ClientError
 
+from h5json.hdf5dtype import createDataType
+from h5json.array_util import jsonToArray, getNumpyValue
+from h5json.array_util import getNumElements, arrayToBytes, bytesToArray
+
 from .util.httpUtil import http_get, http_put, http_post, get_http_client
 from .util.httpUtil import isUnixDomainUrl
 from .util.idUtil import getDataNodeUrl, getNodeCount
-from .util.hdf5dtype import createDataType
 from .util.dsetUtil import getSliceQueryParam, getShapeDims
 from .util.dsetUtil import getSelectionShape, getChunkLayout
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getChunkIdForPartition, getQueryDtype
-from .util.arrayUtil import jsonToArray, getNumpyValue
-from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
 
 from . import config
 from . import hsds_logger as log

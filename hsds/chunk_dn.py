@@ -20,11 +20,12 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web import json_response, StreamResponse
 
+from h5json.hdf5dtype import createDataType, getSubType
+from h5json.array_util import bytesToArray, arrayToBytes, getBroadcastShape
+
 from .util.httpUtil import request_read, getContentType
-from .util.arrayUtil import bytesToArray, arrayToBytes, getBroadcastShape
 from .util.idUtil import getS3Key, validateInPartition, isValidUuid
 from .util.storUtil import isStorObj, deleteStorObj
-from .util.hdf5dtype import createDataType, getSubType
 from .util.dsetUtil import getSelectionList, getChunkLayout, getShapeDims
 from .util.dsetUtil import getSelectionShape, getChunkInitializer
 from .util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
