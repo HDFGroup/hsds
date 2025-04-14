@@ -4,6 +4,7 @@
 
 
 def _wildcharmatch(item, pattern):
+    # wild card matcher
     # match item with pattern where pattern can contain any number of '?' chars
     i = 0  # index to item
     j = 0  # index to pattern
