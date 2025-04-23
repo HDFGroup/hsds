@@ -23,7 +23,6 @@ class VlenTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(VlenTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
-        print(self.base_domain)
         helper.setupDomain(self.base_domain)
         self.endpoint = helper.getEndpoint()
 
@@ -645,12 +644,8 @@ class VlenTest(unittest.TestCase):
 
         # write as binary data
         data = arrayToBytes(arr)
-        print("data:", data)
-        for i in range(len(data)):
-            print(f"{i:04d}: {data[i]}")
         self.assertEqual(len(data), 192)  # will vary based on count
         arr_copy = bytesToArray(data, dt_compound, (count,))
-        print("arr_copy:", arr_copy)
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = self.session.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)

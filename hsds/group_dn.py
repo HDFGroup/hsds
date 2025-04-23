@@ -19,7 +19,8 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web import json_response
 
-from .util.idUtil import isValidUuid, isSchema2Id, isRootObjId, getRootObjId
+from h5json.objid import isValidUuid, isSchema2Id, isRootObjId, getRootObjId
+
 from .util.domainUtil import isValidBucketName
 from .util.timeUtil import getNow
 from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj

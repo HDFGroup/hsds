@@ -17,8 +17,8 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
+from h5json.objid import isValidUuid, validateUuid
 
-from .util.idUtil import isValidUuid, validateUuid
 from .util.domainUtil import isValidBucketName
 from .util.timeUtil import getNow
 from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj

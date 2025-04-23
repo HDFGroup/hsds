@@ -16,8 +16,9 @@
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 from json import JSONDecodeError
 
+from h5json.objid import isValidUuid
+
 from .util.httpUtil import getHref, jsonResponse, getBooleanParam
-from .util.idUtil import isValidUuid
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain

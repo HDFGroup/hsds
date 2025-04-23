@@ -18,8 +18,9 @@ from aiohttp.web_exceptions import HTTPForbidden
 from h5json.hdf5dtype import getItemSize
 from h5json.hdf5dtype import createDataType
 from h5json.array_util import getNumElements, bytesToArray
-from .util.idUtil import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey
-from .util.idUtil import getObjId, isValidChunkId, getCollectionForId
+from h5json.objid import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey
+from h5json.objid import getObjId, isValidChunkId, getCollectionForId
+
 from .util.chunkUtil import getDatasetId, getNumChunks, ChunkIterator
 from .util.dsetUtil import getHyperslabSelection, getFilterOps, getChunkDims, getFilters
 from .util.dsetUtil import getDatasetLayoutClass, getDatasetLayout, getShapeDims

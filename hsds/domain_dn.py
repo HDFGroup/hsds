@@ -18,7 +18,7 @@ from aiohttp.web import json_response
 
 from .util.authUtil import getAclKeys
 from .util.domainUtil import isValidDomain, getBucketForDomain
-from .util.idUtil import validateInPartition
+from .util.nodeUtil import validateInPartition
 from .util.timeUtil import getNow
 from .datanode_lib import get_metadata_obj, save_metadata_obj
 from .datanode_lib import delete_metadata_obj, check_metadata_obj

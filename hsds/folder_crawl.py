@@ -19,8 +19,9 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPServiceUnavailable
 
-from .util.idUtil import getNodeCount
 from .servicenode_lib import getObjectJson, getDomainResponse, getDomainJson
+from .util.nodeUtil import getNodeCount
+
 from . import hsds_logger as log
 
 

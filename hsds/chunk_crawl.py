@@ -28,9 +28,9 @@ from h5json.hdf5dtype import createDataType
 from h5json.array_util import jsonToArray, getNumpyValue
 from h5json.array_util import getNumElements, arrayToBytes, bytesToArray
 
+from .util.nodeUtil import getDataNodeUrl, getNodeCount
 from .util.httpUtil import http_get, http_put, http_post, get_http_client
 from .util.httpUtil import isUnixDomainUrl
-from .util.idUtil import getDataNodeUrl, getNodeCount
 from .util.dsetUtil import getSliceQueryParam, getShapeDims
 from .util.dsetUtil import getSelectionShape, getChunkLayout
 from .util.chunkUtil import getChunkCoverage, getDataCoverage

@@ -20,7 +20,8 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPGone, HTTPC
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
-from .util.idUtil import isValidUuid
+from h5json.objid import isValidUuid
+
 from .util.globparser import globmatch
 from .util.linkUtil import validateLinkName, getLinkClass, isEqualLink
 from .util.domainUtil import isValidBucketName

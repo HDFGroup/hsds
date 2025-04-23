@@ -28,10 +28,10 @@ from aiohttp.web import StreamResponse
 from h5json.hdf5dtype import getItemSize, getDtypeItemSize, getSubType, createDataType
 from h5json.array_util import bytesArrayToList, jsonToArray, getNumElements, arrayToBytes
 from h5json.array_util import bytesToArray, squeezeArray, getBroadcastShape
+from h5json.objid import isValidUuid
 
 from .util.httpUtil import getHref, getAcceptType, getContentType
 from .util.httpUtil import request_read, jsonResponse, isAWSLambda
-from .util.idUtil import isValidUuid
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.dsetUtil import isNullSpace, isScalarSpace, get_slices, getShapeDims

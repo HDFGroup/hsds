@@ -22,9 +22,9 @@ from aiohttp.web import json_response, StreamResponse
 
 from h5json.hdf5dtype import createDataType, getSubType
 from h5json.array_util import bytesToArray, arrayToBytes, getBroadcastShape
+from h5json.objid import getS3Key, isValidUuid
 
 from .util.httpUtil import request_read, getContentType
-from .util.idUtil import getS3Key, validateInPartition, isValidUuid
 from .util.storUtil import isStorObj, deleteStorObj
 from .util.dsetUtil import getSelectionList, getChunkLayout, getShapeDims
 from .util.dsetUtil import getSelectionShape, getChunkInitializer
@@ -33,6 +33,7 @@ from .util.chunkUtil import chunkWriteSelection, chunkReadSelection
 from .util.chunkUtil import chunkWritePoints, chunkReadPoints
 from .util.domainUtil import isValidBucketName
 from .util.boolparser import BooleanParser
+from .util.nodeUtil import validateInPartition
 from .datanode_lib import get_metadata_obj, get_chunk, save_chunk
 
 from . import hsds_logger as log

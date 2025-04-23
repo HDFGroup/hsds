@@ -18,8 +18,10 @@ import asyncio
 from aiohttp.web_exceptions import HTTPServiceUnavailable, HTTPConflict, HTTPBadRequest
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNotFound, HTTPGone
 
+from h5json.objid import getCollectionForId
+
+from .util.nodeUtil import getDataNodeUrl
 from .util.httpUtil import isOK
-from .util.idUtil import getCollectionForId, getDataNodeUrl
 from .util.globparser import globmatch
 from .servicenode_lib import getObjectJson, getAttributes, putAttributes, getLinks, putLinks
 from . import hsds_logger as log

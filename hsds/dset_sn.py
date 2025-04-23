@@ -20,10 +20,10 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
 
 from h5json.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
 from h5json.array_util import getNumElements, getNumpyValue
+from h5json.objid import isValidUuid, isSchema2Id
 
 from .util.httpUtil import getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse, getBooleanParam
-from .util.idUtil import isValidUuid, isSchema2Id
 from .util.dsetUtil import getPreviewQuery, getFilterItem, getShapeDims
 from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
 from .util.chunkUtil import getContiguousLayout

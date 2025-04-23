@@ -22,10 +22,10 @@ from h5json.hdf5dtype import validateTypeItem, getBaseTypeJson
 from h5json.hdf5dtype import createDataType, getItemSize
 from h5json.array_util import jsonToArray, getNumElements, bytesArrayToList
 from h5json.array_util import bytesToArray, arrayToBytes, decodeData, encodeData
+from h5json.objid import isValidUuid, getRootObjId
 
 from .util.httpUtil import getAcceptType, jsonResponse, getHref, getBooleanParam
 from .util.globparser import globmatch
-from .util.idUtil import isValidUuid, getRootObjId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot

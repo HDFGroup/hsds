@@ -18,10 +18,10 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
 from json import JSONDecodeError
 
 from h5json.hdf5dtype import validateTypeItem, getBaseTypeJson
+from h5json.objid import isValidUuid
 
 from .util.httpUtil import getHref, respJsonAssemble, getBooleanParam
 from .util.httpUtil import jsonResponse
-from .util.idUtil import isValidUuid
 from .util.linkUtil import validateLinkName
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword

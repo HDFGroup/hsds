@@ -17,10 +17,11 @@ import asyncio
 import traceback
 from aiohttp.web import run_app
 
+from h5json.objid import isValidUuid, isSchema2Id, getCollectionForId
+from h5json.objid import isRootObjId
+
 from . import config
 from .util.lruCache import LruCache
-from .util.idUtil import isValidUuid, isSchema2Id, getCollectionForId
-from .util.idUtil import isRootObjId
 from .util.httpUtil import isUnixDomainUrl, bindToSocket, getPortFromUrl
 from .util.httpUtil import jsonResponse, release_http_client
 from .util.storUtil import setBloscThreads, getBloscThreads

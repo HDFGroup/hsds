@@ -25,15 +25,18 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPGone
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPServiceUnavailable
 
+
+
 from . import config
 from .util.httpUtil import http_get, http_post, jsonResponse
-from .util.idUtil import createNodeId, getNodeNumber, getNodeCount
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.authUtil import isAdminUser
 from .util.k8sClient import getDnLabelSelector, getPodIps
+from .util.nodeUtil import createNodeId, getNodeNumber, getNodeCount
+
 from . import hsds_logger as log
 
-HSDS_VERSION = "0.9.2"
+HSDS_VERSION = "1.0.0"
 
 
 def getVersion():
