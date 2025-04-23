@@ -45,7 +45,7 @@ async def GET_Links(request):
         msg = "Missing group id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(group_id, obj_class="Group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -177,7 +177,7 @@ async def GET_Link(request):
         msg = "Missing group id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(group_id, obj_class="Group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -495,7 +495,7 @@ async def DELETE_Links(request):
         msg = "Missing group id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(group_id, obj_class="Group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -642,7 +642,7 @@ async def POST_Links(request):
 
     # do a check that everything is as it should with the item list
     for group_id in items:
-        if not isValidUuid(group_id, obj_class="Group"):
+        if not isValidUuid(group_id, obj_class="groups"):
             msg = f"Invalid group id: {group_id}"
             log.warn(msg)
 
@@ -749,7 +749,7 @@ async def DELETE_Link(request):
         msg = "Missing group id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(group_id, obj_class="Group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

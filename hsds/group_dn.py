@@ -47,7 +47,7 @@ async def GET_Group(request):
 
     log.info(f"GET group: {group_id} bucket: {bucket}")
 
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
@@ -100,7 +100,7 @@ async def POST_Group(request):
     group_id = get_obj_id(request, body=body)
 
     log.info(f"POST group: {group_id} bucket: {bucket}")
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
     if "root" not in body:
@@ -116,7 +116,7 @@ async def POST_Group(request):
 
     root_id = body["root"]
 
-    if not isValidUuid(root_id, obj_class="group"):
+    if not isValidUuid(root_id, obj_class="groups"):
         msg = "Invalid root_id: " + root_id
         log.error(msg)
         raise HTTPInternalServerError()
@@ -179,7 +179,7 @@ async def PUT_Group(request):
     # don't really need bucket param since the dirty ids know which bucket
     # they should write too
 
-    if not isValidUuid(root_id, obj_class="group"):
+    if not isValidUuid(root_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {root_id}")
         raise HTTPInternalServerError()
 
@@ -248,7 +248,7 @@ async def DELETE_Group(request):
     params = request.rel_url.query
     group_id = get_obj_id(request)
 
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 

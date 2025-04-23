@@ -33,7 +33,7 @@ async def GET_Dataset(request):
     params = request.rel_url.query
     dset_id = get_obj_id(request)
 
-    if not isValidUuid(dset_id, obj_class="dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         log.error(f"Unexpected dataset_id: {dset_id}")
         raise HTTPInternalServerError()
     if "bucket" in params:
@@ -94,7 +94,7 @@ async def POST_Dataset(request):
         raise HTTPBadRequest(reason=msg)
 
     dset_id = get_obj_id(request, body=body)
-    if not isValidUuid(dset_id, obj_class="dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         log.error(f"Unexpected dataset_id: {dset_id}")
         raise HTTPInternalServerError()
 
@@ -176,7 +176,7 @@ async def DELETE_Dataset(request):
     dset_id = request.match_info.get("id")
     log.info(f"DELETE dataset: {dset_id}")
 
-    if not isValidUuid(dset_id, obj_class="dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         log.error(f"Unexpected dataset id: {dset_id}")
         raise HTTPInternalServerError()
 
@@ -220,7 +220,7 @@ async def PUT_DatasetShape(request):
     params = request.rel_url.query
     dset_id = request.match_info.get("id")
 
-    if not isValidUuid(dset_id, obj_class="dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         log.error(f"Unexpected dset_id: {dset_id}")
         raise HTTPInternalServerError()
 

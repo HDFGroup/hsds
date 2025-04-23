@@ -75,7 +75,7 @@ async def GET_Links(request):
     log.debug(f"GET_Links params: {params}")
     group_id = get_obj_id(request)
     log.info(f"GET links: {group_id}")
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
@@ -171,7 +171,7 @@ async def POST_Links(request):
     group_id = get_obj_id(request)
     log.info(f"POST_Links: {group_id}")
 
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
@@ -286,7 +286,7 @@ async def PUT_Links(request):
     group_id = get_obj_id(request)
     log.info(f"PUT links: {group_id}")
 
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
@@ -405,7 +405,7 @@ async def DELETE_Links(request):
     group_id = get_obj_id(request)
     log.info(f"DELETE links: {group_id}")
 
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         msg = f"Unexpected group_id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

@@ -51,7 +51,7 @@ async def GET_Datatype(request):
         include_attrs = True
 
     if ctype_id:
-        if not isValidUuid(ctype_id, "Type"):
+        if not isValidUuid(ctype_id, "datatypes"):
             msg = f"Invalid type id: {ctype_id}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -62,7 +62,7 @@ async def GET_Datatype(request):
         group_id = None
         if "grpid" in params:
             group_id = params["grpid"]
-            if not isValidUuid(group_id, "Group"):
+            if not isValidUuid(group_id, "groups"):
                 msg = f"Invalid parent group id: {group_id}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
@@ -103,7 +103,7 @@ async def GET_Datatype(request):
         # throws 404 if not found
         kwargs = {"bucket": bucket, "domain": domain}
         ctype_id, domain, _ = await getObjectIdByPath(app, group_id, h5path, **kwargs)
-        if not isValidUuid(ctype_id, "Datatype"):
+        if not isValidUuid(ctype_id, "datatypes"):
             msg = f"No datatype exist with the path: {h5path}"
             log.warn(msg)
             raise HTTPGone()
@@ -273,7 +273,7 @@ async def DELETE_Datatype(request):
         msg = "Missing committed type id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(ctype_id, "Type"):
+    if not isValidUuid(ctype_id, "datatypes"):
         msg = f"Invalid committed type id: {ctype_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

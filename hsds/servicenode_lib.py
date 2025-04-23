@@ -527,7 +527,7 @@ async def putLinks(app, group_id, items, bucket=None):
     """ create a new links.  Return 201 if any item is a new link,
     or 200 if it's a duplicate of an existing link. """
 
-    isValidUuid(group_id, obj_class="group")
+    isValidUuid(group_id, obj_class="groups")
     group_json = None
 
     # validate input

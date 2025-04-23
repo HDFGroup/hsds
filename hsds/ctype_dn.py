@@ -34,7 +34,7 @@ async def GET_Datatype(request):
     params = request.rel_url.query
     ctype_id = get_obj_id(request)
 
-    if not isValidUuid(ctype_id, obj_class="type"):
+    if not isValidUuid(ctype_id, obj_class="datatypes"):
         log.error(f"Unexpected type_id: {ctype_id}")
         raise HTTPInternalServerError()
 
@@ -91,7 +91,7 @@ async def POST_Datatype(request):
         raise HTTPBadRequest(reason=msg)
 
     ctype_id = get_obj_id(request, body=body)
-    if not isValidUuid(ctype_id, obj_class="datatype"):
+    if not isValidUuid(ctype_id, obj_class="datatypes"):
         log.error("Unexpected type_id: {ctype_id}")
         raise HTTPInternalServerError()
 
