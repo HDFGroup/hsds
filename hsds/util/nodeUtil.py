@@ -29,6 +29,7 @@ def _getIdHash(id):
     hexdigest = m.hexdigest()
     return hexdigest[:5]
 
+
 def createNodeId(prefix, node_number=None):
     """Create a random id used to identify nodes"""
     node_id = ""  # nothing too bad happens if this doesn't get set
@@ -83,6 +84,7 @@ def getNodeNumber(app):
             return i
     log.error("getNodeNumber, no matching id")
     return -1
+
 
 def getNodeCount(app):
     dn_urls = app["dn_urls"]

@@ -13,7 +13,6 @@ import unittest
 import json
 import helper
 import numpy as np
-import sys
 
 from h5json.hdf5dtype import createDataType
 from h5json.array_util import arrayToBytes, bytesToArray
@@ -645,7 +644,6 @@ class VlenTest(unittest.TestCase):
         # write as binary data
         data = arrayToBytes(arr)
         self.assertEqual(len(data), 192)  # will vary based on count
-        arr_copy = bytesToArray(data, dt_compound, (count,))
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         rsp = self.session.put(req, data=data, headers=headers_bin_req)
         self.assertEqual(rsp.status_code, 200)

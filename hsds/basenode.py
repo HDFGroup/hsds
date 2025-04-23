@@ -26,7 +26,6 @@ from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPServiceUnavailable
 
 
-
 from . import config
 from .util.httpUtil import http_get, http_post, jsonResponse
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
