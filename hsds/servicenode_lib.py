@@ -1076,7 +1076,7 @@ async def createObject(app,
     if creation_props:
         log.debug(f"    cprops: {creation_props}")
 
-    obj_id = createObjId(collection, rootid=root_id)
+    obj_id = createObjId(collection, root_id=root_id)
     log.info(f"new obj id: {obj_id}")
     obj_json = {"id": obj_id, "root": root_id}
     if obj_type:
