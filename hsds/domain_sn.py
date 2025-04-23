@@ -985,7 +985,7 @@ async def PUT_Domain(request):
 
     if not is_folder and not linked_json:
         # create a root group for the new domain
-        root_id = createObjId("roots")
+        root_id = createObjId("groups")
         log.debug(f"new root group id: {root_id}")
         group_json = {"id": root_id, "root": root_id, "domain": domain}
         log.debug(f"create group for domain, body: {group_json}")
