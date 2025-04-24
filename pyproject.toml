@@ -44,7 +44,7 @@ dependencies = [
     "h5py >= 3.6.0",
     "h5json@git+https://github.com/HDFGroup/hdf5-json@abstract",
     "importlib_resources",
-    "numcodecs",
+    "numcodecs <= 0.15.1",
     "numpy >=2.0.0rc1; python_version>='3.9'",
     "psutil",
     "pyjwt",
