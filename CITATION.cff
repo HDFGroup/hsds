@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+title: 'Highly Scalable Data Service (HSDS)'
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - name: The HDF Group
+    website: 'https://www.hdfgroup.org'
+repository-code: 'https://github.com/HDFGroup/hsds'
+url: 'https://www.hdfgroup.org/solutions/highly-scalable-data-service-hsds/'
