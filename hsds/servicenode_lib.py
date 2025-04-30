@@ -1048,6 +1048,7 @@ async def deleteObject(app, obj_id, bucket=None):
 
 async def createObject(app,
                        root_id=None,
+                       obj_id=None,
                        obj_type=None,
                        obj_shape=None,
                        layout=None,
@@ -1076,7 +1077,18 @@ async def createObject(app,
     if creation_props:
         log.debug(f"    cprops: {creation_props}")
 
-    obj_id = createObjId(collection, root_id=root_id)
+    if obj_id:
+        log.debug(f"using client supplied id: {obj_id}")
+        if not isValidUuid(obj_id, obj_class=collection):
+            msg = f"invalid id: {obj_id}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if getRootObjId(obj_id) != root_id:
+            msg = f"id: {obj_id} is not valid for root: {root_id}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        obj_id = createObjId(collection, root_id=root_id)
     log.info(f"new obj id: {obj_id}")
     obj_json = {"id": obj_id, "root": root_id}
     if obj_type:
@@ -1098,6 +1110,7 @@ async def createObject(app,
 
 async def createObjectByPath(app,
                              parent_id=None,
+                             obj_id=None,
                              h5path=None,
                              implicit=False,
                              obj_type=None,
@@ -1118,6 +1131,8 @@ async def createObjectByPath(app,
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     log.debug(f"createObjectByPath - parent_id: {parent_id}, h5path: {h5path}")
+    if obj_id:
+        log.debug(f"createObjectByPath using client id: {obj_id}")
 
     root_id = getRootObjId(parent_id)
 
@@ -1196,11 +1211,13 @@ async def createObjectByPath(app,
                     kwargs["layout"] = layout
                 if creation_props:
                     kwargs["creation_props"] = creation_props
+                if obj_id:
+                    kwargs["obj_id"] = obj_id
             obj_json = await createObject(app, **kwargs)
-            obj_id = obj_json["id"]
+            tgt_id = obj_json["id"]
             # create a link to the new object
-            await putHardLink(app, parent_id, link_title, tgt_id=obj_id, bucket=bucket)
-            parent_id = obj_id  # new parent
+            await putHardLink(app, parent_id, link_title, tgt_id=tgt_id, bucket=bucket)
+            parent_id = tgt_id  # new parent
     log.info(f"createObjectByPath {h5path} done, returning obj_json")
 
     return obj_json

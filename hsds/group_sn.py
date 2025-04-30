@@ -185,6 +185,7 @@ async def POST_Group(request):
     implicit = getBooleanParam(params, "implicit")
 
     parent_id = None
+    obj_id = None
     h5path = None
     creation_props = None
 
@@ -227,11 +228,16 @@ async def POST_Group(request):
                     parent_id = root_id
                 else:
                     parent_id = body["parent_id"]
+            if "id" in body:
+                obj_id = body["id"]
+                log.debug(f"POST group using client id: {obj_id}")
             if "creationProperties" in body:
                 creation_props = body["creationProperties"]
 
     if parent_id:
         kwargs = {"bucket": bucket, "parent_id": parent_id, "h5path": h5path}
+        if obj_id:
+            kwargs["obj_id"] = obj_id
         if creation_props:
             kwargs["creation_props"] = creation_props
         if implicit:
@@ -240,6 +246,8 @@ async def POST_Group(request):
     else:
         # create an anonymous group
         kwargs = {"bucket": bucket, "root_id": root_id}
+        if obj_id:
+            kwargs["obj_id"] = obj_id
         if creation_props:
             kwargs["creation_props"] = creation_props
         group_json = await createObject(app, **kwargs)

@@ -11,6 +11,9 @@
 ##############################################################################
 import unittest
 import json
+
+from h5json.objid import createObjId
+
 import helper
 import config
 
@@ -119,6 +122,54 @@ class DatatypeTest(unittest.TestCase):
         # a get for the datatype should now return 410 (GONE)
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 410)
+
+    def testPostdTypeWithId(self):
+        # Test creation/deletion of datatype obj
+
+        print("testPostTypeWithId", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create a datatype id
+        ctype_id = createObjId("datatypes", root_id=root_uuid)
+
+        # create a committed type obj
+        data = {"id": ctype_id, "type": "H5T_IEEE_F32LE"}
+        req = self.endpoint + "/datatypes"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertEqual(rspJson["id"], ctype_id)
+        self.assertTrue("type" in rspJson)
+        type_json = rspJson["type"]
+        self.assertEqual(type_json["class"], "H5T_FLOAT")
+        self.assertEqual(type_json["base"], "H5T_IEEE_F32LE")
+
+        # read back the obj
+        req = self.endpoint + "/datatypes/" + ctype_id
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("id" in rspJson)
+        self.assertEqual(rspJson["id"], ctype_id)
+        self.assertTrue("root" in rspJson)
+        self.assertEqual(rspJson["root"], root_uuid)
+        self.assertTrue("created" in rspJson)
+        self.assertTrue("lastModified" in rspJson)
+        self.assertTrue("attributeCount" in rspJson)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertTrue("type" in rspJson)
+        type_json = rspJson["type"]
+        self.assertEqual(type_json["class"], "H5T_FLOAT")
+        self.assertEqual(type_json["base"], "H5T_IEEE_F32LE")
 
     def testPostTypes(self):
         # Test creation with all primitive types

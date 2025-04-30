@@ -1098,11 +1098,16 @@ async def POST_Dataset(request):
             log.debug(f"setting filters to: {f_out}")
             creationProperties["filters"] = f_out
 
-        log.debug(f"set dataset json creationPropries: {creationProperties}")
+        log.debug(f"set dataset json creationProperties: {creationProperties}")
 
     parent_id = None
+    obj_id = None
     link_title = None
     h5path = None
+    if "id" in body:
+        obj_id = body["id"]
+        log.debug(f"POST dataset using client id: {obj_id}")
+
     if "link" in body:
         if "h5path" in body:
             msg = "link can't be used with h5path"
@@ -1111,6 +1116,7 @@ async def POST_Dataset(request):
         link_body = body["link"]
         if "id" in link_body:
             parent_id = link_body["id"]
+
         if "name" in link_body:
             link_title = link_body["name"]
             try:
@@ -1134,6 +1140,8 @@ async def POST_Dataset(request):
 
     # setup args to createObject
     kwargs = {"bucket": bucket, "obj_type": datatype, "obj_shape": shape_json}
+    if obj_id:
+        kwargs["obj_id"] = obj_id
     if creationProperties:
         kwargs["creation_props"] = creationProperties
     if layout:

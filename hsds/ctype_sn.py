@@ -211,7 +211,12 @@ async def POST_Datatype(request):
 
     parent_id = None
     link_title = None
+    obj_id = None
     h5path = None
+    if "id" in body:
+        obj_id = body["id"]
+        log.debug(f"POST datatype using client id: {obj_id}")
+
     if "link" in body:
         if "h5path" in body:
             msg = "link can't be used with h5path"
@@ -220,6 +225,7 @@ async def POST_Datatype(request):
         link_body = body["link"]
         if "id" in link_body:
             parent_id = link_body["id"]
+
         if "name" in link_body:
             link_title = link_body["name"]
             try:
@@ -243,6 +249,9 @@ async def POST_Datatype(request):
 
     # setup args to createObject
     kwargs = {"bucket": bucket, "obj_type": datatype}
+    if obj_id:
+        kwargs["obj_id"] = obj_id
+
     # TBD: creation props for datatype obj?
     if parent_id:
         kwargs["parent_id"] = parent_id

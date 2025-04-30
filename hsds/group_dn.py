@@ -111,8 +111,9 @@ async def POST_Group(request):
     # verify the id doesn't already exist
     obj_found = await check_metadata_obj(app, group_id, bucket=bucket)
     if obj_found:
-        log.error(f"Post with existing group_id: {group_id}")
-        raise HTTPInternalServerError()
+        msg = f"Post with existing group_id: {group_id}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     root_id = body["root"]
 

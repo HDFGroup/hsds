@@ -98,8 +98,9 @@ async def POST_Datatype(request):
     # verify the id doesn't already exist
     obj_found = await check_metadata_obj(app, ctype_id, bucket=bucket)
     if obj_found:
-        log.error(f"Post with existing type_id: {ctype_id}")
-        raise HTTPInternalServerError()
+        msg = f"Post with existing type_id: {ctype_id}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     root_id = None
 

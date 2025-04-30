@@ -101,8 +101,9 @@ async def POST_Dataset(request):
     # verify the id doesn't already exist
     obj_found = await check_metadata_obj(app, dset_id, bucket=bucket)
     if obj_found:
-        log.error("Post with existing dset_id: {}".format(dset_id))
-        raise HTTPInternalServerError()
+        msg = f"Post with existing dset_id: {dset_id}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     if "root" not in body:
         msg = "POST_Dataset with no root"

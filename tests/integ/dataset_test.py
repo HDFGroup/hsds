@@ -13,6 +13,9 @@ import unittest
 import json
 import time
 import numpy as np
+
+from h5json.objid import createObjId
+
 import helper
 import config
 
@@ -189,6 +192,110 @@ class DatasetTest(unittest.TestCase):
         # a get for the dataset should now return 410 (GONE)
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 410)
+
+    def testPostDatasetWithId(self):
+        # Test creation of a dataset obj with client creating obj id
+        domain = self.base_domain + "/testPostDatasetWithId.h5"
+        helper.setupDomain(domain)
+        print("testPostDatasetWithId", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # make a new dataset id
+        dset_id = createObjId("datasets", root_id=root_uuid)
+
+        # create a dataset obj
+        data = {"id": dset_id, "type": "H5T_IEEE_F32LE", "shape": "H5S_SCALAR"}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertEqual(rspJson["id"], dset_id)
+
+        # read back the obj
+        req = self.endpoint + "/datasets/" + dset_id
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        expected_keys = [
+            "id",
+            "shape",
+            "hrefs",
+            "layout",
+            "creationProperties",
+            "attributeCount",
+            "created",
+            "lastModified",
+            "root",
+            "domain",
+        ]
+
+        for name in expected_keys:
+            self.assertTrue(name in rspJson)
+        self.assertEqual(rspJson["id"], dset_id)
+        self.assertEqual(rspJson["root"], root_uuid)
+        self.assertEqual(rspJson["domain"], domain)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        shape_json = rspJson["shape"]
+        self.assertTrue(shape_json["class"], "H5S_SCALAR")
+        self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
+
+        # Get the type
+        rsp = self.session.get(req + "/type", headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("type" in rspJson)
+        self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
+        self.assertTrue("hrefs" in rspJson)
+        hrefs = rspJson["hrefs"]
+        self.assertEqual(len(hrefs), 3)
+
+        # Get the shape
+        rsp = self.session.get(req + "/shape", headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("created" in rspJson)
+        self.assertTrue("lastModified" in rspJson)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("shape" in rspJson)
+        shape_json = rspJson["shape"]
+        self.assertTrue(shape_json["class"], "H5S_SCALAR")
+
+        # try getting verbose info
+        params = {"verbose": 1}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        for name in expected_keys:
+            self.assertTrue(name in rspJson)
+
+        # flush to storage and force an immediate rescan
+        domain_req = self.endpoint + "/"
+        domain_params = {"flush": 1, "rescan": 1}
+        rsp = self.session.put(domain_req, params=domain_params, headers=headers)
+        # should get a NO_CONTENT code,
+        self.assertEqual(rsp.status_code, 204)
+
+        # do a get and verify the additional keys are present
+        expected_keys.append("num_chunks")
+        expected_keys.append("allocated_size")
+
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        for name in expected_keys:
+            self.assertTrue(name in rspJson)
 
     def testScalarEmptyDimsDataset(self):
         # Test creation/deletion of scalar dataset obj
