@@ -15,15 +15,17 @@
 
 import asyncio
 import json
+import numpy as np
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPGone, HTTPConflict
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from aiohttp.client_exceptions import ClientOSError, ClientError
 from aiohttp import ClientResponseError
 
-from h5json.array_util import encodeData
+from h5json.array_util import encodeData, decodeData, bytesToArray, bytesArrayToList, jsonToArray
 from h5json.objid import getCollectionForId, createObjId, getRootObjId
 from h5json.objid import isSchema2Id, getS3Key, isValidUuid
+from h5json.hdf5dtype import getBaseTypeJson, validateTypeItem, createDataType, getItemSize
 
 from .util.nodeUtil import getDataNodeUrl
 from .util.authUtil import getAclKeys
@@ -33,6 +35,7 @@ from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
 from .util.domainUtil import getBucketForDomain, verifyRoot, getLimits
 from .util.storUtil import getCompressors
+from .util.dsetUtil import getShapeDims
 from .basenode import getVersion
 
 from . import hsds_logger as log
@@ -888,6 +891,229 @@ async def doFlush(app, root_id, bucket=None):
         return dn_ids
 
 
+async def getTypeFromRequest(app, body, obj_id=None, bucket=None):
+    """ return a type json from the request body """
+    if "type" not in body:
+        msg = "expected type in body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    datatype = body["type"]
+
+    if isinstance(datatype, str) and datatype.startswith("t-"):
+        # Committed type - fetch type json from DN
+        ctype_id = datatype
+        log.debug(f"got ctypeid: {ctype_id}")
+        ctype_json = await getObjectJson(app, ctype_id, bucket=bucket)
+        log.debug(f"ctype {ctype_id}: {ctype_json}")
+        root_id = getRootObjId(obj_id)
+        if ctype_json["root"] != root_id:
+            msg = "Referenced committed datatype must belong in same domain"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        datatype = ctype_json["type"]
+        # add the ctype_id to the type
+        datatype["id"] = ctype_id
+    elif isinstance(datatype, str):
+        try:
+            # convert predefined type string (e.g. "H5T_STD_I32LE") to
+            # corresponding json representation
+            datatype = getBaseTypeJson(datatype)
+        except TypeError:
+            msg = "PUT attribute with invalid predefined type"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    try:
+        validateTypeItem(datatype)
+    except KeyError as ke:
+        msg = f"KeyError creating type: {ke}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    except TypeError as te:
+        msg = f"TypeError creating type: {te}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    except ValueError as ve:
+        msg = f"ValueError creating type: {ve}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    return datatype
+
+
+def getShapeFromRequest(body):
+    """ get shape json from request body """
+    shape_json = {}
+    if "shape" in body:
+        shape_body = body["shape"]
+        shape_class = None
+        if isinstance(shape_body, dict) and "class" in shape_body:
+            shape_class = shape_body["class"]
+        elif isinstance(shape_body, str):
+            shape_class = shape_body
+        if shape_class:
+            if shape_class == "H5S_NULL":
+                shape_json["class"] = "H5S_NULL"
+                if isinstance(shape_body, dict) and "dims" in shape_body:
+                    msg = "can't include dims with null shape"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+                if isinstance(shape_body, dict) and "value" in body:
+                    msg = "can't have H5S_NULL shape with value"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+            elif shape_class == "H5S_SCALAR":
+                shape_json["class"] = "H5S_SCALAR"
+                dims = getShapeDims(shape_body)
+                if len(dims) != 1 or dims[0] != 1:
+                    msg = "dimensions aren't valid for scalar attribute"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+            elif shape_class == "H5S_SIMPLE":
+                shape_json["class"] = "H5S_SIMPLE"
+                dims = getShapeDims(shape_body)
+                shape_json["dims"] = dims
+            else:
+                msg = f"Unknown shape class: {shape_class}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+        else:
+            # no class, interpret shape value as dimensions and
+            # use H5S_SIMPLE as class
+            if isinstance(shape_body, list) and len(shape_body) == 0:
+                shape_json["class"] = "H5S_SCALAR"
+            else:
+                shape_json["class"] = "H5S_SIMPLE"
+                dims = getShapeDims(shape_body)
+                shape_json["dims"] = dims
+    else:
+        shape_json["class"] = "H5S_SCALAR"
+
+    return shape_json
+
+
+async def getAttributeFromRequest(app, req_json, obj_id=None, bucket=None):
+    """ return attribute from given request json """
+    attr_item = {}
+    log.debug(f"getAttributeFromRequest req_json: {req_json} obj_id: {obj_id}")
+    attr_type = await getTypeFromRequest(app, req_json, obj_id=obj_id, bucket=bucket)
+    attr_shape = getShapeFromRequest(req_json)
+    attr_item = {"type": attr_type, "shape": attr_shape}
+    attr_value = getValueFromRequest(req_json, attr_type, attr_shape)
+    if attr_value is not None:
+        if isinstance(attr_value, bytes):
+            attr_value = encodeData(attr_value)  # store as base64
+            attr_item["encoding"] = "base64"
+        else:
+            # just store the JSON dict or primitive value
+            attr_item["value"] = attr_value
+    else:
+        attr_item["value"] = None
+
+    return attr_item
+
+
+async def getAttributesFromRequest(app, req_json, obj_id=None, bucket=None):
+    """ read the given JSON dictionary and return dict of attribute json """
+
+    attr_items = {}
+    kwargs = {"obj_id": obj_id}
+    if bucket:
+        kwargs["bucket"] = bucket
+    if "attributes" in req_json:
+        attributes = req_json["attributes"]
+        if not isinstance(attributes, dict):
+            msg = f"expected list for attributes but got: {type(attributes)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        # read each attr_item and canonicalize the shape, type, verify value
+        for attr_name in attributes:
+            attr_json = attributes[attr_name]
+            attr_item = await getAttributeFromRequest(app, attr_json, **kwargs)
+            attr_items[attr_name] = attr_item
+    else:
+        log.debug(f"getAttributesFromRequest - no attribute defined in {req_json}")
+
+    return attr_items
+
+
+def getValueFromRequest(body, data_type, data_shape):
+    """ Get attribute value from request json """
+    dims = getShapeDims(data_shape)
+    if "value" in body:
+        if dims is None:
+            msg = "Bad Request: data can not be included with H5S_NULL space"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        value = body["value"]
+        # validate that the value agrees with type/shape
+        arr_dtype = createDataType(data_type)  # np datatype
+        if len(dims) == 0:
+            np_dims = [1, ]
+        else:
+            np_dims = dims
+
+        if body.get("encoding"):
+            item_size = getItemSize(data_type)
+            if item_size == "H5T_VARIABLE":
+                msg = "base64 encoding is not support for variable length attributes"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            try:
+                data = decodeData(value)
+            except ValueError:
+                msg = "unable to decode data"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+            expected_byte_count = arr_dtype.itemsize * np.prod(dims)
+            if len(data) != expected_byte_count:
+                msg = f"expected: {expected_byte_count} but got: {len(data)}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+            # check to see if this works with our shape and type
+            try:
+                arr = bytesToArray(data, arr_dtype, np_dims)
+            except ValueError as e:
+                log.debug(f"data: {data}")
+                log.debug(f"type: {arr_dtype}")
+                log.debug(f"np_dims: {np_dims}")
+                msg = f"Bad Request: encoded input data doesn't match shape and type: {e}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+            value_json = None
+            # now try converting to JSON
+            list_data = arr.tolist()
+            try:
+                value_json = bytesArrayToList(list_data)
+            except ValueError as err:
+                msg = f"Cannot decode bytes to list: {err}, will store as encoded bytes"
+                log.warn(msg)
+            if value_json:
+                log.debug("will store base64 input as json")
+                if data_shape["class"] == "H5S_SCALAR":
+                    # just use the scalar value
+                    value = value_json[0]
+                else:
+                    value = value_json  # return this
+            else:
+                value = data  # return bytes to signal that this needs to be encoded
+        else:
+            # verify that the input data matches the array shape and type
+            try:
+                jsonToArray(np_dims, arr_dtype, value)
+            except ValueError as e:
+                msg = f"Bad Request: input data doesn't match selection: {e}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+    else:
+        value = None
+
+    return value
+
+
 async def getAttributes(app, obj_id,
                         attr_names=None,
                         include_data=False,
@@ -1053,6 +1279,7 @@ async def createObject(app,
                        obj_shape=None,
                        layout=None,
                        creation_props=None,
+                       attrs=None,
                        bucket=None):
     """ create a group, ctype, or dataset object and return object json
         Determination on whether a group, ctype, or dataset is created is based on:
@@ -1076,6 +1303,8 @@ async def createObject(app,
         log.debug(f"    layout: {layout}")
     if creation_props:
         log.debug(f"    cprops: {creation_props}")
+    if attrs:
+        log.debug(f"    attrs: {attrs}")
 
     if obj_id:
         log.debug(f"using client supplied id: {obj_id}")
@@ -1099,6 +1328,13 @@ async def createObject(app,
         obj_json["layout"] = layout
     if creation_props:
         obj_json["creationProperties"] = creation_props
+    if attrs:
+        kwargs = {"obj_id": obj_id, "bucket": bucket}
+        attrs_json = {"attributes": attrs}
+        attr_items = await getAttributesFromRequest(app, attrs_json, **kwargs)
+        log.debug(f"got attr_items: {attr_items}")
+
+        obj_json["attributes"] = attr_items
     log.debug(f"create {collection} obj, body: {obj_json}")
     dn_url = getDataNodeUrl(app, obj_id)
     req = f"{dn_url}/{collection}"
@@ -1117,6 +1353,7 @@ async def createObjectByPath(app,
                              obj_shape=None,
                              layout=None,
                              creation_props=None,
+                             attrs=None,
                              bucket=None):
 
     """ create an object at the designated path relative to the parent.
@@ -1133,6 +1370,16 @@ async def createObjectByPath(app,
     log.debug(f"createObjectByPath - parent_id: {parent_id}, h5path: {h5path}")
     if obj_id:
         log.debug(f"createObjectByPath using client id: {obj_id}")
+    if obj_type:
+        log.debug(f"    obj_type: {obj_type}")
+    if obj_shape:
+        log.debug(f"    obj_shape: {obj_shape}")
+    if layout:
+        log.debug(f"    layout: {layout}")
+    if creation_props:
+        log.debug(f"    cprops: {creation_props}")
+    if attrs:
+        log.debug(f"    attrs: {attrs}")
 
     root_id = getRootObjId(parent_id)
 
@@ -1211,6 +1458,8 @@ async def createObjectByPath(app,
                     kwargs["layout"] = layout
                 if creation_props:
                     kwargs["creation_props"] = creation_props
+                if attrs:
+                    kwargs["attrs"] = attrs
                 if obj_id:
                     kwargs["obj_id"] = obj_id
             obj_json = await createObject(app, **kwargs)

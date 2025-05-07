@@ -297,6 +297,44 @@ class DatasetTest(unittest.TestCase):
         for name in expected_keys:
             self.assertTrue(name in rspJson)
 
+    def testPostDatasetWithAttributes(self):
+        # test POST with attribute initialization
+        domain = self.base_domain + "/testPostDatasetWithAttributes.h5"
+        helper.setupDomain(domain)
+        print("testPostDatasetWithAttributes", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        # get root id
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        print("rspJson:", rspJson)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # setup some attributes to include
+        attr_count = 4
+        attributes = {}
+        extent = 10
+        for i in range(attr_count):
+            value = [i * 10 + j for j in range(extent)]
+            data = {"type": "H5T_STD_I32LE", "shape": extent, "value": value}
+            attr_name = f"attr{i + 1:04d}"
+            attributes[attr_name] = data
+
+        # create new dataset
+        payload = {"type": "H5T_IEEE_F32LE", "shape": "H5S_SCALAR"}
+        payload["attributes"] = attributes
+        payload["link"] = {"id": root_uuid, "name": "linked_datatype"}
+
+        req = helper.getEndpoint() + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["attributeCount"], 4)
+        self.assertTrue(helper.validateId(rspJson["id"]))
+
     def testScalarEmptyDimsDataset(self):
         # Test creation/deletion of scalar dataset obj
         domain = self.base_domain + "/testScalarEmptyDimsDataset.h5"

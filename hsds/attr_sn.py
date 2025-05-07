@@ -18,11 +18,10 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalSer
 from aiohttp.web import StreamResponse
 from json import JSONDecodeError
 
-from h5json.hdf5dtype import validateTypeItem, getBaseTypeJson
 from h5json.hdf5dtype import createDataType, getItemSize
-from h5json.array_util import jsonToArray, getNumElements, bytesArrayToList
+from h5json.array_util import jsonToArray, getNumElements
 from h5json.array_util import bytesToArray, arrayToBytes, decodeData, encodeData
-from h5json.objid import isValidUuid, getRootObjId
+from h5json.objid import isValidUuid
 
 from .util.httpUtil import getAcceptType, jsonResponse, getHref, getBooleanParam
 from .util.globparser import globmatch
@@ -32,8 +31,8 @@ from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.attrUtil import validateAttributeName, getRequestCollectionName
 from .util.dsetUtil import getShapeDims
 
-from .servicenode_lib import getDomainJson, getObjectJson, validateAction
-from .servicenode_lib import getAttributes, putAttributes, deleteAttributes
+from .servicenode_lib import getDomainJson, getAttributeFromRequest, getAttributesFromRequest
+from .servicenode_lib import getAttributes, putAttributes, deleteAttributes, validateAction
 from .domain_crawl import DomainCrawler
 from . import hsds_logger as log
 from . import config
@@ -296,244 +295,6 @@ async def GET_Attribute(request):
     return resp
 
 
-async def _getTypeFromRequest(app, body, obj_id=None, bucket=None):
-    """ return a type json from the request body """
-    if "type" not in body:
-        msg = "PUT attribute with no type in body"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    datatype = body["type"]
-
-    if isinstance(datatype, str) and datatype.startswith("t-"):
-        # Committed type - fetch type json from DN
-        ctype_id = datatype
-        log.debug(f"got ctypeid: {ctype_id}")
-        ctype_json = await getObjectJson(app, ctype_id, bucket=bucket)
-        log.debug(f"ctype {ctype_id}: {ctype_json}")
-        root_id = getRootObjId(obj_id)
-        if ctype_json["root"] != root_id:
-            msg = "Referenced committed datatype must belong in same domain"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        datatype = ctype_json["type"]
-        # add the ctype_id to the type
-        datatype["id"] = ctype_id
-    elif isinstance(datatype, str):
-        try:
-            # convert predefined type string (e.g. "H5T_STD_I32LE") to
-            # corresponding json representation
-            datatype = getBaseTypeJson(datatype)
-        except TypeError:
-            msg = "PUT attribute with invalid predefined type"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
-    try:
-        validateTypeItem(datatype)
-    except KeyError as ke:
-        msg = f"KeyError creating type: {ke}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    except TypeError as te:
-        msg = f"TypeError creating type: {te}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    except ValueError as ve:
-        msg = f"ValueError creating type: {ve}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-
-    return datatype
-
-
-def _getShapeFromRequest(body):
-    """ get shape json from request body """
-    shape_json = {}
-    if "shape" in body:
-        shape_body = body["shape"]
-        shape_class = None
-        if isinstance(shape_body, dict) and "class" in shape_body:
-            shape_class = shape_body["class"]
-        elif isinstance(shape_body, str):
-            shape_class = shape_body
-        if shape_class:
-            if shape_class == "H5S_NULL":
-                shape_json["class"] = "H5S_NULL"
-                if isinstance(shape_body, dict) and "dims" in shape_body:
-                    msg = "can't include dims with null shape"
-                    log.warn(msg)
-                    raise HTTPBadRequest(reason=msg)
-                if isinstance(shape_body, dict) and "value" in body:
-                    msg = "can't have H5S_NULL shape with value"
-                    log.warn(msg)
-                    raise HTTPBadRequest(reason=msg)
-            elif shape_class == "H5S_SCALAR":
-                shape_json["class"] = "H5S_SCALAR"
-                dims = getShapeDims(shape_body)
-                if len(dims) != 1 or dims[0] != 1:
-                    msg = "dimensions aren't valid for scalar attribute"
-                    log.warn(msg)
-                    raise HTTPBadRequest(reason=msg)
-            elif shape_class == "H5S_SIMPLE":
-                shape_json["class"] = "H5S_SIMPLE"
-                dims = getShapeDims(shape_body)
-                shape_json["dims"] = dims
-            else:
-                msg = f"Unknown shape class: {shape_class}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-        else:
-            # no class, interpet shape value as dimensions and
-            # use H5S_SIMPLE as class
-            if isinstance(shape_body, list) and len(shape_body) == 0:
-                shape_json["class"] = "H5S_SCALAR"
-            else:
-                shape_json["class"] = "H5S_SIMPLE"
-                dims = getShapeDims(shape_body)
-                shape_json["dims"] = dims
-    else:
-        shape_json["class"] = "H5S_SCALAR"
-
-    return shape_json
-
-
-def _getValueFromRequest(body, data_type, data_shape):
-    """ Get attribute value from request json """
-    dims = getShapeDims(data_shape)
-    if "value" in body:
-        if dims is None:
-            msg = "Bad Request: data can not be included with H5S_NULL space"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        value = body["value"]
-        # validate that the value agrees with type/shape
-        arr_dtype = createDataType(data_type)  # np datatype
-        if len(dims) == 0:
-            np_dims = [1, ]
-        else:
-            np_dims = dims
-
-        if body.get("encoding"):
-            item_size = getItemSize(data_type)
-            if item_size == "H5T_VARIABLE":
-                msg = "base64 encoding is not support for variable length attributes"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            try:
-                data = decodeData(value)
-            except ValueError:
-                msg = "unable to decode data"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-            expected_numbytes = arr_dtype.itemsize * np.prod(dims)
-            if len(data) != expected_numbytes:
-                msg = f"expected: {expected_numbytes} but got: {len(data)}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-            # check to see if this works with our shape and type
-            try:
-                arr = bytesToArray(data, arr_dtype, np_dims)
-            except ValueError as e:
-                log.debug(f"data: {data}")
-                log.debug(f"type: {arr_dtype}")
-                log.debug(f"np_dims: {np_dims}")
-                msg = f"Bad Request: encoded input data doesn't match shape and type: {e}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-            value_json = None
-            # now try converting to JSON
-            list_data = arr.tolist()
-            try:
-                value_json = bytesArrayToList(list_data)
-            except ValueError as err:
-                msg = f"Cannot decode bytes to list: {err}, will store as encoded bytes"
-                log.warn(msg)
-            if value_json:
-                log.debug("will store base64 input as json")
-                if data_shape["class"] == "H5S_SCALAR":
-                    # just use the scalar value
-                    value = value_json[0]
-                else:
-                    value = value_json  # return this
-            else:
-                value = data  # return bytes to signal that this needs to be encoded
-        else:
-            # verify that the input data matches the array shape and type
-            try:
-                jsonToArray(np_dims, arr_dtype, value)
-            except ValueError as e:
-                msg = f"Bad Request: input data doesn't match selection: {e}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-    else:
-        value = None
-
-    return value
-
-
-async def _getAttributeFromRequest(app, req_json, obj_id=None, bucket=None):
-    """ return attribute from given request json """
-    attr_item = {}
-    attr_type = await _getTypeFromRequest(app, req_json, obj_id=obj_id, bucket=bucket)
-    attr_shape = _getShapeFromRequest(req_json)
-    attr_item = {"type": attr_type, "shape": attr_shape}
-    attr_value = _getValueFromRequest(req_json, attr_type, attr_shape)
-    if attr_value is not None:
-        if isinstance(attr_value, bytes):
-            attr_value = encodeData(attr_value)  # store as base64
-            attr_item["encoding"] = "base64"
-        else:
-            # just store the JSON dict or primitive value
-            attr_item["value"] = attr_value
-    else:
-        attr_item["value"] = None
-
-    return attr_item
-
-
-async def _getAttributesFromRequest(request, req_json, obj_id=None, bucket=None):
-    """ read the given JSON dictinary and return dict of attribute json """
-
-    app = request.app
-    attr_items = {}
-    kwargs = {"obj_id": obj_id}
-    if bucket:
-        kwargs["bucket"] = bucket
-    if "attributes" in req_json:
-        attributes = req_json["attributes"]
-        if not isinstance(attributes, dict):
-            msg = f"expected list for attributes but got: {type(attributes)}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        # read each attr_item and canonicalize the shape, type, verify value
-        for attr_name in attributes:
-            attr_json = attributes[attr_name]
-            attr_item = await _getAttributeFromRequest(app, attr_json, **kwargs)
-            attr_items[attr_name] = attr_item
-
-    elif "type" in req_json:
-        # single attribute create - fake an item list
-        attr_item = await _getAttributeFromRequest(app, req_json, **kwargs)
-        if "name" in req_json:
-            attr_name = req_json["name"]
-        else:
-            attr_name = request.match_info.get("name")
-            validateAttributeName(attr_name)
-        if not attr_name:
-            msg = "Missing attribute name"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
-        attr_items[attr_name] = attr_item
-    else:
-        log.debug(f"_getAttributes from request - no attribute defined in {req_json}")
-
-    return attr_items
-
-
 async def PUT_Attribute(request):
     """HTTP method to create a new attribute"""
     log.request(request)
@@ -556,7 +317,7 @@ async def PUT_Attribute(request):
         log.debug(f"Attribute name: [{attr_name}]")
         validateAttributeName(attr_name)
 
-    log.info(f"PUT Attributes id: {req_obj_id} name: {attr_name}")
+    log.info(f"PUT Attribute id: {req_obj_id} name: {attr_name}")
     username, pswd = getUserPasswordFromRequest(request)
     # write actions need auth
     await validateUserPassword(app, username, pswd)
@@ -588,7 +349,7 @@ async def PUT_Attribute(request):
 
     # get attribute from request body
     kwargs = {"bucket": bucket, "obj_id": req_obj_id}
-    attr_body = await _getAttributeFromRequest(app, body, **kwargs)
+    attr_body = await getAttributeFromRequest(app, body, **kwargs)
 
     # write attribute to DN
     attr_json = {attr_name: attr_body}
@@ -625,7 +386,7 @@ async def PUT_Attributes(request):
     await validateUserPassword(app, username, pswd)
 
     if not request.has_body:
-        msg = "PUT Attribute with no body"
+        msg = "PUT Attributes with no body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
     try:
@@ -655,10 +416,10 @@ async def PUT_Attributes(request):
     if not req_obj_id:
         req_obj_id = domain_json["root"]
     kwargs = {"obj_id": req_obj_id, "bucket": bucket}
-    attr_items = await _getAttributesFromRequest(request, body, **kwargs)
+    attr_items = await getAttributesFromRequest(app, body, **kwargs)
 
     if attr_items:
-        log.debug(f"PUT Attribute {len(attr_items)} attibutes to add")
+        log.debug(f"PUT Attribute {len(attr_items)} attributes to add")
     else:
         log.debug("no attributes defined yet")
 
@@ -667,6 +428,7 @@ async def PUT_Attributes(request):
     obj_ids = {}
     if "obj_ids" in body:
         body_ids = body["obj_ids"]
+
         if isinstance(body_ids, list):
             # multi cast the attributes - each attribute  in attr-items
             # will be written to each of the objects identified by obj_id
@@ -686,7 +448,7 @@ async def PUT_Attributes(request):
                 msg += f"{len(obj_ids)} objects"
                 log.info(msg)
         elif isinstance(body_ids, dict):
-            # each value is body_ids is a set of attriutes to write to the object
+            # each value is body_ids is a set of attributes to write to the object
             # unlike the above case, different attributes can be written to
             # different objects
             if attr_items:
@@ -702,7 +464,7 @@ async def PUT_Attributes(request):
                     id_json = body_ids[obj_id]
 
                     kwargs = {"obj_id": obj_id, "bucket": bucket}
-                    obj_items = await _getAttributesFromRequest(request, id_json, **kwargs)
+                    obj_items = await getAttributesFromRequest(app, id_json, **kwargs)
                     if obj_items:
                         obj_ids[obj_id] = obj_items
 

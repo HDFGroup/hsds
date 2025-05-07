@@ -188,6 +188,7 @@ async def POST_Group(request):
     obj_id = None
     h5path = None
     creation_props = None
+    attrs = None
 
     if request.has_body:
         try:
@@ -233,6 +234,9 @@ async def POST_Group(request):
                 log.debug(f"POST group using client id: {obj_id}")
             if "creationProperties" in body:
                 creation_props = body["creationProperties"]
+            if "attributes" in body:
+                attrs = body["attributes"]
+                log.debug(f"POST Group attributes: {attrs}")
 
     if parent_id:
         kwargs = {"bucket": bucket, "parent_id": parent_id, "h5path": h5path}
@@ -240,6 +244,8 @@ async def POST_Group(request):
             kwargs["obj_id"] = obj_id
         if creation_props:
             kwargs["creation_props"] = creation_props
+        if attrs:
+            kwargs["attrs"] = attrs
         if implicit:
             kwargs["implicit"] = True
         group_json = await createObjectByPath(app, **kwargs)
@@ -250,6 +256,8 @@ async def POST_Group(request):
             kwargs["obj_id"] = obj_id
         if creation_props:
             kwargs["creation_props"] = creation_props
+        if attrs:
+            kwargs["attrs"] = attrs
         group_json = await createObject(app, **kwargs)
 
     log.debug(f"returning resp: {group_json}")

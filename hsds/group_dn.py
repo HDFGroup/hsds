@@ -99,7 +99,7 @@ async def POST_Group(request):
 
     group_id = get_obj_id(request, body=body)
 
-    log.info(f"POST group: {group_id} bucket: {bucket}")
+    log.info(f"POST group: {group_id} bucket: {bucket} body: {body}")
     if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
@@ -125,13 +125,20 @@ async def POST_Group(request):
     # ok - all set, create group obj
     now = getNow(app)
 
+    if "attributes" in body:
+        # initialize attributes
+        attrs = body["attributes"]
+        log.debug(f"POST Group with attributes: {attrs}")
+    else:
+        attrs = {}
+
     group_json = {
         "id": group_id,
         "root": root_id,
         "created": now,
         "lastModified": now,
         "links": {},
-        "attributes": {},
+        "attributes": attrs,
     }
 
     if "creationProperties" in body:
@@ -147,7 +154,7 @@ async def POST_Group(request):
     resp_json["created"] = group_json["created"]
     resp_json["lastModified"] = group_json["lastModified"]
     resp_json["linkCount"] = 0
-    resp_json["attributeCount"] = 0
+    resp_json["attributeCount"] = len(attrs)
 
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)

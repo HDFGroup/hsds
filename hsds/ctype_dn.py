@@ -122,10 +122,17 @@ async def POST_Datatype(request):
         raise HTTPInternalServerError()
     type_json = body["type"]
 
+    if "attributes" in body:
+        # initialize attributes
+        attrs = body["attributes"]
+        log.debug(f"POST datatype with attributes: {attrs}")
+    else:
+        attrs = {}
+
     # ok - all set, create committed type obj
     now = getNow(app)
 
-    log.info(f"POST_datatype, typejson: {type_json}")
+    log.info(f"POST_datatype, type_json: {type_json}")
 
     ctype_json = {
         "id": ctype_id,
@@ -133,7 +140,7 @@ async def POST_Datatype(request):
         "created": now,
         "lastModified": now,
         "type": type_json,
-        "attributes": {},
+        "attributes": attrs,
     }
 
     kwargs = {"bucket": bucket, "notify": True, "flush": True}
@@ -145,7 +152,7 @@ async def POST_Datatype(request):
     resp_json["created"] = ctype_json["created"]
     resp_json["lastModified"] = ctype_json["lastModified"]
     resp_json["type"] = type_json
-    resp_json["attributeCount"] = 0
+    resp_json["attributeCount"] = len(attrs)
     resp = json_response(resp_json, status=201)
 
     log.response(request, resp=resp)

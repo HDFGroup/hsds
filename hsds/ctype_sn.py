@@ -213,9 +213,15 @@ async def POST_Datatype(request):
     link_title = None
     obj_id = None
     h5path = None
+    attrs = None
+
     if "id" in body:
         obj_id = body["id"]
         log.debug(f"POST datatype using client id: {obj_id}")
+
+    if "attributes" in body:
+        attrs = body["attributes"]
+        log.debug(f"POST datatype attributes: {attrs}")
 
     if "link" in body:
         if "h5path" in body:
@@ -251,6 +257,8 @@ async def POST_Datatype(request):
     kwargs = {"bucket": bucket, "obj_type": datatype}
     if obj_id:
         kwargs["obj_id"] = obj_id
+    if attrs:
+        kwargs["attrs"] = attrs
 
     # TBD: creation props for datatype obj?
     if parent_id:

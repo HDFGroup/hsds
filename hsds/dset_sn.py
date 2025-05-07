@@ -859,6 +859,12 @@ async def POST_Dataset(request):
     else:
         creationProperties = {}
 
+    if "attributes" in body:
+        attrs = body["attributes"]
+        log.debug(f"POST Dataset attributes: {attrs}")
+    else:
+        attrs = None
+
     # TBD: check for invalid layout class...
     if layout_props:
         if layout_props["class"] == "H5D_CONTIGUOUS":
@@ -1144,6 +1150,8 @@ async def POST_Dataset(request):
         kwargs["obj_id"] = obj_id
     if creationProperties:
         kwargs["creation_props"] = creationProperties
+    if attrs:
+        kwargs["attrs"] = attrs
     if layout:
         kwargs["layout"] = layout
 
