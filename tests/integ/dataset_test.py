@@ -333,7 +333,19 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["attributeCount"], 4)
-        self.assertTrue(helper.validateId(rspJson["id"]))
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # fetch the attributes
+        req = f"{helper.getEndpoint()}/datasets/{dset_id}/attributes"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertFalse("type" in rspJson)
+        self.assertFalse("shape" in rspJson)
+        self.assertTrue("attributes") in rspJson
+        self.assertEqual(len(rspJson["attributes"]), attr_count)
 
     def testScalarEmptyDimsDataset(self):
         # Test creation/deletion of scalar dataset obj

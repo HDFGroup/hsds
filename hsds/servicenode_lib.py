@@ -15,6 +15,7 @@
 
 import asyncio
 import json
+import time
 import numpy as np
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPGone, HTTPConflict
@@ -39,6 +40,7 @@ from .util.dsetUtil import getShapeDims
 from .basenode import getVersion
 
 from . import hsds_logger as log
+from . import config
 
 
 async def getDomainJson(app, domain, reload=False):
@@ -1009,6 +1011,18 @@ async def getAttributeFromRequest(app, req_json, obj_id=None, bucket=None):
             attr_item["value"] = attr_value
     else:
         attr_item["value"] = None
+
+    now = time.time()
+    if "created" in req_json:
+        created = req_json["created"]
+        # allow "pre-dated" attributes if the timestamp is within the last 10 seconds
+        predate_max_time = config.get("predate_max_time", default=10.0)
+        if now - created > predate_max_time:
+            attr_item["created"] = created
+        else:
+            log.warn("stale created timestamp for attribute, ignoring")
+    if "created" not in attr_item:
+        attr_item["created"] = now
 
     return attr_item
 

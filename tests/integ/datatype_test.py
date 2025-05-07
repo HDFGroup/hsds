@@ -201,12 +201,24 @@ class DatatypeTest(unittest.TestCase):
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
-        self.assertTrue(helper.validateId(rspJson["id"]))
+        ctype_id = rspJson["id"]
+        self.assertTrue(helper.validateId(ctype_id))
         self.assertTrue("type" in rspJson)
         type_json = rspJson["type"]
         self.assertEqual(type_json["class"], "H5T_FLOAT")
         self.assertEqual(type_json["base"], "H5T_IEEE_F32LE")
-        self.assertEqual(rspJson["attributeCount"], 4)
+        self.assertEqual(rspJson["attributeCount"], attr_count)
+
+        # fetch the attributes, check count
+        req = f"{helper.getEndpoint()}/datatypes/{ctype_id}/attributes"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertFalse("type" in rspJson)
+        self.assertFalse("shape" in rspJson)
+        self.assertTrue("attributes") in rspJson
+        self.assertEqual(len(rspJson["attributes"]), attr_count)
 
     def testPostTypes(self):
         # Test creation with all primitive types

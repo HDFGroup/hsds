@@ -403,8 +403,20 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["linkCount"], 0)
-        self.assertEqual(rspJson["attributeCount"], 4)
-        self.assertTrue(helper.validateId(rspJson["id"]))
+        self.assertEqual(rspJson["attributeCount"], attr_count)
+        grp_id = rspJson["id"]
+        self.assertTrue(helper.validateId(grp_id))
+
+        # fetch the attributes, check count
+        req = f"{helper.getEndpoint()}/groups/{grp_id}/attributes"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertFalse("type" in rspJson)
+        self.assertFalse("shape" in rspJson)
+        self.assertTrue("attributes") in rspJson
+        self.assertEqual(len(rspJson["attributes"]), attr_count)
 
     def testPostWithPath(self):
         # test POST with implicit parent group creation
