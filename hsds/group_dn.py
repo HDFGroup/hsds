@@ -132,12 +132,19 @@ async def POST_Group(request):
     else:
         attrs = {}
 
+    if "links" in body:
+        # initialize links
+        links = body["links"]
+        log.debug(f"POST Group with links: {links}")
+    else:
+        links = {}
+
     group_json = {
         "id": group_id,
         "root": root_id,
         "created": now,
         "lastModified": now,
-        "links": {},
+        "links": links,
         "attributes": attrs,
     }
 
@@ -153,7 +160,7 @@ async def POST_Group(request):
     resp_json["root"] = root_id
     resp_json["created"] = group_json["created"]
     resp_json["lastModified"] = group_json["lastModified"]
-    resp_json["linkCount"] = 0
+    resp_json["linkCount"] = len(links)
     resp_json["attributeCount"] = len(attrs)
 
     resp = json_response(resp_json, status=201)

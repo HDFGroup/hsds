@@ -1294,6 +1294,7 @@ async def createObject(app,
                        layout=None,
                        creation_props=None,
                        attrs=None,
+                       links=None,
                        bucket=None):
     """ create a group, ctype, or dataset object and return object json
         Determination on whether a group, ctype, or dataset is created is based on:
@@ -1319,6 +1320,8 @@ async def createObject(app,
         log.debug(f"    cprops: {creation_props}")
     if attrs:
         log.debug(f"    attrs: {attrs}")
+    if links:
+        log.debug(f"    links: {links}")
 
     if obj_id:
         log.debug(f"using client supplied id: {obj_id}")
@@ -1347,8 +1350,13 @@ async def createObject(app,
         attrs_json = {"attributes": attrs}
         attr_items = await getAttributesFromRequest(app, attrs_json, **kwargs)
         log.debug(f"got attr_items: {attr_items}")
-
         obj_json["attributes"] = attr_items
+    if links:
+        if collection != "groups":
+            msg = "links can only be used with groups"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        obj_json["links"] = links
     log.debug(f"create {collection} obj, body: {obj_json}")
     dn_url = getDataNodeUrl(app, obj_id)
     req = f"{dn_url}/{collection}"
@@ -1368,6 +1376,7 @@ async def createObjectByPath(app,
                              layout=None,
                              creation_props=None,
                              attrs=None,
+                             links=None,
                              bucket=None):
 
     """ create an object at the designated path relative to the parent.
@@ -1394,6 +1403,12 @@ async def createObjectByPath(app,
         log.debug(f"    cprops: {creation_props}")
     if attrs:
         log.debug(f"    attrs: {attrs}")
+    if links:
+        log.debug(f"   links: {links}")
+        if obj_type:
+            msg = "only group objects can have links"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
     root_id = getRootObjId(parent_id)
 
@@ -1474,6 +1489,8 @@ async def createObjectByPath(app,
                     kwargs["creation_props"] = creation_props
                 if attrs:
                     kwargs["attrs"] = attrs
+                if links:
+                    kwargs["links"] = links
                 if obj_id:
                     kwargs["obj_id"] = obj_id
             obj_json = await createObject(app, **kwargs)

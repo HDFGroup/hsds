@@ -13,7 +13,7 @@
 # service node of hsds cluster
 #
 
-from aiohttp.web_exceptions import HTTPBadRequest
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from json import JSONDecodeError
 
 from h5json.objid import isValidUuid, getCollectionForId
@@ -142,6 +142,10 @@ async def GET_Links(request):
 
         # mix in collection key, target and hrefs
         for link in links:
+            if "class" not in link:
+                log.error("expected to find class key in link")
+                raise HTTPInternalServerError()
+
             if link["class"] == "H5L_TYPE_HARD":
                 collection_name = getCollectionForId(link["id"])
                 link["collection"] = collection_name

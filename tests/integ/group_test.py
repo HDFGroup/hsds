@@ -316,7 +316,7 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(rspJson["linkCount"], 0)
         self.assertEqual(rspJson["attributeCount"], 0)
         new_group_id = rspJson["id"]
-        self.assertTrue(helper.validateId(rspJson["id"]))
+        self.assertTrue(helper.validateId(new_group_id))
         self.assertTrue(new_group_id != root_uuid)
 
         # get root group and verify link count is 1
@@ -417,6 +417,64 @@ class GroupTest(unittest.TestCase):
         self.assertFalse("shape" in rspJson)
         self.assertTrue("attributes") in rspJson
         self.assertEqual(len(rspJson["attributes"]), attr_count)
+
+    def testPostWithLinks(self):
+        # test POST with attribute initialization
+        print("testPostWithLinks", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get root id
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # some objects to link
+        link_count = 4
+        links = {}
+        req = helper.getEndpoint() + "/groups"
+
+        for i in range(link_count):
+            rsp = self.session.post(req, headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+            rspJson = json.loads(rsp.text)
+            group_id = rspJson["id"]
+            self.assertTrue(helper.validateId(group_id))
+            links[f"obj_{i}"] = {"id": group_id}
+
+        # create new group
+        payload = {"links": links, "link": {"id": root_uuid, "name": "g1"}}
+        req = helper.getEndpoint() + "/groups"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], link_count)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        grp_id = rspJson["id"]
+        helper.validateId(grp_id)
+
+        # fetch all the links
+        req = helper.getEndpoint() + "/groups/" + grp_id + "/links"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        self.assertTrue("links" in rspJson)
+        links_rsp = rspJson["links"]
+        self.assertEqual(len(links_rsp), link_count)
+        for i in range(link_count):
+            link_rsp = links_rsp[i]
+            self.assertTrue("class" in link_rsp)
+            self.assertEqual(link_rsp["class"], "H5L_TYPE_HARD")
+            self.assertTrue("id" in link_rsp)
+            self.assertTrue("title" in link_rsp)
+            self.assertEqual(link_rsp["title"], f"obj_{i}")
+            self.assertTrue("collection" in link_rsp)
+            self.assertEqual(link_rsp["collection"], "groups")
+            self.assertTrue("target" in link_rsp)
+            self.assertTrue("href" in link_rsp)
 
     def testPostWithPath(self):
         # test POST with implicit parent group creation

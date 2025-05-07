@@ -13,6 +13,8 @@
 # group handler for service node of hsds cluster
 #
 
+import time
+
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 from json import JSONDecodeError
 
@@ -23,11 +25,12 @@ from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain, getPathForDomain, verifyRoot
-from .util.linkUtil import validateLinkName
+from .util.linkUtil import validateLinkName, getLinkClass
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction
 from .servicenode_lib import getObjectIdByPath, getPathForObjectId
 from .servicenode_lib import createObject, createObjectByPath, deleteObject
 from . import hsds_logger as log
+from . import config
 
 
 async def GET_Group(request):
@@ -189,6 +192,7 @@ async def POST_Group(request):
     h5path = None
     creation_props = None
     attrs = None
+    links = None
 
     if request.has_body:
         try:
@@ -236,28 +240,66 @@ async def POST_Group(request):
                 creation_props = body["creationProperties"]
             if "attributes" in body:
                 attrs = body["attributes"]
+                if not isinstance(attrs, dict):
+                    msg = f"POST_Groups expected dict for for links, but got: {type(links)}"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
                 log.debug(f"POST Group attributes: {attrs}")
+            if "links" in body:
+                links = body["links"]
+                if not isinstance(links, dict):
+                    msg = f"POST_Groups expected dict for for links, but got: {type(links)}"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+                # validate the links
+                now = time.time()
+
+                for title in links:
+                    try:
+                        validateLinkName(title)
+                        link_item = links[title]
+                        link_class = getLinkClass(link_item)
+                        if "class" in link_item:
+                            if link_class != link_item["class"]:
+                                msg = f"expected link class of: {link_class} but got {link_item}"
+                                log.warn(msg)
+                                raise HTTPBadRequest(reason=msg)
+                        else:
+                            link_item["class"] = link_class
+                        getLinkClass(link_item)
+                        if "created" in link_item:
+                            created = link_item["created"]
+                            # allow "pre-dated" attributes if recent enough
+                            predate_max_time = config.get("predate_max_time", default=10.0)
+                            if now - created > predate_max_time:
+                                link_item["created"] = created
+                            else:
+                                log.warn("stale created timestamp for link, ignoring")
+                            if "created" not in link_item:
+                                link_item["created"] = now
+
+                    except ValueError:
+                        raise HTTPBadRequest(reason="invalid link item")
+
+    kwargs = {"bucket": bucket}
+    if obj_id:
+        kwargs["obj_id"] = obj_id
+    if creation_props:
+        kwargs["creation_props"] = creation_props
+    if attrs:
+        kwargs["attrs"] = attrs
+    if links:
+        kwargs["links"] = links
 
     if parent_id:
-        kwargs = {"bucket": bucket, "parent_id": parent_id, "h5path": h5path}
-        if obj_id:
-            kwargs["obj_id"] = obj_id
-        if creation_props:
-            kwargs["creation_props"] = creation_props
-        if attrs:
-            kwargs["attrs"] = attrs
+        kwargs["parent_id"] = parent_id
+        kwargs["h5path"] = h5path
         if implicit:
             kwargs["implicit"] = True
         group_json = await createObjectByPath(app, **kwargs)
     else:
         # create an anonymous group
-        kwargs = {"bucket": bucket, "root_id": root_id}
-        if obj_id:
-            kwargs["obj_id"] = obj_id
-        if creation_props:
-            kwargs["creation_props"] = creation_props
-        if attrs:
-            kwargs["attrs"] = attrs
+        kwargs["root_id"] = root_id
         group_json = await createObject(app, **kwargs)
 
     log.debug(f"returning resp: {group_json}")
