@@ -20,13 +20,15 @@ import numpy as np
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPGone, HTTPConflict
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
+
 from aiohttp.client_exceptions import ClientOSError, ClientError
 from aiohttp import ClientResponseError
 
 from h5json.array_util import encodeData, decodeData, bytesToArray, bytesArrayToList, jsonToArray
 from h5json.objid import getCollectionForId, createObjId, getRootObjId
 from h5json.objid import isSchema2Id, getS3Key, isValidUuid
-from h5json.hdf5dtype import getBaseTypeJson, validateTypeItem, createDataType, getItemSize
+from h5json.hdf5dtype import getBaseTypeJson, validateTypeItem, createDataType
+from h5json.hdf5dtype import getItemSize
 
 from .util.nodeUtil import getDataNodeUrl
 from .util.authUtil import getAclKeys
@@ -37,6 +39,7 @@ from .util.httpUtil import http_get, http_put, http_post, http_delete
 from .util.domainUtil import getBucketForDomain, verifyRoot, getLimits
 from .util.storUtil import getCompressors
 from .util.dsetUtil import getShapeDims
+
 from .basenode import getVersion
 
 from . import hsds_logger as log

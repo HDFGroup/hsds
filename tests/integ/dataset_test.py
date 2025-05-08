@@ -309,7 +309,6 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        print("rspJson:", rspJson)
         root_uuid = rspJson["root"]
         helper.validateId(root_uuid)
 

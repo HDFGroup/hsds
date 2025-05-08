@@ -84,6 +84,7 @@ async def write_chunk_hyperslab(
 
     msg = f"write_chunk_hyperslab, chunk_id: {chunk_id}, slices: {slices}, "
     msg += f"bucket: {bucket}"
+    msg += f" dset_json: {dset_json}"
     log.info(msg)
     if "layout" not in dset_json:
         log.error(f"No layout found in dset_json: {dset_json}")

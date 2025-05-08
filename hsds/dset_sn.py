@@ -19,7 +19,7 @@ from json import JSONDecodeError
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
 
 from h5json.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson, getItemSize
-from h5json.array_util import getNumElements, getNumpyValue
+from h5json.array_util import getNumElements, getNumpyValue, jsonToArray
 from h5json.objid import isValidUuid, isSchema2Id
 
 from .util.httpUtil import getHref, respJsonAssemble
@@ -36,7 +36,7 @@ from .util.linkUtil import validateLinkName
 from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
 from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo
 from .servicenode_lib import createObject, createObjectByPath, deleteObject
-from .dset_lib import updateShape, deleteAllChunks
+from .dset_lib import updateShape, deleteAllChunks, doHyperslabWrite
 from . import config
 from . import hsds_logger as log
 
@@ -764,7 +764,7 @@ async def POST_Dataset(request):
             elif shape == "H5S_SCALAR":
                 shape_json["class"] = "H5S_SCALAR"
             else:
-                msg = "POST Datset with invalid shape value"
+                msg = "POST Dataset with invalid shape value"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
         elif isinstance(shape, list):
@@ -846,6 +846,30 @@ async def POST_Dataset(request):
                 raise HTTPBadRequest(reason=msg)
             else:
                 shape_json["maxdims"].append(maxextent)
+
+    if "value" in body and body["value"]:
+        # data to initialize dataset included in request
+        input_data = body["value"]
+        msg = "input data doesn't match request type and shape"
+        dims = getShapeDims(shape_json)
+        if not dims:
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        arr_dtype = createDataType(datatype)
+        try:
+            input_arr = jsonToArray(dims, arr_dtype, input_data)
+        except ValueError:
+            log.warn(f"ValueError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        except TypeError:
+            log.warn(f"TypeError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        except IndexError:
+            log.warn(f"IndexError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"got json arr: {input_arr.shape}")
+    else:
+        input_arr = None
 
     layout_props = None
     min_chunk_size = int(config.get("min_chunk_size"))
@@ -1167,6 +1191,27 @@ async def POST_Dataset(request):
         # create an anonymous datatype
         kwargs["root_id"] = root_id
         dset_json = await createObject(app, **kwargs)
+
+    # write data if provided
+    if input_arr:
+        log.debug(f"write input_arr: {input_arr}")
+        # mixin the layout
+        dset_json["layout"] = layout
+        # make selection for entire dataspace
+        dims = getShapeDims(shape_json)
+        slices = []
+        for dim in dims:
+            s = slice(0, dim, 1)
+            slices.append(s)
+        # make a one page list to handle the write in one chunk crawler run
+        # (larger write request should user binary streaming)
+        kwargs = {"page_number": 0, "page": slices}
+        kwargs["dset_json"] = dset_json
+        kwargs["bucket"] = bucket
+        kwargs["select_dtype"] = input_arr.dtype
+        kwargs["data"] = input_arr
+        # do write
+        await doHyperslabWrite(app, request, **kwargs)
 
     # dataset creation successful
     resp = await jsonResponse(request, dset_json, status=201)

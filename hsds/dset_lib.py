@@ -11,25 +11,28 @@
 ##############################################################################
 
 import asyncio
+from asyncio import IncompleteReadError
+
 import math
 import numpy as np
 
 from aiohttp.client_exceptions import ClientError
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict
+from aiohttp.web_exceptions import HTTPInternalServerError, HTTPRequestEntityTooLarge
 
-from h5json.hdf5dtype import createDataType, getItemSize
-from h5json.array_util import getNumpyValue
+from h5json.hdf5dtype import createDataType, getItemSize, getDtypeItemSize
+from h5json.array_util import getNumpyValue, bytesToArray
 from h5json.objid import isSchema2Id, getS3Key, getObjId
 
 from .util.nodeUtil import getDataNodeUrl
 from .util.boolparser import BooleanParser
 from .util.dsetUtil import isNullSpace, getDatasetLayout, getDatasetLayoutClass, get_slices
-from .util.dsetUtil import getChunkLayout, getSelectionShape, getShapeDims
+from .util.dsetUtil import getShapeDims, getSelectionShape, getChunkLayout
 from .util.chunkUtil import getChunkCoordinate, getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getQueryDtype, get_chunktable_dims
-from .util.httpUtil import http_delete, http_put
+from .util.httpUtil import http_delete, http_put, request_read
 from .util.rangegetUtil import getHyperChunkFactors
 from .util.storUtil import getStorKeys
 
@@ -1056,3 +1059,185 @@ async def deleteAllChunks(app, dset_id, bucket=None):
         await removeChunks(app, chunk_ids, bucket=bucket)
     else:
         log.info(f"deleteAllChunks for {dset_id} - no chunks need deletion")
+
+
+async def doPointWrite(app,
+                       request,
+                       points=None,
+                       data=None,
+                       dset_json=None,
+                       bucket=None
+                       ):
+    """ write the given points to the dataset """
+
+    num_points = len(points)
+    log.debug(f"doPointWrite - num_points: {num_points}")
+    dset_id = dset_json["id"]
+    layout = getChunkLayout(dset_json)
+    datashape = dset_json["shape"]
+    dims = getShapeDims(datashape)
+    rank = len(dims)
+
+    chunk_dict = {}  # chunk ids to list of points in chunk
+
+    for pt_indx in range(num_points):
+        if rank == 1:
+            point = int(points[pt_indx])
+        else:
+            point_tuple = points[pt_indx]
+            point = []
+            for i in range(len(point_tuple)):
+                point.append(int(point_tuple[i]))
+        if rank == 1:
+            if point < 0 or point >= dims[0]:
+                msg = f"PUT Value point: {point} is not within the "
+                msg += "bounds of the dataset"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+        else:
+            if len(point) != rank:
+                msg = "PUT Value point value did not match dataset rank"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            for i in range(rank):
+                if point[i] < 0 or point[i] >= dims[i]:
+                    msg = f"PUT Value point: {point} is not within the "
+                    msg += "bounds of the dataset"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+        chunk_id = getChunkId(dset_id, point, layout)
+        # get the pt_indx element from the input data
+        value = data[pt_indx]
+        if chunk_id not in chunk_dict:
+            point_list = [point, ]
+            point_data = [value, ]
+            chunk_dict[chunk_id] = {"indices": point_list, "points": point_data}
+        else:
+            item = chunk_dict[chunk_id]
+            point_list = item["indices"]
+            point_list.append(point)
+            point_data = item["points"]
+            point_data.append(value)
+
+    num_chunks = len(chunk_dict)
+    log.debug(f"num_chunks: {num_chunks}")
+    max_chunks = int(config.get("max_chunks_per_request", default=1000))
+    if num_chunks > max_chunks:
+        msg = f"PUT value request with more than {max_chunks} chunks"
+        log.warn(msg)
+
+    chunk_ids = list(chunk_dict.keys())
+    chunk_ids.sort()
+
+    crawler = ChunkCrawler(
+        app,
+        chunk_ids,
+        dset_json=dset_json,
+        bucket=bucket,
+        points=chunk_dict,
+        action="write_point_sel",
+    )
+    await crawler.crawl()
+
+    crawler_status = crawler.get_status()
+
+    if crawler_status not in (200, 201):
+        msg = f"doPointWritte raising HTTPInternalServerError for status: {crawler_status}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+    else:
+        log.info("doPointWrite success")
+
+
+async def doHyperslabWrite(app,
+                           request,
+                           page_number=0,
+                           page=None,
+                           data=None,
+                           dset_json=None,
+                           select_dtype=None,
+                           bucket=None
+                           ):
+    """ write the given page selection to the dataset """
+    dset_id = dset_json["id"]
+    log.info(f"doHyperslabWrite on {dset_id} - page: {page_number} dset_json: {dset_json}")
+    type_json = dset_json["type"]
+
+    if select_dtype is not None:
+        item_size = getDtypeItemSize(select_dtype)
+    else:
+        item_size = getItemSize(type_json)
+    if item_size == "H5T_VARIABLE" and data is None:
+        msg = "unexpected call to doHyperslabWrite for variable length data"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    layout = getChunkLayout(dset_json)
+
+    num_chunks = getNumChunks(page, layout)
+    log.debug(f"num_chunks: {num_chunks}")
+    max_chunks = int(config.get("max_chunks_per_request", default=1000))
+    if num_chunks > max_chunks:
+        msg = f"PUT value chunk count: {num_chunks} exceeds max_chunks: {max_chunks}"
+        log.warn(msg)
+    select_shape = getSelectionShape(page)
+    log.debug(f"got select_shape: {select_shape} for page: {page_number}")
+
+    if data is None:
+        num_bytes = math.prod(select_shape) * item_size
+        log.debug(f"reading {num_bytes} from request stream")
+        # read page of data from input stream
+        try:
+            page_bytes = await request_read(request, count=num_bytes)
+        except HTTPRequestEntityTooLarge as tle:
+            msg = "Got HTTPRequestEntityTooLarge exception during "
+            msg += f"binary read: {tle}) for page: {page_number}"
+            log.warn(msg)
+            raise  # re-throw
+        except IncompleteReadError as ire:
+            msg = "Got asyncio.IncompleteReadError during binary "
+            msg += f"read: {ire} for page: {page_number}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"read {len(page_bytes)} for page: {page_number}")
+        try:
+            arr = bytesToArray(page_bytes, select_dtype, select_shape)
+        except ValueError as ve:
+            msg = f"bytesToArray value error for page: {page_number}: {ve}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        arr = data  # use array provided to function
+
+    try:
+        chunk_ids = getChunkIds(dset_id, page, layout)
+    except ValueError:
+        log.warn("getChunkIds failed")
+        raise HTTPInternalServerError()
+    if len(chunk_ids) < 10:
+        log.debug(f"chunk_ids: {chunk_ids}")
+    else:
+        log.debug(f"chunk_ids: {chunk_ids[:10]} ...")
+    if len(chunk_ids) > max_chunks:
+        msg = f"got {len(chunk_ids)} for page: {page_number}.  max_chunks: {max_chunks}"
+        log.warn(msg)
+
+    crawler = ChunkCrawler(
+        app,
+        chunk_ids,
+        dset_json=dset_json,
+        bucket=bucket,
+        slices=page,
+        arr=arr,
+        action="write_chunk_hyperslab",
+    )
+    await crawler.crawl()
+
+    crawler_status = crawler.get_status()
+
+    if crawler_status not in (200, 201):
+        msg = f"crawler failed for page: {page_number} with status: {crawler_status}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+    else:
+        log.info("crawler write_chunk_hyperslab successful")
