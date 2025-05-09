@@ -1288,7 +1288,7 @@ class ValueTest(unittest.TestCase):
             "charSet": "H5T_CSET_ASCII",
             "class": "H5T_STRING",
             "strPad": "H5T_STR_NULLPAD",
-            "length": 1,
+            "length": 5,
         }
 
         fields = (
@@ -1300,8 +1300,8 @@ class ValueTest(unittest.TestCase):
         #
         # create compound scalar dataset
         #
-        value = (42, 'F')
-        payload = {"type": datatype}  # , "value": value}
+        value = (42, 'C')
+        payload = {"type": datatype, "value": value}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -1318,12 +1318,6 @@ class ValueTest(unittest.TestCase):
         shape = rspJson["shape"]
         self.assertEqual(shape["class"], "H5S_SCALAR")
 
-        # write entire array
-        payload = {"value": value}
-        req = self.endpoint + "/datasets/" + dset0d_uuid + "/value"
-        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 200)  # write value
-
         # read back the value
         req = self.endpoint + "/datasets/" + dset0d_uuid + "/value"
         rsp = self.session.get(req, headers=headers)
@@ -1331,12 +1325,19 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], [42, 'C'])
 
         #
         # create 1d dataset
         #
+
+        # make up some data
         num_elements = 10
-        payload = {"type": datatype, "shape": num_elements}
+        value = []
+        for i in range(num_elements):
+            item = (i * 10, chr(ord('A') + i))
+            value.append(item)
+        payload = {"type": datatype, "shape": num_elements, "value": value}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -1345,23 +1346,15 @@ class ValueTest(unittest.TestCase):
         dset1d_uuid = rspJson["id"]
         self.assertTrue(helper.validateId(dset1d_uuid))
 
-        # link new dataset as 'dset1'
-        name = "dset1d" + helper.getRandomName()
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
-        payload = {"id": dset1d_uuid}
-        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-
-        # write entire array
-        value = []
-        for i in range(num_elements):
-            item = (i * 10, 'F')
-            value.append(item)
-        payload = {"value": value}
-
+        # read back the value
         req = self.endpoint + "/datasets/" + dset1d_uuid + "/value"
-        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 200)  # write value
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(len(rspJson["value"]), num_elements)
+        self.assertEqual(rspJson["value"][2], [20, 'C'])
 
     def testSimpleTypeFillValue(self):
         # test Dataset with simple type and fill value

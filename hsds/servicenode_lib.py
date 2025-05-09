@@ -1070,7 +1070,9 @@ def getValueFromRequest(body, data_type, data_shape):
         else:
             np_dims = dims
 
-        if body.get("encoding"):
+        if "encoding" in body:
+            encoding = body["encoding"]
+            log.debug(f"using encoding: {encoding}")
             item_size = getItemSize(data_type)
             if item_size == "H5T_VARIABLE":
                 msg = "base64 encoding is not support for variable length attributes"

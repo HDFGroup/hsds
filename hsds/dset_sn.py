@@ -856,6 +856,7 @@ async def POST_Dataset(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         arr_dtype = createDataType(datatype)
+
         try:
             input_arr = jsonToArray(dims, arr_dtype, input_data)
         except ValueError:
@@ -1193,7 +1194,7 @@ async def POST_Dataset(request):
         dset_json = await createObject(app, **kwargs)
 
     # write data if provided
-    if input_arr:
+    if input_arr is not None:
         log.debug(f"write input_arr: {input_arr}")
         # mixin the layout
         dset_json["layout"] = layout
