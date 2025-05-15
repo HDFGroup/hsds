@@ -66,8 +66,8 @@ class PostCrawler:
             item = self._rsp_objs[i]
             if not item:
                 continue  # resp not filled in yet
-            if "status" in item:
-                item_status = item["status"]
+            if "status_code" in item:
+                item_status = item["status_code"]
                 if status is None or item_status > status:
                     # return the more severe error
                     log.debug(f"setting status to {item_status}")

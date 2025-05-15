@@ -29,6 +29,7 @@ from .servicenode_lib import getObjectIdByPath, getPathForObjectId
 from .servicenode_lib import createObject, createObjectByPath, deleteObject
 from . import hsds_logger as log
 from .post_crawl import createObjects
+from .domain_crawl import DomainCrawler
 from . import config
 
 
@@ -171,7 +172,7 @@ async def _create_group(app, **kwargs):
     return group_json
 
 
-def _get_create_args(body, root_id=None, bucket=None, implicit=False):
+def _get_create_args(body, root_id=None, bucket=None, implicit=False, ignore_link=False):
     """ get query args for _create_group from request body """
     kwargs = {"bucket": bucket}
     predate_max_time = config.get("predate_max_time", default=10.0)
@@ -187,7 +188,7 @@ def _get_create_args(body, root_id=None, bucket=None, implicit=False):
             raise HTTPBadRequest(reason=msg)
         link_body = body["link"]
         log.debug(f"link_body: {link_body}")
-        if "id" in link_body:
+        if "id" in link_body and not ignore_link:
             parent_id = link_body["id"]
         if "name" in link_body:
             link_title = link_body["name"]
@@ -201,7 +202,8 @@ def _get_create_args(body, root_id=None, bucket=None, implicit=False):
 
         if parent_id and link_title:
             log.debug(f"parent id: {parent_id}, link_title: {link_title}")
-            h5path = link_title  # just use the link name as the h5path
+            if not ignore_link:
+                h5path = link_title  # just use the link name as the h5path
 
     if "parent_id" not in body:
         parent_id = root_id
@@ -329,6 +331,7 @@ async def POST_Group(request):
                             log.warn(msg)
                             raise HTTPBadRequest(reason=msg)
                         kwargs = _get_create_args(item, root_id=root_id, bucket=bucket)
+                        kwargs["ignore_link"] = True
                         kwarg_list.append(kwargs)
                         kwargs = {"bucket": bucket, "root_id": root_id}
                     post_group_rsp = await createObjects(app, kwarg_list, **kwargs)
@@ -346,6 +349,45 @@ async def POST_Group(request):
         post_group_rsp = await _create_group(app, **kwargs)
 
     log.debug(f"returning resp: {post_group_rsp}")
+
+    if "objects" in post_group_rsp:
+        # add any links in multi request
+        objects = post_group_rsp["objects"]
+        obj_count = len(objects)
+        log.debug(f"PostGroup multi create: {obj_count} objects")
+        if len(body) != obj_count:
+            msg = f"Expected {obj_count} objects but got {len(body)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        parent_ids = {}
+        for index in range(obj_count):
+            item = body[index]
+            if "link" in item:
+                link_item = item["link"]
+                parent_id = link_item.get("id")
+                title = link_item.get("name")
+                if parent_id and title:
+                    # add a hard link
+                    object = objects[index]
+                    obj_id = object["id"]
+                    if parent_id not in parent_ids:
+                        parent_ids[parent_id] = {}
+                    links = parent_ids[parent_id]
+                    links[title] = {"id": obj_id}
+        if parent_ids:
+            log.debug(f"POSTGroup multi - adding links: {parent_ids}")
+            kwargs = {"action": "put_link", "bucket": bucket}
+            kwargs["replace"] = True
+
+            crawler = DomainCrawler(app, parent_ids, **kwargs)
+
+            # will raise exception on not found, server busy, etc.
+            await crawler.crawl()
+
+            status = crawler.get_status()
+
+            log.info(f"DomainCrawler done for put_links action, status: {status}")
+
     # group creation successful
     resp = await jsonResponse(request, post_group_rsp, status=201)
     log.response(request, resp=resp)

@@ -457,7 +457,7 @@ async def PUT_Links(request):
     count = len(grp_ids)
     if count == 0:
         msg = "no grp_ids defined"
-        log.warn(f"PUT_Attributes: {msg}")
+        log.warn(f"PUT_Links: {msg}")
         raise HTTPBadRequest(reason=msg)
     elif count == 1:
         # just send one PUT Attributes request to the dn

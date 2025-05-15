@@ -136,17 +136,17 @@ def h5Join(path, paths):
 
 
 def getRequestLink(title, link_json, predate_max_time=0.0):
-    """ return normalized link from request json 
+    """ return normalized link from request json
         Throw value error if badly formatted """
-    
+
     if not isinstance(link_json, dict):
-            msg = f"expected dict for for links, but got: {type(link_json)}"
-            log.warn(msg)
-            raise ValueError(msg)
-       
-    log.debug(f"getRequestLink title: {title} link_json: {link_json}")   
+        msg = f"expected dict for for links, but got: {type(link_json)}"
+        log.warn(msg)
+        raise ValueError(msg)
+
+    log.debug(f"getRequestLink title: {title} link_json: {link_json}")
     link_item = {}  # normalized link item to return
-    
+
     now = time.time()
 
     validateLinkName(title)  # will raise ValueError is invalid
@@ -157,7 +157,7 @@ def getRequestLink(title, link_json, predate_max_time=0.0):
             msg = f"expected link class of: {link_class} but got {link_json}"
             log.warn(msg)
             raise ValueError(msg)
-        
+
     link_item = {"class": link_class}
 
     if link_class == "H5L_TYPE_HARD":
@@ -173,13 +173,13 @@ def getRequestLink(title, link_json, predate_max_time=0.0):
                 log.warn(msg)
                 raise ValueError(msg)
             link_item["h5path"] = link_json["h5path"]
-        
+
         if link_class == "H5L_TYPE_EXTERNAL":
             if "h5domain" not in link_json:
                 msg = "expected h5domain key for external link"
                 log.warn(msg)
                 raise ValueError(msg)
-                         
+
     if "created" in link_json:
         created = link_json["created"]
         # allow "pre-dated" attributes if recent enough
@@ -192,16 +192,16 @@ def getRequestLink(title, link_json, predate_max_time=0.0):
 
     return link_item
 
-    
+
 def getRequestLinks(links_json, predate_max_time=0.0):
-    """ return list of normalized links from request json 
+    """ return list of normalized links from request json
         Throw value error if any is badly formatted """
-    
+
     if not isinstance(links_json, dict):
-            msg = f"POST_Groups expected dict for for links, but got: {type(links_json)}"
-            log.warn(msg)
-            raise ValueError(msg)
-       
+        msg = f"POST_Groups expected dict for for links, but got: {type(links_json)}"
+        log.warn(msg)
+        raise ValueError(msg)
+
     links = {}  # normalized link items to return
     kwargs = {"predate_max_time": predate_max_time}
 
@@ -209,4 +209,3 @@ def getRequestLinks(links_json, predate_max_time=0.0):
         links[title] = getRequestLink(title, links_json[title], **kwargs)
 
     return links
-

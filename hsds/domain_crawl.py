@@ -248,7 +248,7 @@ class DomainCrawler:
     async def get_obj_json(self, obj_id):
         """ get the given obj_json for the obj_id.
             for each group found, search the links if follow_links is set """
-        log.debug(f"get_obj_json: {obj_id}")
+        log.debug(f"DomainCrawler get_obj_json: {obj_id}")
         collection = getCollectionForId(obj_id)
         kwargs = {"bucket": self._bucket, "include_attrs": self._include_attrs}
 
@@ -408,7 +408,7 @@ class DomainCrawler:
 
     async def put_links(self, grp_id, link_items):
         # write the given links for the obj_id
-        log.debug(f"put_links for {grp_id}, {len(link_items)} links")
+        log.debug(f"DomainCrawler put_links for {grp_id}, {len(link_items)} links")
         req = getDataNodeUrl(self._app, grp_id)
         req += f"/groups/{grp_id}/links"
         kwargs = {"bucket": self._bucket}

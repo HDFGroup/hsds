@@ -535,7 +535,6 @@ async def putLinks(app, group_id, items, bucket=None):
     or 200 if it's a duplicate of an existing link. """
 
     isValidUuid(group_id, obj_class="groups")
-    group_json = None
 
     # validate input
     for title in items:
@@ -548,25 +547,23 @@ async def putLinks(app, group_id, items, bucket=None):
             raise HTTPBadRequest(reason="invalid link")
 
         if link_class == "H5L_TYPE_HARD":
+            if "id" not in item:
+                msg = "expected id key for hard link class"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
             tgt_id = item["id"]
-            isValidUuid(tgt_id)
-            # for hard links, verify that the referenced id exists and is in
-            # this domain
-            ref_json = await getObjectJson(app, tgt_id, bucket=bucket)
-            if not group_json:
-                # just need to fetch this once
-                group_json = await getObjectJson(app, group_id, bucket=bucket)
-            if ref_json["root"] != group_json["root"]:
-                msg = "Hard link must reference an object in the same domain"
+            try:
+                isValidUuid(tgt_id)
+            except ValueError:
+                msg = f"invalid object id: {tgt_id}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
 
     # ready to add links now
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links"
-    log.debug(f"PUT links - PUT request: {req}")
+    log.debug(f"PUT links {len(items)} items - PUT request: {req}")
     params = {"bucket": bucket}
-
     data = {"links": items}
 
     put_rsp = await http_put(app, req, data=data, params=params)
