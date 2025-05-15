@@ -88,7 +88,7 @@ class FileClient:
         return key_stats
 
     def _file_stats_increment(self, counter, inc=1):
-        """Incremenet the indicated connter"""
+        """Increment the indicated counter"""
         if "file_stats" not in self._app:
             # setup stats
             file_stats = {}
@@ -175,6 +175,26 @@ class FileClient:
             raise HTTPInternalServerError()
         return data
 
+    def _mkdir(self, dirpath):
+        """ create the given directory if it doesn't already exist """
+        try:
+            dirpath = pp.normpath(dirpath)
+            log.debug(f"normpath: {dirpath}")
+
+            if not pp.isdir(dirpath):
+                log.debug(f"mkdir({dirpath})")
+                mkdir(dirpath)
+            else:
+                log.debug(f"isdir {dirpath} found")
+        except IOError as ioe:
+            if ioe.errno == 17:
+                # likely directory was created by another process since we checked
+                log.warn(f"mkdir failed, {dirpath} created outside this process")
+            else:
+                msg = f"fileClient: IOError on mkdir {dirpath}: {ioe}"
+                log.warn(msg)
+                raise HTTPInternalServerError()
+
     async def put_object(self, key, data, bucket=None):
         """Write data to given key.
         Returns client specific dict on success
@@ -202,15 +222,7 @@ class FileClient:
                 for key_dir in key_dirs:
                     dirpath = pp.join(dirpath, key_dir)
                     log.debug(f"pp.join({key_dir}) => {dirpath}")
-
-                    dirpath = pp.normpath(dirpath)
-                    log.debug(f"normpath: {dirpath}")
-
-                    if not pp.isdir(dirpath):
-                        log.debug(f"mkdir({dirpath})")
-                        mkdir(dirpath)
-                    else:
-                        log.debug(f"isdir {dirpath} found")
+                    self._mkdir(dirpath)
             log.debug(f"open({filepath}, 'wb')")
             async with aiofiles.open(filepath, loop=loop, mode="wb") as f:
                 await f.write(data)
