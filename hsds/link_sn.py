@@ -142,11 +142,15 @@ async def GET_Links(request):
 
         # mix in collection key, target and hrefs
         for link in links:
-            if "class" not in link:
-                log.error("expected to find class key in link")
-                raise HTTPInternalServerError()
+            for key in ("class", "title"):
+                if key not in link:
+                    log.error(f"expected to find {key} key in link")
+                    raise HTTPInternalServerError()
 
             if link["class"] == "H5L_TYPE_HARD":
+                if "id" not in link:
+                    log.error("expected to id key in hard link")
+                    raise HTTPInternalServerError()
                 collection_name = getCollectionForId(link["id"])
                 link["collection"] = collection_name
                 target_uri = "/" + collection_name + "/" + link["id"]

@@ -466,7 +466,7 @@ class DomainCrawler:
                     pass  # ok
                 elif status == 400:
                     log.warn("DomainCrawler - BadRequest")
-                    raise HTTPBadRequest(reason="unkown")
+                    raise HTTPBadRequest(reason="unknown")
                 elif status == 404:
                     log.warn("DomainCrawler - not found")
                     raise HTTPNotFound()

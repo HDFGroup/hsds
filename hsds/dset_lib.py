@@ -1142,7 +1142,7 @@ async def doPointWrite(app,
     crawler_status = crawler.get_status()
 
     if crawler_status not in (200, 201):
-        msg = f"doPointWritte raising HTTPInternalServerError for status: {crawler_status}"
+        msg = f"doPointWrite raising HTTPInternalServerError for status: {crawler_status}"
         log.error(msg)
         raise HTTPInternalServerError()
     else:

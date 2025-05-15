@@ -41,7 +41,6 @@ from .util.storUtil import getCompressors
 from .util.dsetUtil import getShapeDims
 
 from .basenode import getVersion
-
 from . import hsds_logger as log
 from . import config
 
