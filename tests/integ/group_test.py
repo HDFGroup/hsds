@@ -223,6 +223,22 @@ class GroupTest(unittest.TestCase):
         self.assertTrue("alias" in rspJson)
         self.assertEqual(rspJson["alias"], [])
 
+        # try with an empty body
+        payload = {}
+        req = endpoint + "/groups"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        group_id = rspJson["id"]
+        self.assertTrue(helper.validateId(group_id))
+
+        # try with a type in body (as if we were trying to create a committed type)
+        payload["type"] = "H5T_IEEE_F32LE"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
         # try POST with user who doesn't have create permission on this domain
         test_user2 = config.get("user2_name")  # some tests will be skipped if not set
         if not test_user2:
@@ -655,6 +671,8 @@ class GroupTest(unittest.TestCase):
 
         # try again with implicit creation set
         params = {"implicit": 1}
+        g21_id = createObjId("groups", root_id=root_uuid)
+        payload = {"id": g21_id, "h5path": "g2/g2.1"}
         rsp = self.session.post(req, data=json.dumps(payload), params=params, headers=headers)
         self.assertEqual(rsp.status_code, 201)  # g2 and g2.1 created
         rspJson = json.loads(rsp.text)

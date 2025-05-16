@@ -32,10 +32,9 @@ from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.storUtil import getSupportedFilters
-from .util.linkUtil import validateLinkName
 from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
 from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo
-from .servicenode_lib import createObject, createObjectByPath, deleteObject
+from .servicenode_lib import getCreateArgs, createDataset, deleteObject
 from .dset_lib import updateShape, deleteAllChunks, doHyperslabWrite
 from . import config
 from . import hsds_logger as log
@@ -1131,67 +1130,17 @@ async def POST_Dataset(request):
 
         log.debug(f"set dataset json creationProperties: {creationProperties}")
 
-    parent_id = None
-    obj_id = None
-    link_title = None
-    h5path = None
-    if "id" in body:
-        obj_id = body["id"]
-        log.debug(f"POST dataset using client id: {obj_id}")
+    # setup args to createDataset
+    implicit = getBooleanParam(params, "implicit")
+    kwargs = getCreateArgs(body, root_id=root_id, type=datatype, bucket=bucket, implicit=implicit)
+    # fill in dataset-specific keys
+    kwargs["creation_props"] = creationProperties
+    kwargs["shape"] = shape_json
+    kwargs["layout"] = layout
 
-    if "link" in body:
-        if "h5path" in body:
-            msg = "link can't be used with h5path"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        link_body = body["link"]
-        if "id" in link_body:
-            parent_id = link_body["id"]
+    log.debug(f"kwargs for dataset create: {kwargs}")
 
-        if "name" in link_body:
-            link_title = link_body["name"]
-            try:
-                # will throw exception if there's a slash in the name
-                validateLinkName(link_title)
-            except ValueError:
-                msg = f"invalid link title: {link_title}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-        if parent_id and link_title:
-            log.debug(f"parent id: {parent_id}, link_title: {link_title}")
-            h5path = link_title  # just use the link name as the h5path
-
-    if "h5path" in body:
-        h5path = body["h5path"]
-        if "parent_id" not in body:
-            parent_id = root_id
-        else:
-            parent_id = body["parent_id"]
-
-    # setup args to createObject
-    kwargs = {"bucket": bucket, "obj_type": datatype, "obj_shape": shape_json}
-    if obj_id:
-        kwargs["obj_id"] = obj_id
-    if creationProperties:
-        kwargs["creation_props"] = creationProperties
-    if attrs:
-        kwargs["attrs"] = attrs
-    if layout:
-        kwargs["layout"] = layout
-
-    if parent_id:
-        kwargs["parent_id"] = parent_id
-        kwargs["h5path"] = h5path
-        # allow parent group creation or not
-        implicit = getBooleanParam(params, "implicit")
-        if implicit:
-            kwargs["implicit"] = True
-        dset_json = await createObjectByPath(app, **kwargs)
-    else:
-        # create an anonymous datatype
-        kwargs["root_id"] = root_id
-        dset_json = await createObject(app, **kwargs)
+    dset_json = await createDataset(app, **kwargs)
 
     # write data if provided
     if input_arr is not None:

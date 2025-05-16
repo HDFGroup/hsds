@@ -609,6 +609,80 @@ class DatatypeTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["id"], new_datatype_id)
 
+    def testPostMulti(self):
+        # test POST with multi-object creation
+        print("testPostMulti", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        # get root id
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # get root group and verify link count is 0
+        req = helper.getEndpoint() + "/groups/" + root_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+
+        str_type = {
+            "charSet": "H5T_CSET_ASCII",
+            "class": "H5T_STRING",
+            "length": 12,
+            "strPad": "H5T_STR_NULLPAD",
+        }
+
+        float_type = "H5T_IEEE_F32LE"
+
+        # create a set of anonymous ctypes
+        fields = (
+            {"name": "temp", "type": "H5T_STD_I32LE"},
+            {"name": "pressure", "type": "H5T_IEEE_F32LE"},
+        )
+        compound_type = {"class": "H5T_COMPOUND", "fields": fields}
+
+        payload = [{"type": str_type}, {"type": float_type}, {"type": compound_type}]
+        req = helper.getEndpoint() + "/datatypes"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("objects" in rspJson)
+        rsp_objs = rspJson["objects"]
+        self.assertEqual(len(rsp_objs), 3)
+
+        for i in range(3):
+            obj_json = rsp_objs[i]
+            self.assertEqual(obj_json["attributeCount"], 0)
+            ctype_id = obj_json["id"]
+            self.assertTrue(helper.validateId(ctype_id))
+
+        # create a set of linked ctypes
+        for i in range(3):
+            item = payload[i]
+            item["link"] = {"id": root_uuid, "name": f"ctype_{i + 1}"}
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("objects" in rspJson)
+        rsp_objs = rspJson["objects"]
+        self.assertEqual(len(rsp_objs), 3)
+        for i in range(3):
+            json_rsp = rsp_objs[i]
+            self.assertEqual(json_rsp["attributeCount"], 0)
+            ctype_id = json_rsp["id"]
+            self.assertTrue(helper.validateId(ctype_id))
+
+        # get root group and verify link count is 3
+        req = helper.getEndpoint() + "/groups/" + root_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 3)
+
 
 if __name__ == "__main__":
     # setup test files

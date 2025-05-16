@@ -32,7 +32,7 @@ from h5json.hdf5dtype import getItemSize
 
 from .util.nodeUtil import getDataNodeUrl
 from .util.authUtil import getAclKeys
-from .util.linkUtil import h5Join, validateLinkName, getLinkClass
+from .util.linkUtil import h5Join, validateLinkName, getLinkClass, getRequestLinks
 from .util.storUtil import getStorJSONObj, isStorObj
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
@@ -1287,34 +1287,254 @@ async def deleteObject(app, obj_id, bucket=None):
         del meta_cache[obj_id]  # remove from cache
 
 
+def getCreateArgs(body,
+                  root_id=None,
+                  bucket=None,
+                  type=None,
+                  shape=None,
+                  implicit=False,
+                  ignore_link=False):
+    """ get args for createObject from request body """
+
+    kwargs = {"bucket": bucket}
+    predate_max_time = config.get("predate_max_time", default=10.0)
+
+    parent_id = None
+    obj_id = None
+    h5path = None
+
+    if "link" in body:
+        if "h5path" in body:
+            msg = "link can't be used with h5path"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        # if ingore_link is set, parent_links will be created post object creation
+        link_body = body["link"]
+        log.debug(f"link_body: {link_body}")
+        if "id" in link_body and not ignore_link:
+            parent_id = link_body["id"]
+        if "name" in link_body:
+            link_title = link_body["name"]
+            try:
+                # will throw exception if there's a slash in the name
+                validateLinkName(link_title)
+            except ValueError:
+                msg = f"invalid link title: {link_title}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+        if parent_id and link_title:
+            log.debug(f"parent id: {parent_id}, link_title: {link_title}")
+            if not ignore_link:
+                h5path = link_title  # just use the link name as the h5path
+
+    if "parent_id" not in body:
+        parent_id = root_id
+    else:
+        parent_id = body["parent_id"]
+
+    if "h5path" in body:
+        h5path = body["h5path"]
+        # normalize the h5path
+        if h5path.startswith("/"):
+            if parent_id == root_id:
+                # just adjust the path to be relative
+                h5path = h5path[1:]
+            else:
+                msg = f"PostCrawler expecting relative h5path, but got: {h5path}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+        if h5path.endswith("/"):
+            h5path = h5path[:-1]  # makes iterating through the links a bit easier
+
+    if parent_id and h5path:
+        # these are used by createObjectByPath
+        kwargs["parent_id"] = parent_id
+        kwargs["implicit"] = implicit
+        kwargs["h5path"] = h5path
+    else:
+        kwargs["root_id"] = root_id
+
+    if "id" in body:
+        obj_id = body["id"]
+        # tbd: validate this is a group id
+        kwargs["obj_id"] = obj_id
+        log.debug(f"createObject will use client id: {obj_id}")
+
+    if "creationProperties" in body:
+        creation_props = body["creationProperties"]
+        # tbd: validate creation_props
+        kwargs["creation_props"] = creation_props
+
+    if "attributes" in body:
+        attrs = body["attributes"]
+        if not isinstance(attrs, dict):
+            msg = f"expected dict for for attributes, but got: {type(attrs)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"createObject attributes: {attrs}")
+
+        # tbd: validate attributes
+        kwargs["attrs"] = attrs
+
+    if "links" in body:
+        body_links = body["links"]
+        log.debug(f"got links for new group: {body_links}")
+        try:
+            links = getRequestLinks(body["links"], predate_max_time=predate_max_time)
+        except ValueError:
+            msg = "invalid link item sent in request"
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"adding links to createObject request: {links}")
+        kwargs["links"] = links
+
+    if type:
+        kwargs["type"] = type
+    elif "type" in body:
+        datatype = body["type"]
+        if isinstance(datatype, str):
+            try:
+                # convert predefined type string (e.g. "H5T_STD_I32LE") to
+                # corresponding json representation
+                datatype = getBaseTypeJson(datatype)
+                log.debug(f"got datatype: {datatype}")
+            except TypeError:
+                msg = f"POST with invalid predefined type: {datatype}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+        try:
+            validateTypeItem(datatype)
+        except KeyError as ke:
+            msg = f"KeyError creating type: {ke}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        except TypeError as te:
+            msg = f"TypeError creating type: {te}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        except ValueError as ve:
+            msg = f"ValueError creating type: {ve}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        kwargs["type"] = datatype
+    else:
+        pass  # no type
+
+    return kwargs
+
+
+async def createLinkFromParent(app, parent_id, h5path, tgt_id=None, bucket=None, implicit=False):
+    """ create link or links from parentId to tgt_id.
+        If implicit is True, create any intermediate group objects needed """
+
+    if not h5path:
+        log.warn("createLinkFromParent with null h5path")
+        return
+    log.info(f"createLinkFromParent, parent_id: {parent_id} h5path: {h5path} tgt_id={tgt_id}")
+    if implicit:
+        log.debug("createLinkFromParent - using implicit creation")
+    link_titles = h5path.split("/")
+    log.debug(f"link_titles: {link_titles}")
+    for i in range(len(link_titles)):
+        if i == len(link_titles) - 1:
+            last_link = True
+        else:
+            last_link = False
+        link_title = link_titles[i]
+        log.debug(f"createLinkFromParent - processing link: {link_title}")
+        link_json = None
+        try:
+            link_json = await getLink(app, parent_id, link_title, bucket=bucket)
+        except (HTTPNotFound, HTTPGone):
+            pass  # link doesn't exist
+
+        if link_json:
+            log.debug(f"link for link_title {link_title} found: {link_json}")
+            # if this is the last link, that's a problem
+            if last_link:
+                msg = f"object at {h5path} already exists"
+                log.warn(msg)
+                raise HTTPConflict()
+            # otherwise, verify that this is a hardlink
+            if link_json.get("class") != "H5L_TYPE_HARD":
+                msg = "createLinkFromParent - h5path must contain only hard links"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            parent_id = link_json["id"]
+            if getCollectionForId(parent_id) != "groups":
+                # parent objects must be groups!
+                msg = f"{link_title} is not a group"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            else:
+                log.debug(f"link: {link_title} to sub-group found")
+        else:
+            log.debug(f"link for link_title {link_title} not found")
+            if last_link:
+                # create a link to the new object
+                await putHardLink(app, parent_id, link_title, tgt_id=tgt_id, bucket=bucket)
+                parent_id = tgt_id  # new parent
+            elif implicit:
+                # create a new group object
+                log.info(f"creating intermediate group object for: {link_title}")
+                kwargs = {"parent_id": parent_id, "bucket": bucket}
+                grp_id = createObjId("groups", root_id=getRootObjId(parent_id))
+                kwargs["obj_id"] = grp_id
+                # createObject won't call back to this function since we haven't set the h5path
+                await createObject(app, **kwargs)
+                # create a link to the subgroup
+                await putHardLink(app, parent_id, link_title, tgt_id=grp_id, bucket=bucket)
+                parent_id = grp_id  # new parent
+            else:
+                if len(link_titles) > 1:
+                    msg = f"createLinkFromParent failed: not all groups in {h5path} exist"
+                else:
+                    msg = f"createLinkFromParent failed: {h5path} does not exist"
+                log.warn(msg)
+                raise HTTPNotFound(reason=msg)
+
+
 async def createObject(app,
+                       parent_id=None,
                        root_id=None,
+                       h5path=None,
                        obj_id=None,
-                       obj_type=None,
-                       obj_shape=None,
+                       type=None,
+                       shape=None,
                        layout=None,
                        creation_props=None,
                        attrs=None,
                        links=None,
+                       implicit=None,
                        bucket=None):
     """ create a group, ctype, or dataset object and return object json
         Determination on whether a group, ctype, or dataset is created is based on:
-            1) if obj_type and obj_shape are set, a dataset object will be created
-            2) if obj_type is set but not obj_shape, a  datatype object will be created
+            1) if type and shape are set, a dataset object will be created
+            2) if type is set but not shape, a  datatype object will be created
             3) otherwise (type and shape are both None), a group object will be created
         The layout parameter only applies to dataset creation
     """
-    if obj_type and obj_shape:
+    if type and shape:
         collection = "datasets"
-    elif obj_type:
+    elif type:
         collection = "datatypes"
     else:
         collection = "groups"
-    log.info(f"createObject for {collection} collection, root: {root_id}, bucket: {bucket}")
-    if obj_type:
-        log.debug(f"    obj_type: {obj_type}")
-    if obj_shape:
-        log.debug(f"    obj_shape: {obj_shape}")
+
+    if not root_id:
+        root_id = getRootObjId(parent_id)
+    log.info(f"createObject for {collection} collection, root_id: {root_id}, bucket: {bucket}")
+    if root_id != parent_id:
+        log.debug(f"    parent_id: {parent_id}")
+    if obj_id:
+        log.debug(f"    obj_id: {obj_id}")
+    if h5path:
+        log.debug(f"    h5path: {h5path}")
+    if type:
+        log.debug(f"    type: {type}")
+    if shape:
+        log.debug(f"    shape: {shape}")
     if layout:
         log.debug(f"    layout: {layout}")
     if creation_props:
@@ -1323,6 +1543,19 @@ async def createObject(app,
         log.debug(f"    attrs: {attrs}")
     if links:
         log.debug(f"    links: {links}")
+
+    if h5path:
+        if h5path.startswith("/"):
+            if parent_id == root_id:
+                # just adjust the path to be relative
+                h5path = h5path[1:]
+            else:
+                msg = f"createObject expecting relative h5path, but got: {h5path}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+        if h5path.endswith("/"):
+            h5path = h5path[:-1]  # makes iterating through the links a bit easier
 
     if obj_id:
         log.debug(f"using client supplied id: {obj_id}")
@@ -1336,12 +1569,12 @@ async def createObject(app,
             raise HTTPBadRequest(reason=msg)
     else:
         obj_id = createObjId(collection, root_id=root_id)
-    log.info(f"new obj id: {obj_id}")
+        log.info(f"new obj id: {obj_id}")
     obj_json = {"id": obj_id, "root": root_id}
-    if obj_type:
-        obj_json["type"] = obj_type
-    if obj_shape:
-        obj_json["shape"] = obj_shape
+    if type:
+        obj_json["type"] = type
+    if shape:
+        obj_json["shape"] = shape
     if layout:
         obj_json["layout"] = layout
     if creation_props:
@@ -1364,141 +1597,113 @@ async def createObject(app,
     params = {"bucket": bucket}
     rsp_json = await http_post(app, req, data=obj_json, params=params)
 
+    # object creation successful, create link from parent if requested
+    if h5path:
+        kwargs = {"tgt_id": obj_id, "bucket": bucket, "implicit": implicit}
+        await createLinkFromParent(app, parent_id, h5path, **kwargs)
+
     return rsp_json
 
 
-async def createObjectByPath(app,
-                             parent_id=None,
-                             obj_id=None,
-                             h5path=None,
-                             implicit=False,
-                             obj_type=None,
-                             obj_shape=None,
-                             layout=None,
-                             creation_props=None,
-                             attrs=None,
-                             links=None,
-                             bucket=None):
+async def createGroup(app,
+                      parent_id=None,
+                      root_id=None,
+                      h5path=None,
+                      obj_id=None,
+                      creation_props=None,
+                      attrs=None,
+                      links=None,
+                      implicit=None,
+                      bucket=None):
 
-    """ create an object at the designated path relative to the parent.
-    If implicit is True, make any intermediate groups needed in the h5path. """
+    """ create a new group object """
 
-    if not parent_id:
-        msg = "no parent_id given for createObjectByPath"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    if not h5path:
-        msg = "no h5path given for createObjectByPath"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    log.debug(f"createObjectByPath - parent_id: {parent_id}, h5path: {h5path}")
-    if obj_id:
-        log.debug(f"createObjectByPath using client id: {obj_id}")
-    if obj_type:
-        log.debug(f"    obj_type: {obj_type}")
-    if obj_shape:
-        log.debug(f"    obj_shape: {obj_shape}")
-    if layout:
-        log.debug(f"    layout: {layout}")
-    if creation_props:
-        log.debug(f"    cprops: {creation_props}")
-    if attrs:
-        log.debug(f"    attrs: {attrs}")
-    if links:
-        log.debug(f"   links: {links}")
-        if obj_type:
-            msg = "only group objects can have links"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+    kwargs = {}
+    kwargs["parent_id"] = parent_id
+    kwargs["root_id"] = root_id
+    kwargs["h5path"] = h5path
+    kwargs["obj_id"] = obj_id
+    kwargs["creation_props"] = creation_props
+    kwargs["attrs"] = attrs
+    kwargs["links"] = links
+    kwargs["implicit"] = implicit
+    kwargs["bucket"] = bucket
+    rsp_json = await createObject(app, **kwargs)
+    return rsp_json
 
-    root_id = getRootObjId(parent_id)
 
-    if h5path.startswith("/"):
-        if parent_id == root_id:
-            # just adjust the path to be relative
-            h5path = h5path[1:]
-        else:
-            msg = f"createObjectByPath expecting relative h5path, but got: {h5path}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+async def createDatatypeObj(app,
+                            parent_id=None,
+                            root_id=None,
+                            type=None,
+                            h5path=None,
+                            obj_id=None,
+                            creation_props=None,
+                            attrs=None,
+                            links=None,
+                            implicit=None,
+                            bucket=None):
 
-    if h5path.endswith("/"):
-        h5path = h5path[:-1]  # makes iterating through the links a bit easier
+    """ create a new committed type object"""
 
-    if not h5path:
-        msg = "h5path for createObjectByPath invalid"
+    if not type:
+        msg = "type not set for committed type creation"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    obj_json = None
-    link_titles = h5path.split("/")
-    log.debug(f"link_titles: {link_titles}")
-    for i in range(len(link_titles)):
-        if i == len(link_titles) - 1:
-            last_link = True
-        else:
-            last_link = False
-        link_title = link_titles[i]
-        log.debug(f"createObjectByPath - processing link: {link_title}")
-        link_json = None
-        try:
-            link_json = await getLink(app, parent_id, link_title, bucket=bucket)
-        except (HTTPNotFound, HTTPGone):
-            pass  # link doesn't exist
+    kwargs = {}
+    kwargs["parent_id"] = parent_id
+    kwargs["root_id"] = root_id
+    kwargs["type"] = type
+    kwargs["h5path"] = h5path
+    kwargs["obj_id"] = obj_id
+    kwargs["creation_props"] = creation_props
+    kwargs["attrs"] = attrs
+    kwargs["links"] = links
+    kwargs["implicit"] = implicit
+    kwargs["bucket"] = bucket
+    rsp_json = await createObject(app, **kwargs)
+    return rsp_json
 
-        if link_json:
-            log.debug(f"link for link_title {link_title} found: {link_json}")
-            # if this is the last link, that's a problem
-            if last_link:
-                msg = f"object at {h5path} already exists"
-                log.warn(msg)
-                raise HTTPConflict()
-            # otherwise, verify that this is a hardlink
-            if link_json.get("class") != "H5L_TYPE_HARD":
-                msg = "createObjectByPath - h5path must contain only hardlinks"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            parent_id = link_json["id"]
-            if getCollectionForId(parent_id) != "groups":
-                # parent objects must be groups!
-                msg = f"{link_title} is not a group"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            else:
-                log.debug(f"link: {link_title} to sub-group found")
-        else:
-            log.debug(f"link for link_title {link_title} not found")
-            if not last_link and not implicit:
-                if len(link_titles) > 1:
-                    msg = f"createObjectByPath failed: not all groups in {h5path} exist"
-                else:
-                    msg = f"createObjectByPath failed: {h5path} does not exist"
-                log.warn(msg)
-                raise HTTPNotFound(reason=msg)
-            # create the group or group/datatype/dataset for the last
-            # item in the path (based on parameters passed in)
-            kwargs = {"bucket": bucket, "root_id": root_id}
 
-            if last_link:
-                if obj_type:
-                    kwargs["obj_type"] = obj_type
-                if obj_shape:
-                    kwargs["obj_shape"] = obj_shape
-                if layout:
-                    kwargs["layout"] = layout
-                if creation_props:
-                    kwargs["creation_props"] = creation_props
-                if attrs:
-                    kwargs["attrs"] = attrs
-                if links:
-                    kwargs["links"] = links
-                if obj_id:
-                    kwargs["obj_id"] = obj_id
-            obj_json = await createObject(app, **kwargs)
-            tgt_id = obj_json["id"]
-            # create a link to the new object
-            await putHardLink(app, parent_id, link_title, tgt_id=tgt_id, bucket=bucket)
-            parent_id = tgt_id  # new parent
-    log.info(f"createObjectByPath {h5path} done, returning obj_json")
+async def createDataset(app,
+                        parent_id=None,
+                        root_id=None,
+                        type=None,
+                        shape=None,
+                        h5path=None,
+                        obj_id=None,
+                        creation_props=None,
+                        layout=None,
+                        attrs=None,
+                        links=None,
+                        implicit=None,
+                        bucket=None):
 
-    return obj_json
+    """ create a new dataset object"""
+
+    if not type:
+        msg = "type not set for dataset creation"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if not shape:
+        msg = "shape not set for dataset creation"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    kwargs = {}
+    kwargs["parent_id"] = parent_id
+    kwargs["root_id"] = root_id
+    kwargs["type"] = type
+    kwargs["shape"] = shape
+    kwargs["h5path"] = h5path
+    kwargs["obj_id"] = obj_id
+    kwargs["layout"] = layout
+    kwargs["creation_props"] = creation_props
+    kwargs["attrs"] = attrs
+    kwargs["links"] = links
+    kwargs["implicit"] = implicit
+    kwargs["bucket"] = bucket
+    rsp_json = await createObject(app, **kwargs)
+    return rsp_json

@@ -23,14 +23,12 @@ from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain, getPathForDomain, verifyRoot
-from .util.linkUtil import validateLinkName, getRequestLinks
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction
-from .servicenode_lib import getObjectIdByPath, getPathForObjectId
-from .servicenode_lib import createObject, createObjectByPath, deleteObject
+from .servicenode_lib import getObjectIdByPath, getPathForObjectId, deleteObject
+from .servicenode_lib import getCreateArgs, createGroup
 from . import hsds_logger as log
-from .post_crawl import createObjects
+from .post_crawl import createGroups
 from .domain_crawl import DomainCrawler
-from . import config
 
 
 async def GET_Group(request):
@@ -159,115 +157,6 @@ async def GET_Group(request):
     return resp
 
 
-async def _create_group(app, **kwargs):
-    """ helper method for group creation """
-
-    if kwargs.get("parent_id") and kwargs.get("h5path"):
-        group_json = await createObjectByPath(app, **kwargs)
-    else:
-        # create an anonymous group
-        log.debug(f"_create_group - kwargs: {kwargs}")
-        group_json = await createObject(app, **kwargs)
-
-    return group_json
-
-
-def _get_create_args(body, root_id=None, bucket=None, implicit=False, ignore_link=False):
-    """ get query args for _create_group from request body """
-    kwargs = {"bucket": bucket}
-    predate_max_time = config.get("predate_max_time", default=10.0)
-
-    parent_id = None
-    obj_id = None
-    h5path = None
-
-    if "link" in body:
-        if "h5path" in body:
-            msg = "link can't be used with h5path"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        link_body = body["link"]
-        log.debug(f"link_body: {link_body}")
-        if "id" in link_body and not ignore_link:
-            parent_id = link_body["id"]
-        if "name" in link_body:
-            link_title = link_body["name"]
-            try:
-                # will throw exception if there's a slash in the name
-                validateLinkName(link_title)
-            except ValueError:
-                msg = f"invalid link title: {link_title}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-        if parent_id and link_title:
-            log.debug(f"parent id: {parent_id}, link_title: {link_title}")
-            if not ignore_link:
-                h5path = link_title  # just use the link name as the h5path
-
-    if "parent_id" not in body:
-        parent_id = root_id
-    else:
-        parent_id = body["parent_id"]
-
-    if "h5path" in body:
-        h5path = body["h5path"]
-        # normalize the h5path
-        if h5path.startswith("/"):
-            if parent_id == root_id:
-                # just adjust the path to be relative
-                h5path = h5path[1:]
-            else:
-                msg = f"PostCrawler expecting relative h5path, but got: {h5path}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-        if h5path.endswith("/"):
-            h5path = h5path[:-1]  # makes iterating through the links a bit easier
-
-    if parent_id and h5path:
-        # these are used by createObjectByPath
-        kwargs["parent_id"] = parent_id
-        kwargs["implicit"] = implicit
-        kwargs["h5path"] = h5path
-    else:
-        kwargs["root_id"] = root_id
-
-    if "id" in body:
-        obj_id = body["id"]
-        # tbd: validate this is a group id
-        kwargs["obj_id"] = obj_id
-        log.debug(f"POST group using client id: {obj_id}")
-
-    if "creationProperties" in body:
-        creation_props = body["creationProperties"]
-        # tbd: validate creation_props
-        kwargs["creation_props"] = creation_props
-
-    if "attributes" in body:
-        attrs = body["attributes"]
-        if not isinstance(attrs, dict):
-            msg = f"POST_Groups expected dict for for attributes, but got: {type(attrs)}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        log.debug(f"POST Group attributes: {attrs}")
-
-        # tbd: validate attributes
-        kwargs["attrs"] = attrs
-    if "links" in body:
-        body_links = body["links"]
-        log.debug(f"got links for new group: {body_links}")
-        try:
-            links = getRequestLinks(body["links"], predate_max_time=predate_max_time)
-        except ValueError:
-            msg = "invalid link item sent in request"
-            raise HTTPBadRequest(reason=msg)
-        log.debug(f"adding links to group POST request: {links}")
-        kwargs["links"] = links
-
-    return kwargs
-
-
 async def POST_Group(request):
     """HTTP method to create new Group object"""
     log.request(request)
@@ -297,7 +186,7 @@ async def POST_Group(request):
     # allow parent group creation or not
     implicit = getBooleanParam(params, "implicit")
     kwargs = {}
-    post_group_rsp = None
+    post_rsp = None
     if request.has_body:
         try:
             body = await request.json()
@@ -316,10 +205,10 @@ async def POST_Group(request):
                     kwargs = {"root_id": root_id, "bucket": bucket}
                 elif count == 1:
                     # just create one object in typical way
-                    kwargs = _get_create_args(body[0],
-                                              root_id=root_id,
-                                              bucket=bucket,
-                                              implicit=implicit)
+                    kwargs = getCreateArgs(body[0],
+                                           root_id=root_id,
+                                           bucket=bucket,
+                                           implicit=implicit)
                 else:
                     # create multiple group objects
                     kwarg_list = []  # list of kwargs for each object
@@ -330,31 +219,34 @@ async def POST_Group(request):
                             msg = f"PostGroup - invalid item type: {type(item)}"
                             log.warn(msg)
                             raise HTTPBadRequest(reason=msg)
-                        kwargs = _get_create_args(item, root_id=root_id, bucket=bucket)
+                        kwargs = getCreateArgs(item, root_id=root_id, bucket=bucket)
                         kwargs["ignore_link"] = True
                         kwarg_list.append(kwargs)
                         kwargs = {"bucket": bucket, "root_id": root_id}
-                    post_group_rsp = await createObjects(app, kwarg_list, **kwargs)
+                    post_rsp = await createGroups(app, kwarg_list, **kwargs)
             else:
-                kwargs = _get_create_args(body, root_id=root_id, bucket=bucket, implicit=implicit)
+                kwargs = getCreateArgs(body, root_id=root_id, bucket=bucket, implicit=implicit)
         else:
             kwargs["root_id"] = root_id
             kwargs["bucket"] = bucket
     else:
         kwargs = {"root_id": root_id, "bucket": bucket}
 
-    if post_group_rsp is None:
+    if post_rsp is None:
         # Handle cases other than multi-group create here
-        log.debug(f"_create_group - kwargs: {kwargs}")
-        post_group_rsp = await _create_group(app, **kwargs)
+        if "type" in kwargs:
+            msg = "type key is not allowed for Group creation"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        post_rsp = await createGroup(app, **kwargs)
 
-    log.debug(f"returning resp: {post_group_rsp}")
+    log.debug(f"returning resp: {post_rsp}")
 
-    if "objects" in post_group_rsp:
+    if "objects" in post_rsp:
         # add any links in multi request
-        objects = post_group_rsp["objects"]
+        objects = post_rsp["objects"]
         obj_count = len(objects)
-        log.debug(f"PostGroup multi create: {obj_count} objects")
+        log.debug(f"Post group multi create: {obj_count} objects")
         if len(body) != obj_count:
             msg = f"Expected {obj_count} objects but got {len(body)}"
             log.warn(msg)
@@ -375,7 +267,7 @@ async def POST_Group(request):
                     links = parent_ids[parent_id]
                     links[title] = {"id": obj_id}
         if parent_ids:
-            log.debug(f"POSTGroup multi - adding links: {parent_ids}")
+            log.debug(f"POST group multi - adding links: {parent_ids}")
             kwargs = {"action": "put_link", "bucket": bucket}
             kwargs["replace"] = True
 
@@ -389,7 +281,7 @@ async def POST_Group(request):
             log.info(f"DomainCrawler done for put_links action, status: {status}")
 
     # group creation successful
-    resp = await jsonResponse(request, post_group_rsp, status=201)
+    resp = await jsonResponse(request, post_rsp, status=201)
     log.response(request, resp=resp)
     return resp
 

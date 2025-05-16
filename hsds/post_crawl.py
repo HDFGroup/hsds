@@ -19,7 +19,7 @@ from aiohttp.web_exceptions import HTTPServiceUnavailable, HTTPConflict, HTTPBad
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNotFound, HTTPGone
 
 from .util.httpUtil import isOK
-from .servicenode_lib import createObject, createObjectByPath
+from .servicenode_lib import createObject
 from . import hsds_logger as log
 
 
@@ -148,7 +148,7 @@ class PostCrawler:
         if "obj_id" in item:
             kwargs["obj_id"] = item["obj_id"]
         if "type" in item:
-            kwargs["obj_type"] = item["type"]
+            kwargs["type"] = item["type"]
         if "layout" in item:
             kwargs["layout"] = item["layout"]
         if "creation_props" in item:
@@ -167,11 +167,7 @@ class PostCrawler:
         log.debug(f"PostCrawler index {index} kwargs: {kwargs}")
         rsp_json = None
         try:
-            if kwargs.get("parent_id") and kwargs.get("h5path"):
-                rsp_json = await createObjectByPath(self._app, **kwargs)
-            else:
-                # create an anonymous group
-                rsp_json = await createObject(self._app, **kwargs)
+            rsp_json = await createObject(self._app, **kwargs)
         except HTTPConflict:
             log.warn("PostCrawler - got HTTPConflict from http_post")
             rsp_json = {"status_code": 409}
@@ -188,26 +184,75 @@ class PostCrawler:
         self._rsp_objs[index] = rsp_json
 
 
-async def createObjects(app, items, root_id=None, bucket=None):
-    """ create an objects based on parameters in items list """
+async def _createObjects(app, items: list, root_id=None, bucket=None):
+    """ generic create function """
+
+    post_crawler = PostCrawler(app, root_id=root_id, bucket=bucket, items=items)
+    await post_crawler.crawl()
+    if post_crawler.get_status() > 201:
+        msg = f"createGroups returning status from crawler: {post_crawler.get_status()}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    obj_list = post_crawler.get_rsp_objs()
+    if not isinstance(obj_list, list):
+        msg = f"createGroups expected list but got: {type(obj_list)}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+    return {"objects": obj_list}
+
+
+async def createGroups(app, items: list, root_id=None, bucket=None):
+    """ create an group objects based on parameters in items list """
 
     if not root_id:
         msg = "no root_id given for createObjects"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    log.info(f"createObjects with {len(items)} items, root_id: {root_id}")
+    for item in items:
+        if not isinstance(item, dict):
+            msg = "expected list of dictionary objects for multi-object create"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if "type" in item:
+            msg = "type key not allowed for multi-group create"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if "shape" in item:
+            msg = "shape key not allowed for multi-group create"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
-    post_crawler = PostCrawler(app, root_id=root_id, bucket=bucket, items=items)
-    await post_crawler.crawl()
-    if post_crawler.get_status() > 201:
-        msg = f"createObjects returning status from crawler: {post_crawler.get_status()}"
-        log.error(msg)
-        raise HTTPInternalServerError()
+    log.info(f"createGroups with {len(items)} items, root_id: {root_id}")
 
-    obj_list = post_crawler.get_rsp_objs()
-    if not isinstance(obj_list, list):
-        msg = f"createObjects expected list but got: {type(obj_list)}"
-        log.error(msg)
-        raise HTTPInternalServerError()
-    return {"objects": obj_list}
+    rsp_json = await _createObjects(app, items=items, root_id=root_id, bucket=bucket)
+    return rsp_json
+
+
+async def createDatatypeObjs(app, items: list, root_id=None, bucket=None):
+    """ create an datatype objects based on parameters in items list """
+
+    if not root_id:
+        msg = "no root_id given for createDatatypeObjs"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    for item in items:
+        if not isinstance(item, dict):
+            msg = "expected list of dictionary objects for multi-object create"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if "type" not in item:
+            msg = "type key not provided for multi-datatype create"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if "shape" in item:
+            msg = "shape key not allowed for multi-datatype create"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    log.info(f"createDatatypes with {len(items)} items, root_id: {root_id}")
+
+    rsp_json = await _createObjects(app, items=items, root_id=root_id, bucket=bucket)
+    return rsp_json
