@@ -140,9 +140,14 @@ class DatatypeTest(unittest.TestCase):
         # create a datatype id
         ctype_id = createObjId("datatypes", root_id=root_uuid)
 
+        # try creating a committed type without a type in the body
+        req = self.endpoint + "/datatypes"
+        data = {"id": ctype_id}
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 401)  # bad request
+
         # create a committed type obj
         data = {"id": ctype_id, "type": "H5T_IEEE_F32LE"}
-        req = self.endpoint + "/datatypes"
         rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)

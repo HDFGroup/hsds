@@ -155,7 +155,7 @@ async def POST_Datatype(request):
     await validateUserPassword(app, username, pswd)
 
     if not request.has_body:
-        msg = "POST Datatype with no body"
+        msg = "POST datatype with no body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -213,7 +213,7 @@ async def POST_Datatype(request):
                 kwargs["ignore_link"] = True
                 kwarg_list.append(kwargs)
             kwargs = {"bucket": bucket, "root_id": root_id}
-            log.debug(f"createDatatypeObjcs, items: {kwarg_list}")
+            log.debug(f"createDatatypeObjects, items: {kwarg_list}")
             post_rsp = await createDatatypeObjs(app, kwarg_list, **kwargs)
     else:
         # single object create
@@ -251,7 +251,7 @@ async def POST_Datatype(request):
                     links = parent_ids[parent_id]
                     links[title] = {"id": obj_id}
         if parent_ids:
-            log.debug(f"POST ctype multi - adding links: {parent_ids}")
+            log.debug(f"POST datatype multi - adding links: {parent_ids}")
             kwargs = {"action": "put_link", "bucket": bucket}
             kwargs["replace"] = True
 
