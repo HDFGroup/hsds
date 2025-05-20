@@ -149,6 +149,8 @@ class PostCrawler:
             kwargs["obj_id"] = item["obj_id"]
         if "type" in item:
             kwargs["type"] = item["type"]
+        if "shape" in item:
+            kwargs["shape"] = item["shape"]
         if "layout" in item:
             kwargs["layout"] = item["layout"]
         if "creation_props" in item:
@@ -231,7 +233,7 @@ async def createGroups(app, items: list, root_id=None, bucket=None):
 
 
 async def createDatatypeObjs(app, items: list, root_id=None, bucket=None):
-    """ create an datatype objects based on parameters in items list """
+    """ create datatype objects based on parameters in items list """
 
     if not root_id:
         msg = "no root_id given for createDatatypeObjs"
@@ -253,6 +255,33 @@ async def createDatatypeObjs(app, items: list, root_id=None, bucket=None):
             raise HTTPBadRequest(reason=msg)
 
     log.info(f"createDatatypes with {len(items)} items, root_id: {root_id}")
+
+    rsp_json = await _createObjects(app, items=items, root_id=root_id, bucket=bucket)
+    return rsp_json
+
+async def createDatasets(app, items: list, root_id=None, bucket=None):
+    """ create dataset objects based on parameters in items list """
+
+    if not root_id:
+        msg = "no root_id given for createDatatypeObjs"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    for item in items:
+        if not isinstance(item, dict):
+            msg = "expected list of dictionary objects for multi-object create"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if "type" not in item:
+            msg = "type key not provided for multi-dataset create"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if "shape" not in item:
+            msg = "shape key not provided for multi-dataset create"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    log.info(f"createDatasets with {len(items)} items, root_id: {root_id}")
 
     rsp_json = await _createObjects(app, items=items, root_id=root_id, bucket=bucket)
     return rsp_json

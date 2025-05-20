@@ -15,6 +15,7 @@
 
 import asyncio
 import json
+import math
 import time
 import numpy as np
 
@@ -24,7 +25,8 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from aiohttp.client_exceptions import ClientOSError, ClientError
 from aiohttp import ClientResponseError
 
-from h5json.array_util import encodeData, decodeData, bytesToArray, bytesArrayToList, jsonToArray
+from h5json.array_util import encodeData, decodeData, bytesToArray, bytesArrayToList
+from h5json.array_util import jsonToArray, getNumpyValue
 from h5json.objid import getCollectionForId, createObjId, getRootObjId
 from h5json.objid import isSchema2Id, getS3Key, isValidUuid
 from h5json.hdf5dtype import getBaseTypeJson, validateTypeItem, createDataType
@@ -33,12 +35,14 @@ from h5json.hdf5dtype import getItemSize
 from .util.nodeUtil import getDataNodeUrl
 from .util.authUtil import getAclKeys
 from .util.linkUtil import h5Join, validateLinkName, getLinkClass, getRequestLinks
-from .util.storUtil import getStorJSONObj, isStorObj
+from .util.storUtil import getStorJSONObj, isStorObj, getSupportedFilters
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
 from .util.domainUtil import getBucketForDomain, verifyRoot, getLimits
 from .util.storUtil import getCompressors
-from .util.dsetUtil import getShapeDims
+from .util.dsetUtil import getShapeDims, getShapeJson, getFiltersJson, validateChunkLayout
+from .util.dsetUtil import getContiguousLayout, guessChunk, getChunkSize
+from .util.dsetUtil import expandChunk, shrinkChunk
 
 from .basenode import getVersion
 from . import hsds_logger as log
@@ -1287,14 +1291,68 @@ async def deleteObject(app, obj_id, bucket=None):
         del meta_cache[obj_id]  # remove from cache
 
 
+def validateDatasetCreationProps(creation_props, type_json=None, shape=None):
+    """ validate creation props """
+
+    log.debug(f"validateCreationProps: {creation_props}")
+    if "fillValue" in creation_props:
+        if not type_json or not shape:
+            msg = "shape and type must be set to use fillValue"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        
+        # validate fill value compatible with type
+        dt = createDataType(type_json)
+        fill_value = creation_props["fillValue"]
+        log.debug(f"got fill_value: {fill_value}")
+        if "fillValue_encoding" in creation_props:
+            fill_value_encoding = creation_props["fillValue_encoding"]
+            if fill_value_encoding not in ("None", "base64"):
+                msg = f"unexpected value for fill_value_encoding: {fill_value_encoding}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            else:
+                # should see a string in this case
+                if not isinstance(fill_value, str):
+                    msg = f"unexpected fill value: {fill_value} "
+                    msg += f"for encoding: {fill_value_encoding}"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+        else:
+            fill_value_encoding = None
+
+            try:
+                getNumpyValue(fill_value, dt=dt, encoding=fill_value_encoding)
+            except ValueError:
+                msg = f"invalid fill value: {fill_value}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            
+    if "filters" in creation_props:
+        if not type_json or not shape:
+            msg = "shape and type must be set to use filters"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        
+        supported_filters = getSupportedFilters() 
+        # will raise bad request exception if not valid
+        supported_filters = getSupportedFilters(include_compressors=True)
+        log.debug(f"supported_filters: {supported_filters}")
+        filters_out = getFiltersJson(creation_props, supported_filters=supported_filters)
+        # replace filters with our starndardized list
+        log.debug(f"setting filters to: {filters_out}")
+        creation_props["filters"] = filters_out
+
 def getCreateArgs(body,
                   root_id=None,
                   bucket=None,
                   type=None,
-                  shape=None,
                   implicit=False,
+                  chunk_table=None,
                   ignore_link=False):
     """ get args for createObject from request body """
+
+    log.debug(f"getCreateArgs with body keys: {list(body.keys())}")
 
     kwargs = {"bucket": bucket}
     predate_max_time = config.get("predate_max_time", default=10.0)
@@ -1364,8 +1422,10 @@ def getCreateArgs(body,
 
     if "creationProperties" in body:
         creation_props = body["creationProperties"]
-        # tbd: validate creation_props
-        kwargs["creation_props"] = creation_props
+        # validate after we've checked for shape and type
+    else:
+        creation_props = {}
+    kwargs["creation_props"] = creation_props
 
     if "attributes" in body:
         attrs = body["attributes"]
@@ -1391,20 +1451,25 @@ def getCreateArgs(body,
 
     if type:
         kwargs["type"] = type
+        type_json = type
     elif "type" in body:
-        datatype = body["type"]
-        if isinstance(datatype, str):
+        type_json = body["type"]
+        if isinstance(type_json, str):
             try:
                 # convert predefined type string (e.g. "H5T_STD_I32LE") to
                 # corresponding json representation
-                datatype = getBaseTypeJson(datatype)
-                log.debug(f"got datatype: {datatype}")
+                type_json = getBaseTypeJson(type_json)
+                log.debug(f"got type: {type_json}")
             except TypeError:
-                msg = f"POST with invalid predefined type: {datatype}"
+                msg = f"POST with invalid predefined type: {type_json}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
+    else:
+        type_json = None
+
+    if type_json:
         try:
-            validateTypeItem(datatype)
+            validateTypeItem(type_json)
         except KeyError as ke:
             msg = f"KeyError creating type: {ke}"
             log.warn(msg)
@@ -1417,10 +1482,237 @@ def getCreateArgs(body,
             msg = f"ValueError creating type: {ve}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        kwargs["type"] = datatype
+        kwargs["type"] = type_json
     else:
         pass  # no type
+    return kwargs
 
+def getDatasetCreateArgs(body,
+                  root_id=None,
+                  bucket=None,
+                  type=None,
+                  implicit=False,
+                  chunk_table=None,
+                  ignore_link=False):
+
+    """ get args for createDataset from request body """
+
+    # call getCreateArgs for group, datatype objects, then fill in for dataset specific options
+    kwargs = getCreateArgs(body,
+                           root_id=root_id,
+                           bucket=bucket,
+                           type=type,
+                           implicit=implicit,
+                           ignore_link=ignore_link)
+    
+    if not "type" in kwargs:
+        msg = "no type specified for create dataset"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    
+    type_json = kwargs["type"]
+    #
+    # Validate shape if present
+    #
+
+    # will return scalar shape if no shape key in body
+    shape_json = getShapeJson(body)
+    kwargs["shape"] = shape_json
+       
+    # get layout for dataset creation
+    log.debug("getting dataset creation settings")
+    layout_props = None
+    min_chunk_size = int(config.get("min_chunk_size"))
+    max_chunk_size = int(config.get("max_chunk_size"))
+    type_json = kwargs["type"]
+    item_size = getItemSize(type_json)
+    creation_props = kwargs["creation_props"]
+    layout_props = None
+
+    if creation_props:
+        validateDatasetCreationProps(creation_props, type_json=type_json, shape=shape_json)
+        if "layout" in creation_props:
+            layout_props = creation_props["layout"]
+            try:
+                validateChunkLayout(shape_json, item_size, layout_props, chunk_table=chunk_table)
+            except ValueError:
+                msg = f"invalid chunk layout: {layout_props}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+    # TBD: check for invalid layout class...
+    if layout_props:
+        if layout_props["class"] == "H5D_CONTIGUOUS":
+            # treat contiguous as chunked
+            layout_class = "H5D_CHUNKED"
+        else:
+            layout_class = layout_props["class"]
+    elif shape_json["class"] != "H5S_NULL":
+        layout_class = "H5D_CHUNKED"
+    else:
+        layout_class = None
+    log.debug(f"using layout_class: {layout_class}")
+
+    if layout_class == "H5D_COMPACT":
+        layout = {"class": "H5D_COMPACT"}
+    elif layout_class:
+        # initialize to H5D_CHUNKED
+        layout = {"class": "H5D_CHUNKED"}
+    else:
+        # null space - no layout
+        layout = None
+
+    if layout_props and "dims" in layout_props:
+        chunk_dims = layout_props["dims"]
+    else:
+        chunk_dims = None
+
+    if layout_class == "H5D_CONTIGUOUS_REF":
+        opts = {"chunk_min": min_chunk_size, "chunk_max": max_chunk_size}
+        chunk_dims = getContiguousLayout(shape_json, item_size, **opts)
+        layout["dims"] = chunk_dims
+        log.debug(f"autoContiguous layout: {layout}")
+
+    if layout_class == "H5D_CHUNKED" and chunk_dims is None:
+        # do auto-chunking
+        chunk_dims = guessChunk(shape_json, item_size)
+        log.debug(f"initial autochunk layout: {chunk_dims}")
+
+    if layout_class == "H5D_CHUNKED":
+        chunk_size = getChunkSize(chunk_dims, item_size)
+
+        msg = f"chunk_size: {chunk_size}, min: {min_chunk_size}, "
+        msg += f"max: {max_chunk_size}"
+        log.debug(msg)
+        
+        # adjust the chunk shape if chunk size is too small or too big
+        adjusted_chunk_dims = None
+        if chunk_size < min_chunk_size:
+            msg = f"chunk size: {chunk_size} less than min size: "
+            msg += f"{min_chunk_size}, expanding"
+            log.debug(msg)
+            opts = {"chunk_min": min_chunk_size, "layout_class": layout_class}
+            adjusted_chunk_dims = expandChunk(chunk_dims, item_size, shape_json, **opts)
+        elif chunk_size > max_chunk_size:
+            msg = f"chunk size: {chunk_size} greater than max size: "
+            msg += f"{max_chunk_size}, shrinking"
+            log.debug(msg)
+            opts = {"chunk_max": max_chunk_size}
+            adjusted_chunk_dims = shrinkChunk(chunk_dims, item_size, **opts)
+        
+        if adjusted_chunk_dims:
+            msg = f"requested chunk_dimensions: {chunk_dims} modified "
+            msg += f"dimensions: {adjusted_chunk_dims}"
+            log.debug(msg)
+            layout["dims"] = adjusted_chunk_dims
+        else:
+            layout["dims"] = chunk_dims  # don't need to adjust chunk size
+
+        # set partition_count if needed:
+        max_chunks_per_folder = int(config.get("max_chunks_per_folder"))
+        set_partition = False
+        if max_chunks_per_folder > 0:
+            if "dims" in shape_json and "dims" in layout:
+                set_partition = True
+
+        if set_partition:
+            chunk_dims = layout["dims"]
+            shape_dims = shape_json["dims"]
+            if "maxdims" in shape_json:
+                max_dims = shape_json["maxdims"]
+            else:
+                max_dims = None
+            num_chunks = 1
+            rank = len(shape_dims)
+            unlimited_count = 0
+            if max_dims:
+                for i in range(rank):
+                    if max_dims[i] == 0:
+                        unlimited_count += 1
+                msg = f"number of unlimited dimensions: {unlimited_count}"
+                log.debug(msg)
+
+            for i in range(rank):
+                max_dim = 1
+                if max_dims:
+                    max_dim = max_dims[i]
+                    if max_dim == 0:
+                        # don't really know what the ultimate extent
+                        # could be, but assume 10^6 for total number of
+                        # elements and square-shaped array...
+                        MAX_ELEMENT_GUESS = 10.0 ** 6
+                        exp = 1 / unlimited_count
+                        max_dim = int(math.pow(MAX_ELEMENT_GUESS, exp))
+                else:
+                    max_dim = shape_dims[i]
+                num_chunks *= math.ceil(max_dim / chunk_dims[i])
+
+            if num_chunks > max_chunks_per_folder:
+                partition_count = math.ceil(num_chunks / max_chunks_per_folder)
+                msg = f"set partition count to: {partition_count}, "
+                msg += f"num_chunks: {num_chunks}"
+                log.info(msg)
+                layout["partition_count"] = partition_count
+            else:
+                msg = "do not need chunk partitions, num_chunks: "
+                msg += f"{num_chunks} max_chunks_per_folder: "
+                msg += f"{max_chunks_per_folder}"
+                log.info(msg)
+
+    if layout_class in ("H5D_CHUNKED_REF", "H5D_CHUNKED_REF_INDIRECT"):
+        chunk_size = getChunkSize(chunk_dims, item_size)
+
+        msg = f"chunk_size: {chunk_size}, min: {min_chunk_size}, "
+        msg += f"max: {max_chunk_size}"
+        log.debug(msg)
+        # nothing to do about inefficiently small chunks, but large chunks
+        # can be subdivided
+        if chunk_size < min_chunk_size:
+            msg = f"chunk size: {chunk_size} less than min size: "
+            msg += f"{min_chunk_size} for {layout_class} dataset"
+            log.warn(msg)
+        elif chunk_size > max_chunk_size:
+            msg = f"chunk size: {chunk_size} greater than max size: "
+            msg += f"{max_chunk_size}, for {layout_class} dataset"
+            log.warn(msg)
+        layout["dims"] = chunk_dims
+        
+    if layout:
+        log.debug(f"setting layout to: {layout}")
+        kwargs["layout"] = layout
+
+    # 
+    # get input data if present
+    #
+    if "value" in body and body["value"]:
+        # data to initialize dataset included in request
+        if shape_json["class"] == "H5S_NULL":
+            msg = "null shape datasets can not have initial values"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        
+        input_data = body["value"]
+        msg = "input data doesn't match request type and shape"
+        dims = getShapeDims(shape_json)
+        if not dims:
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        arr_dtype = createDataType(type_json)
+
+        try:
+            input_arr = jsonToArray(dims, arr_dtype, input_data)
+        except ValueError:
+            log.warn(f"ValueError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        except TypeError:
+            log.warn(f"TypeError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        except IndexError:
+            log.warn(f"IndexError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"got json arr: {input_arr.shape}")
+        kwargs["value"] = input_data
+     
     return kwargs
 
 
@@ -1597,6 +1889,8 @@ async def createObject(app,
     params = {"bucket": bucket}
     rsp_json = await http_post(app, req, data=obj_json, params=params)
 
+    log.debug(f"createObject: {req} got rsp_json: {rsp_json}")
+
     # object creation successful, create link from parent if requested
     if h5path:
         kwargs = {"tgt_id": obj_id, "bucket": bucket, "implicit": implicit}
@@ -1675,6 +1969,7 @@ async def createDataset(app,
                         obj_id=None,
                         creation_props=None,
                         layout=None,
+                        value=None,
                         attrs=None,
                         links=None,
                         implicit=None,
@@ -1688,9 +1983,8 @@ async def createDataset(app,
         raise HTTPBadRequest(reason=msg)
 
     if not shape:
-        msg = "shape not set for dataset creation"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
+        # default to a scalar dataset
+        shape = {"class": "H5S_SCALAR"}
 
     kwargs = {}
     kwargs["parent_id"] = parent_id
@@ -1705,5 +1999,56 @@ async def createDataset(app,
     kwargs["links"] = links
     kwargs["implicit"] = implicit
     kwargs["bucket"] = bucket
-    rsp_json = await createObject(app, **kwargs)
-    return rsp_json
+    dset_json = await createObject(app, **kwargs)
+
+    if value:
+        log.debug(f"tbd - set dataset value to: {value}")
+        shape_json = kwargs["shape"]
+        type_json = kwargs["type"]
+        # data to initialize dataset included in request
+        msg = "input data doesn't match request type and shape"
+        dims = getShapeDims(shape_json)
+        if not dims:
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        arr_dtype = createDataType(type_json)
+
+        try:
+            input_arr = jsonToArray(dims, arr_dtype, value)
+        except ValueError:
+            log.warn(f"ValueError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        except TypeError:
+            log.warn(f"TypeError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        except IndexError:
+            log.warn(f"IndexError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"got json arr: {input_arr.shape}")
+    else:
+        input_arr = None
+
+    # write data if provided
+    if input_arr is not None:
+        log.debug(f"write input_arr: {input_arr}")
+        # mixin the layout
+        dset_json["layout"] = layout
+        # make selection for entire dataspace
+        dims = getShapeDims(shape_json)
+        slices = []
+        for dim in dims:
+            s = slice(0, dim, 1)
+            slices.append(s)
+        # make a one page list to handle the write in one chunk crawler run
+        # (larger write request should user binary streaming)
+        kwargs = {"page_number": 0, "page": slices}
+        kwargs["dset_json"] = dset_json
+        kwargs["bucket"] = bucket
+        kwargs["select_dtype"] = input_arr.dtype
+        kwargs["data"] = input_arr
+        log.debug(f"kwargs for hyperslab write: {kwargs}")
+        # do write
+        #request = None  # don't need in this case since not reading from input stream
+        #await doHyperslabWrite(app, request, **kwargs)
+
+    return dset_json

@@ -928,7 +928,7 @@ class ValueTest(unittest.TestCase):
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
-        # read unintialized value from dataset
+        # read uninitialized value from dataset
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
