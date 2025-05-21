@@ -20,9 +20,8 @@ import helper
 import config
 
 # min/max chunk size - these can be set by config, but
-# practially the min config value should be larger than
-# CHUNK_MIN and the max config value should less than
-# CHUNK_MAX
+# practically the min config value should be larger than
+# CHUNK_MIN and the max config value should less than CHUNK_MAX
 CHUNK_MIN = 1024  # lower limit  (1024b)
 CHUNK_MAX = 50 * 1024 * 1024  # upper limit (50M)
 
@@ -2751,7 +2750,7 @@ class DatasetTest(unittest.TestCase):
         req = self.endpoint + "/datasets"
         # 50K x 80K x 90K dataset
         dims = [0, 80000, 90000]
-        # unlimited extend in dim 0, fixeed in dimension 2, extenbile by 10x in dim 3
+        # unlimited extend in dim 0, fixeed in dimension 2, extensible by 10x in dim 3
         max_dims = [0, 80000, 900000]
         payload = {"type": "H5T_IEEE_F32LE", "shape": dims, "maxdims": max_dims}
 
@@ -2814,6 +2813,88 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         # Should fail with Bad Request due to invalid layout value
         self.assertEqual(rsp.status_code, 400)  # create dataset
+
+    def testDatasetPostMulti(self):
+        # test POST with multi-object creation
+        domain = self.base_domain + "/testDatasetPostMulti.h5"
+        helper.setupDomain(domain)
+        print("testDatasetPostMulti", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/"
+
+        # get root ids
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # get root group and verify link count is 0
+        req = helper.getEndpoint() + "/groups/" + root_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+
+        dataset_count = 3
+        datatype = "H5T_STD_I32LE"
+        payload = []
+        for _ in range(dataset_count):
+            dataset_args = {"type": datatype}
+            payload.append(dataset_args)
+
+        req = helper.getEndpoint() + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("objects" in rspJson)
+        rsp_objs = rspJson["objects"]
+        self.assertEqual(len(rsp_objs), dataset_count)
+
+        expected_keys = [
+            "id",
+            "shape",
+            "layout",
+            "attributeCount",
+            "created",
+            "lastModified",
+            "root",
+        ]
+
+        for i in range(dataset_count):
+            obj_json = rsp_objs[i]
+            self.assertEqual(obj_json["attributeCount"], 0)
+            dset_id = obj_json["id"]
+            self.assertTrue(helper.validateId(dset_id))
+            self.assertTrue(dset_id.startswith("d-"))
+            for key in expected_keys:
+                self.assertTrue(key in obj_json)
+
+        # create a set of linked datasets
+        for i in range(dataset_count):
+            item = payload[i]
+            item["link"] = {"id": root_uuid, "name": f"dset_{i + 1}"}
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("objects" in rspJson)
+        rsp_objs = rspJson["objects"]
+        self.assertEqual(len(rsp_objs), dataset_count)
+        for i in range(dataset_count):
+            json_rsp = rsp_objs[i]
+            self.assertEqual(json_rsp["attributeCount"], 0)
+            dset_id = json_rsp["id"]
+            self.assertTrue(helper.validateId(dset_id))
+            for key in expected_keys:
+                self.assertTrue(key in obj_json)
+
+        # get root group and verify link count is dataset_count
+        req = helper.getEndpoint() + "/groups/" + root_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], dataset_count)
 
 
 if __name__ == "__main__":

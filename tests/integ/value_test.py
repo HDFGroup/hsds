@@ -1012,6 +1012,86 @@ class ValueTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], 42)
 
+    def testScalarDatasetInitDataMulti(self):
+        # Test creation/deletion of multiple scalar dataset obj along with initial data
+        print("testScalarDatasetInitDataMulti", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        dataset_count = 3
+        datatype = "H5T_STD_I32LE"
+        payload = []
+        for i in range(dataset_count):
+            dataset_args = {"type": datatype}
+            dataset_args["value"] = i
+            payload.append(dataset_args)
+
+        # create dataset objects
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+
+        self.assertTrue("objects" in rspJson)
+        rsp_objs = rspJson["objects"]
+        self.assertEqual(len(rsp_objs), dataset_count)
+
+        for i in range(dataset_count):
+            obj_json = rsp_objs[i]
+            self.assertEqual(obj_json["attributeCount"], 0)
+            dset_id = obj_json["id"]
+            self.assertTrue(helper.validateId(dset_id))
+            self.assertTrue(dset_id.startswith("d-"))
+
+        # read back the obj
+        for i in range(dataset_count):
+            dset_id = rsp_objs[i]["id"]
+            req = self.endpoint + "/datasets/" + dset_id
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+
+            expected_keys = [
+                "id",
+                "shape",
+                "hrefs",
+                "layout",
+                "creationProperties",
+                "attributeCount",
+                "created",
+                "lastModified",
+                "root",
+                "domain",
+            ]
+
+            for name in expected_keys:
+                self.assertTrue(name in rspJson)
+            self.assertEqual(rspJson["id"], dset_id)
+            self.assertEqual(rspJson["root"], root_uuid)
+            self.assertEqual(rspJson["domain"], self.base_domain)
+            self.assertEqual(rspJson["attributeCount"], 0)
+            shape_json = rspJson["shape"]
+            self.assertTrue(shape_json["class"], "H5S_SCALAR")
+            self.assertTrue(rspJson["type"], "H5T_STD_I32LE")
+
+        # read the data back
+        for i in range(dataset_count):
+            dset_id = rsp_objs[i]["id"]
+            req = self.endpoint + "/datasets/" + dset_id + "/value"
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertTrue("hrefs" in rspJson)
+            self.assertTrue("value" in rspJson)
+            self.assertEqual(rspJson["value"], i)
+
     def testNullSpaceDataset(self):
         # Test attempted read/write to null space dataset
         print("testNullSpaceDataset", self.base_domain)
