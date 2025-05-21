@@ -170,6 +170,8 @@ async def POST_Dataset(request):
     resp_json["shape"] = shape_json
     resp_json["lastModified"] = dset_json["lastModified"]
     resp_json["attributeCount"] = len(attrs)
+    if layout is not None:
+        resp_json["layout"] = layout
 
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)

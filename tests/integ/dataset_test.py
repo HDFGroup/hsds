@@ -64,6 +64,24 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
+
+        expected_keys = [
+            "id",
+            "shape",
+            "layout",
+            "attributeCount",
+            "created",
+            "lastModified",
+            "root",
+        ]
+        for name in expected_keys:
+            self.assertTrue(name in rspJson)
+
+        # additional keys expected for GET response
+        expected_keys.append("hrefs")
+        expected_keys.append("creationProperties")
+        expected_keys.append("domain")
+
         self.assertEqual(rspJson["attributeCount"], 0)
         dset_id = rspJson["id"]
         self.assertTrue(helper.validateId(dset_id))
@@ -74,21 +92,6 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
 
-        expected_keys = [
-            "id",
-            "shape",
-            "hrefs",
-            "layout",
-            "creationProperties",
-            "attributeCount",
-            "created",
-            "lastModified",
-            "root",
-            "domain",
-        ]
-
-        for name in expected_keys:
-            self.assertTrue(name in rspJson)
         self.assertEqual(rspJson["id"], dset_id)
         self.assertEqual(rspJson["root"], root_uuid)
         self.assertEqual(rspJson["domain"], domain)

@@ -475,6 +475,7 @@ class DatatypeTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)  # link doesn't exist yet
         rspJson = json.loads(rsp.text)
+
         self.assertTrue("link" in rspJson)
         link_json = rspJson["link"]
         self.assertEqual(link_json["collection"], "datatypes")

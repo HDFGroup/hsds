@@ -210,7 +210,7 @@ async def POST_Datatype(request):
                     log.warn(msg)
                     raise HTTPBadRequest(reason=msg)
                 kwargs = getCreateArgs(item, root_id=root_id, bucket=bucket)
-                kwargs["ignore_link"] = True
+                kwargs["ignore_link"] = True  # will create parent links later
                 kwarg_list.append(kwargs)
             kwargs = {"bucket": bucket, "root_id": root_id}
             log.debug(f"createDatatypeObjects, items: {kwarg_list}")

@@ -259,6 +259,7 @@ async def createDatatypeObjs(app, items: list, root_id=None, bucket=None):
     rsp_json = await _createObjects(app, items=items, root_id=root_id, bucket=bucket)
     return rsp_json
 
+
 async def createDatasets(app, items: list, root_id=None, bucket=None):
     """ create dataset objects based on parameters in items list """
 

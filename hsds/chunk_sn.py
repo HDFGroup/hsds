@@ -515,6 +515,7 @@ async def PUT_Value(request):
     # get state for dataset from DN - will need this to validate
     # some of the query parameters
     dset_json = await getDsetJson(app, dset_id, bucket=bucket)
+    log.debug(f"got dset_json: {dset_json}")
 
     datashape = dset_json["shape"]
     if isNullSpace(dset_json):

@@ -15,15 +15,15 @@
 #
 
 from json import JSONDecodeError
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
 
-#from h5json.hdf5dtype import createDataType
-from h5json.array_util import getNumElements #, jsonToArray
+from h5json.hdf5dtype import createDataType
+from h5json.array_util import getNumElements, jsonToArray
 from h5json.objid import isValidUuid, isSchema2Id
 
 from .util.httpUtil import getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse, getBooleanParam
-from .util.dsetUtil import getPreviewQuery# , getShapeDims, validateChunkLayout
+from .util.dsetUtil import getPreviewQuery, getShapeDims
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
@@ -31,7 +31,7 @@ from .util.domainUtil import getBucketForDomain, verifyRoot
 from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
 from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo
 from .servicenode_lib import getDatasetCreateArgs, createDataset, deleteObject
-from .dset_lib import updateShape, deleteAllChunks #, doHyperslabWrite
+from .dset_lib import updateShape, deleteAllChunks, doHyperslabWrite
 from .post_crawl import createDatasets
 from .domain_crawl import DomainCrawler
 from . import hsds_logger as log
@@ -497,12 +497,23 @@ async def POST_Dataset(request):
     post_rsp = None
 
     datatype_json = None
+    init_values = []    # value initializer for each object
+
+    def _updateInitValuesList(kwargs):
+        # remove value key from kwargs and append
+        # to init_values list
+        if "value" in kwargs:
+            init_values.append(kwargs["value"])
+            del kwargs["value"]
+        else:
+            # add a placeholder
+            init_values.append(None)
 
     #
     # handle case of committed type input
     #
     if isinstance(body, dict) and "type" in body:
-         
+
         body_type = body["type"]
         log.debug(f"got datatype: {body_type}")
         if isinstance(body_type, str) and body_type.startswith("t-"):
@@ -532,10 +543,11 @@ async def POST_Dataset(request):
         elif count == 1:
             # just create one object in typical way
             kwargs = getDatasetCreateArgs(body[0],
-                                   root_id=root_id,
-                                   type=datatype_json,
-                                   bucket=bucket,
-                                   implicit=implicit)
+                                          root_id=root_id,
+                                          type=datatype_json,
+                                          bucket=bucket,
+                                          implicit=implicit)
+            _updateInitValuesList(kwargs)
         else:
             # create multiple dataset objects
             kwarg_list = []  # list of kwargs for each object
@@ -546,7 +558,11 @@ async def POST_Dataset(request):
                     msg = f"Post_Dataset - invalid item type: {type(item)}"
                     log.warn(msg)
                     raise HTTPBadRequest(reason=msg)
-                kwargs = getDatasetCreateArgs(item, root_id=root_id, type=datatype_json, bucket=bucket)
+                kwargs = getDatasetCreateArgs(item,
+                                              root_id=root_id,
+                                              type=datatype_json,
+                                              bucket=bucket)
+                _updateInitValuesList(kwargs)
                 kwargs["ignore_link"] = True
                 kwarg_list.append(kwargs)
             kwargs = {"bucket": bucket, "root_id": root_id}
@@ -556,7 +572,12 @@ async def POST_Dataset(request):
             post_rsp = await createDatasets(app, kwarg_list, **kwargs)
     else:
         # single object create
-        kwargs = getDatasetCreateArgs(body, root_id=root_id, type=datatype_json, bucket=bucket, implicit=implicit)
+        kwargs = getDatasetCreateArgs(body,
+                                      root_id=root_id,
+                                      type=datatype_json,
+                                      bucket=bucket,
+                                      implicit=implicit)
+        _updateInitValuesList(kwargs)
         log.debug(f"kwargs for dataset create: {kwargs}")
 
     if post_rsp is None:
@@ -564,6 +585,66 @@ async def POST_Dataset(request):
         post_rsp = await createDataset(app, **kwargs)
 
     log.debug(f"returning resp: {post_rsp}")
+
+    if "objects" in post_rsp:
+        # add any links in multi request
+        objects = post_rsp["objects"]
+        obj_count = len(objects)
+        log.debug(f"Post dataset multi create: {obj_count} objects")
+        if len(body) != obj_count:
+            msg = f"Expected {obj_count} objects but got {len(body)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        obj_count = 1  # single object create
+        objects = [post_rsp, ]  # treat as an array to make the following code more consistent
+
+    if len(init_values) != obj_count:
+        msg = f"Expected {obj_count} init values"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    # write any init data values
+    for index in range(obj_count):
+        init_data = init_values[index]
+        if init_data is None:
+            continue
+        dset_json = objects[index]
+        log.debug(f"init value, post_rsp: {dset_json}")
+        shape_json = dset_json["shape"]
+        type_json = dset_json["type"]
+        arr_dtype = createDataType(type_json)
+        dims = getShapeDims(shape_json)
+        try:
+            input_arr = jsonToArray(dims, arr_dtype, init_data)
+        except ValueError:
+            log.warn(f"ValueError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        except TypeError:
+            log.warn(f"TypeError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        except IndexError:
+            log.warn(f"IndexError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"got json arr: {input_arr.shape}")
+
+        # write data if provided
+        log.debug(f"write input_arr: {input_arr}")
+        # make selection for entire dataspace
+        dims = getShapeDims(shape_json)
+        slices = []
+        for dim in dims:
+            s = slice(0, dim, 1)
+            slices.append(s)
+        # make a one page list to handle the write in one chunk crawler run
+        # (larger write request should user binary streaming)
+        kwargs = {"page_number": 0, "page": slices}
+        kwargs["dset_json"] = dset_json
+        kwargs["bucket"] = bucket
+        kwargs["select_dtype"] = input_arr.dtype
+        kwargs["data"] = input_arr
+        # do write
+        await doHyperslabWrite(app, request, **kwargs)
 
     if "objects" in post_rsp:
         # add any links in multi request
@@ -598,57 +679,10 @@ async def POST_Dataset(request):
 
             # will raise exception on not found, server busy, etc.
             await crawler.crawl()
-
             status = crawler.get_status()
 
             log.info(f"DomainCrawler done for put_links action, status: {status}")
-    """ 
-    if "value" in body and body["value"]:
-        # data to initialize dataset included in request
-        input_data = body["value"]
-        msg = "input data doesn't match request type and shape"
-        dims = getShapeDims(shape_json)
-        if not dims:
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        arr_dtype = createDataType(datatype)
 
-        try:
-            input_arr = jsonToArray(dims, arr_dtype, input_data)
-        except ValueError:
-            log.warn(f"ValueError: {msg}")
-            raise HTTPBadRequest(reason=msg)
-        except TypeError:
-            log.warn(f"TypeError: {msg}")
-            raise HTTPBadRequest(reason=msg)
-        except IndexError:
-            log.warn(f"IndexError: {msg}")
-            raise HTTPBadRequest(reason=msg)
-        log.debug(f"got json arr: {input_arr.shape}")
-    else:
-        input_arr = None
-
-    # write data if provided
-    if input_arr is not None:
-        log.debug(f"write input_arr: {input_arr}")
-        # mixin the layout
-        dset_json["layout"] = layout
-        # make selection for entire dataspace
-        dims = getShapeDims(shape_json)
-        slices = []
-        for dim in dims:
-            s = slice(0, dim, 1)
-            slices.append(s)
-        # make a one page list to handle the write in one chunk crawler run
-        # (larger write request should user binary streaming)
-        kwargs = {"page_number": 0, "page": slices}
-        kwargs["dset_json"] = dset_json
-        kwargs["bucket"] = bucket
-        kwargs["select_dtype"] = input_arr.dtype
-        kwargs["data"] = input_arr
-        # do write
-        await doHyperslabWrite(app, request, **kwargs)
-    """
     # dataset creation successful
     resp = await jsonResponse(request, post_rsp, status=201)
     log.response(request, resp=resp)

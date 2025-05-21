@@ -1300,7 +1300,7 @@ def validateDatasetCreationProps(creation_props, type_json=None, shape=None):
             msg = "shape and type must be set to use fillValue"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        
+
         # validate fill value compatible with type
         dt = createDataType(type_json)
         fill_value = creation_props["fillValue"]
@@ -1327,14 +1327,14 @@ def validateDatasetCreationProps(creation_props, type_json=None, shape=None):
                 msg = f"invalid fill value: {fill_value}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-            
+
     if "filters" in creation_props:
         if not type_json or not shape:
             msg = "shape and type must be set to use filters"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        
-        supported_filters = getSupportedFilters() 
+
+        supported_filters = getSupportedFilters()
         # will raise bad request exception if not valid
         supported_filters = getSupportedFilters(include_compressors=True)
         log.debug(f"supported_filters: {supported_filters}")
@@ -1342,6 +1342,7 @@ def validateDatasetCreationProps(creation_props, type_json=None, shape=None):
         # replace filters with our starndardized list
         log.debug(f"setting filters to: {filters_out}")
         creation_props["filters"] = filters_out
+
 
 def getCreateArgs(body,
                   root_id=None,
@@ -1487,13 +1488,14 @@ def getCreateArgs(body,
         pass  # no type
     return kwargs
 
+
 def getDatasetCreateArgs(body,
-                  root_id=None,
-                  bucket=None,
-                  type=None,
-                  implicit=False,
-                  chunk_table=None,
-                  ignore_link=False):
+                         root_id=None,
+                         bucket=None,
+                         type=None,
+                         implicit=False,
+                         chunk_table=None,
+                         ignore_link=False):
 
     """ get args for createDataset from request body """
 
@@ -1504,12 +1506,12 @@ def getDatasetCreateArgs(body,
                            type=type,
                            implicit=implicit,
                            ignore_link=ignore_link)
-    
-    if not "type" in kwargs:
+
+    if "type" not in kwargs:
         msg = "no type specified for create dataset"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    
+
     type_json = kwargs["type"]
     #
     # Validate shape if present
@@ -1518,7 +1520,7 @@ def getDatasetCreateArgs(body,
     # will return scalar shape if no shape key in body
     shape_json = getShapeJson(body)
     kwargs["shape"] = shape_json
-       
+
     # get layout for dataset creation
     log.debug("getting dataset creation settings")
     layout_props = None
@@ -1584,7 +1586,7 @@ def getDatasetCreateArgs(body,
         msg = f"chunk_size: {chunk_size}, min: {min_chunk_size}, "
         msg += f"max: {max_chunk_size}"
         log.debug(msg)
-        
+
         # adjust the chunk shape if chunk size is too small or too big
         adjusted_chunk_dims = None
         if chunk_size < min_chunk_size:
@@ -1599,7 +1601,7 @@ def getDatasetCreateArgs(body,
             log.debug(msg)
             opts = {"chunk_max": max_chunk_size}
             adjusted_chunk_dims = shrinkChunk(chunk_dims, item_size, **opts)
-        
+
         if adjusted_chunk_dims:
             msg = f"requested chunk_dimensions: {chunk_dims} modified "
             msg += f"dimensions: {adjusted_chunk_dims}"
@@ -1676,12 +1678,12 @@ def getDatasetCreateArgs(body,
             msg += f"{max_chunk_size}, for {layout_class} dataset"
             log.warn(msg)
         layout["dims"] = chunk_dims
-        
+
     if layout:
         log.debug(f"setting layout to: {layout}")
         kwargs["layout"] = layout
 
-    # 
+    #
     # get input data if present
     #
     if "value" in body and body["value"]:
@@ -1690,7 +1692,7 @@ def getDatasetCreateArgs(body,
             msg = "null shape datasets can not have initial values"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        
+
         input_data = body["value"]
         msg = "input data doesn't match request type and shape"
         dims = getShapeDims(shape_json)
@@ -1712,7 +1714,7 @@ def getDatasetCreateArgs(body,
             raise HTTPBadRequest(reason=msg)
         log.debug(f"got json arr: {input_arr.shape}")
         kwargs["value"] = input_data
-     
+
     return kwargs
 
 
@@ -1969,7 +1971,6 @@ async def createDataset(app,
                         obj_id=None,
                         creation_props=None,
                         layout=None,
-                        value=None,
                         attrs=None,
                         links=None,
                         implicit=None,
@@ -2000,55 +2001,5 @@ async def createDataset(app,
     kwargs["implicit"] = implicit
     kwargs["bucket"] = bucket
     dset_json = await createObject(app, **kwargs)
-
-    if value:
-        log.debug(f"tbd - set dataset value to: {value}")
-        shape_json = kwargs["shape"]
-        type_json = kwargs["type"]
-        # data to initialize dataset included in request
-        msg = "input data doesn't match request type and shape"
-        dims = getShapeDims(shape_json)
-        if not dims:
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        arr_dtype = createDataType(type_json)
-
-        try:
-            input_arr = jsonToArray(dims, arr_dtype, value)
-        except ValueError:
-            log.warn(f"ValueError: {msg}")
-            raise HTTPBadRequest(reason=msg)
-        except TypeError:
-            log.warn(f"TypeError: {msg}")
-            raise HTTPBadRequest(reason=msg)
-        except IndexError:
-            log.warn(f"IndexError: {msg}")
-            raise HTTPBadRequest(reason=msg)
-        log.debug(f"got json arr: {input_arr.shape}")
-    else:
-        input_arr = None
-
-    # write data if provided
-    if input_arr is not None:
-        log.debug(f"write input_arr: {input_arr}")
-        # mixin the layout
-        dset_json["layout"] = layout
-        # make selection for entire dataspace
-        dims = getShapeDims(shape_json)
-        slices = []
-        for dim in dims:
-            s = slice(0, dim, 1)
-            slices.append(s)
-        # make a one page list to handle the write in one chunk crawler run
-        # (larger write request should user binary streaming)
-        kwargs = {"page_number": 0, "page": slices}
-        kwargs["dset_json"] = dset_json
-        kwargs["bucket"] = bucket
-        kwargs["select_dtype"] = input_arr.dtype
-        kwargs["data"] = input_arr
-        log.debug(f"kwargs for hyperslab write: {kwargs}")
-        # do write
-        #request = None  # don't need in this case since not reading from input stream
-        #await doHyperslabWrite(app, request, **kwargs)
 
     return dset_json
