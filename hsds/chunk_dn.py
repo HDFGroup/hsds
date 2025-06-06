@@ -65,7 +65,7 @@ async def PUT_Chunk(request):
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
 
-    if not isValidUuid(chunk_id, "Chunk"):
+    if not isValidUuid(chunk_id, obj_class="chunks"):
         msg = f"Invalid chunk id: {chunk_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -339,7 +339,7 @@ async def GET_Chunk(request):
         msg = "Missing chunk id"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(chunk_id, "Chunk"):
+    if not isValidUuid(chunk_id, obj_class="chunks"):
         msg = f"Invalid chunk id: {chunk_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -655,7 +655,7 @@ async def POST_Chunk(request):
     chunk_index = getChunkIndex(chunk_id)
     log.debug(f"chunk_index: {chunk_index}")
 
-    if not isValidUuid(chunk_id, "Chunk"):
+    if not isValidUuid(chunk_id, obj_class="chunks"):
         msg = f"Invalid chunk id: {chunk_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -842,7 +842,7 @@ async def DELETE_Chunk(request):
         raise HTTPBadRequest(reason=msg)
     log.info(f"DELETE chunk: {chunk_id}")
 
-    if not isValidUuid(chunk_id, "Chunk"):
+    if not isValidUuid(chunk_id, obj_class="chunks"):
         msg = f"Invalid chunk id: {chunk_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

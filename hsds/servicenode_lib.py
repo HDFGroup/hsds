@@ -1367,7 +1367,7 @@ def getCreateArgs(body,
             msg = "link can't be used with h5path"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        # if ingore_link is set, parent_links will be created post object creation
+        # if ignore_link is set, parent_links will be created post object creation
         link_body = body["link"]
         log.debug(f"link_body: {link_body}")
         if "id" in link_body and not ignore_link:
@@ -1417,7 +1417,11 @@ def getCreateArgs(body,
 
     if "id" in body:
         obj_id = body["id"]
-        # tbd: validate this is a group id
+        if not isValidUuid(obj_id):
+            msg = f"Invalid id: {obj_id}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
         kwargs["obj_id"] = obj_id
         log.debug(f"createObject will use client id: {obj_id}")
 

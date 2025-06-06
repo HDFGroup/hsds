@@ -13,6 +13,9 @@ import unittest
 import time
 import json
 from os import path as pp
+
+from h5json.objid import createObjId
+
 import config
 import helper
 
@@ -489,6 +492,94 @@ class DomainTest(unittest.TestCase):
                 self.assertTrue(k in rspJson)
             # we should get the same value for root id
             self.assertEqual(root_id, rspJson["root"])
+
+    def testCreateDomainWithId(self):
+        domain = self.base_domain + "/newdomainwithid.h5"
+        print("testCreateDomainWithId", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        root_id = createObjId("groups")
+        body = {"root_id": root_id}
+        req = helper.getEndpoint() + "/"
+
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        for k in (
+            "root",
+            "owner",
+            "acls",
+            "created",
+            "lastModified",
+            "version",
+            "limits",
+            "compressors",
+        ):
+            self.assertTrue(k in rspJson)
+
+        self.assertEqual(rspJson["root"], root_id)
+
+        limit_keys = ("min_chunk_size", "max_chunk_size", "max_request_size")
+        limits = rspJson["limits"]
+        for k in limit_keys:
+            self.assertTrue(k in limits)
+            limit = limits[k]
+            self.assertTrue(isinstance(limit, int))
+            self.assertTrue(limit > 0)
+        compressors = rspJson["compressors"]
+        for compressor in EXPECTED_COMPRESSORS:
+            self.assertTrue(compressor in compressors)
+
+        # do a get on the new domain
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        for k in (
+            "root",
+            "owner",
+            "class",
+            "created",
+            "lastModified",
+            "limits",
+            "version",
+        ):
+            self.assertTrue(k in rspJson)
+        # we should get the same value for root id
+        self.assertEqual(root_id, rspJson["root"])
+        # should get limits here too
+        limits = rspJson["limits"]
+        for k in limit_keys:
+            self.assertTrue(k in limits)
+            limit = limits[k]
+            self.assertTrue(isinstance(limit, int))
+            self.assertTrue(limit > 0)
+
+        # verify we can access root groups
+        root_req = helper.getEndpoint() + "/groups/" + root_id
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = self.session.get(root_req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # verify that putting the same domain again fails with a 409 error
+        rsp = self.session.put(req, headers=headers)
+        self.assertEqual(rsp.status_code, 409)
+
+        # PUT with a different domain name should also give a 409
+        # (due to the root_id conflicting)
+        domain2 = self.base_domain + "/newdomainwithid2.h5"
+        headers2 = helper.getRequestHeaders(domain=domain2)
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers2)
+        self.assertEqual(rsp.status_code, 409)
+
+        # Delete the original domain
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = self.session.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # re-create the domain with the same root id
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
     """
     def testCreateDomainWithCustomClass(self):
         domain = self.base_domain + "/newclassdomain.h6"

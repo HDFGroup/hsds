@@ -85,7 +85,7 @@ async def GET_Dataset(request):
         include_attrs = True
 
     if dset_id:
-        if not isValidUuid(dset_id, "Dataset"):
+        if not isValidUuid(dset_id, obj_class="datasets"):
             msg = f"Invalid dataset id: {dset_id}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -96,7 +96,7 @@ async def GET_Dataset(request):
         group_id = None
         if "grpid" in params:
             group_id = params["grpid"]
-            if not isValidUuid(group_id, "Group"):
+            if not isValidUuid(group_id, obj_class="groups"):
                 msg = f"Invalid parent group id: {group_id}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
@@ -140,7 +140,7 @@ async def GET_Dataset(request):
         # throws 404 if not found
         kwargs = {"bucket": bucket, "domain": domain}
         dset_id, domain, _ = await getObjectIdByPath(app, group_id, h5path, **kwargs)
-        if not isValidUuid(dset_id, "Dataset"):
+        if not isValidUuid(dset_id, obj_class="datasets"):
             msg = f"No dataset exist with the path: {h5path}"
             log.warn(msg)
             raise HTTPNotFound()
@@ -228,7 +228,7 @@ async def GET_DatasetType(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(dset_id, "Dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -280,7 +280,7 @@ async def GET_DatasetShape(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(dset_id, "Dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -337,7 +337,7 @@ async def PUT_DatasetShape(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(dset_id, "Dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -700,7 +700,7 @@ async def DELETE_Dataset(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(dset_id, "Dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

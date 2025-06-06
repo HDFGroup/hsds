@@ -98,6 +98,10 @@ async def POST_Group(request):
         raise HTTPBadRequest(reason=msg)
 
     group_id = get_obj_id(request, body=body)
+    deleted_ids = app["deleted_ids"]
+    if group_id in deleted_ids:
+        log.warn(f"POST Group has id: {group_id} that has previously been deleted")
+        deleted_ids.remove(group_id)
 
     log.info(f"POST group: {group_id} bucket: {bucket} body: {body}")
     if not isValidUuid(group_id, obj_class="groups"):

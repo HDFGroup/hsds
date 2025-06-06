@@ -98,6 +98,11 @@ async def POST_Dataset(request):
         log.error(f"Unexpected dataset_id: {dset_id}")
         raise HTTPInternalServerError()
 
+    deleted_ids = app["deleted_ids"]
+    if dset_id in deleted_ids:
+        log.warn(f"POST Dataset has id: {dset_id} that has previously been deleted")
+        deleted_ids.remove(dset_id)
+
     # verify the id doesn't already exist
     obj_found = await check_metadata_obj(app, dset_id, bucket=bucket)
     if obj_found:

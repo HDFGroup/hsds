@@ -95,6 +95,11 @@ async def POST_Datatype(request):
         log.error("Unexpected type_id: {ctype_id}")
         raise HTTPInternalServerError()
 
+    deleted_ids = app["deleted_ids"]
+    if ctype_id in deleted_ids:
+        log.warn(f"POST Dataset has id: {ctype_id} that has previously been deleted")
+        deleted_ids.remove(ctype_id)
+
     # verify the id doesn't already exist
     obj_found = await check_metadata_obj(app, ctype_id, bucket=bucket)
     if obj_found:

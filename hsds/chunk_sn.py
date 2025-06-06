@@ -497,7 +497,7 @@ async def PUT_Value(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(dset_id, "Dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -784,7 +784,7 @@ async def GET_Value(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(dset_id, "Dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -1062,7 +1062,7 @@ async def POST_Value(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(dset_id, "Dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

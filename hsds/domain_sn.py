@@ -18,12 +18,12 @@ import json
 import os.path as op
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
-from aiohttp.web_exceptions import HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPInternalServerError, HTTPGone
 from aiohttp.web_exceptions import HTTPConflict, HTTPServiceUnavailable
 from aiohttp.web import json_response
 
 from h5json.objid import createObjId, getCollectionForId
-from h5json.objid import isValidUuid, isSchema2Id
+from h5json.objid import isValidUuid, isRootObjId, isSchema2Id
 
 from .util.nodeUtil import getNodeCount, getDataNodeUrl
 from .util.httpUtil import getObjectClass, http_post, http_put, http_delete
@@ -99,7 +99,7 @@ async def get_collections(app, root_id, bucket=None, max_objects_limit=None):
 
 
 async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
-    """Iterate through all objects in heirarchy and add to obj_dict
+    """Iterate through all objects in hierarchy and add to obj_dict
     keyed by obj id
     """
 
@@ -754,7 +754,7 @@ async def PUT_Domain(request):
     username, pswd = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)
 
-    # inital perms for owner and default
+    # initial perms for owner and default
     owner_perm = {
         "create": True,
         "read": True,
@@ -858,7 +858,7 @@ async def PUT_Domain(request):
         if "root" in domain_json:
             # nothing to update for folders
             root_id = domain_json["root"]
-            if not isValidUuid(root_id):
+            if not isValidUuid(root_id, obj_class="groups"):
                 msg = f"domain: {domain} with invalid  root id: {root_id}"
                 log.error(msg)
                 raise HTTPInternalServerError()
@@ -985,8 +985,33 @@ async def PUT_Domain(request):
 
     if not is_folder and not linked_json:
         # create a root group for the new domain
-        root_id = createObjId("groups")
-        log.debug(f"new root group id: {root_id}")
+        if body and "root_id" in body:
+            root_id = body["root_id"]
+            if not isRootObjId(root_id):
+                msg = f"invalid client provided root id: {root_id}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            # verify that the group object doesn't already exist
+            log.debug(f"attempting to fetch root id: {root_id}")
+            kwargs = {
+                "refresh": True,
+                "include_links": False,
+                "include_attrs": False,
+                "bucket": bucket,
+            }
+            try:
+                await getObjectJson(app, root_id, **kwargs)
+                msg = "client specified root_id already exists"
+                log.warn(msg)
+                raise HTTPConflict()
+            except HTTPNotFound:
+                log.debug(f"root_id: {root_id} not found (expected)")
+            except HTTPGone:
+                log.debug(f"root_id: {root_id} has been removed (expected)")
+            log.debug(f"using client supplied root_id: {root_id}")
+        else:
+            root_id = createObjId("groups")
+            log.debug(f"new root group id: {root_id}")
         group_json = {"id": root_id, "root": root_id, "domain": domain}
         log.debug(f"create group for domain, body: {group_json}")
 

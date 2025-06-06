@@ -52,7 +52,7 @@ async def GET_Group(request):
     if group_id:
         log.info(f"GET_Group, id: {group_id}")
         # is the id a group id and not something else?
-        if not isValidUuid(group_id, "Group"):
+        if not isValidUuid(group_id, obj_class="groups"):
             msg = f"Invalid group id: {group_id}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -99,7 +99,7 @@ async def GET_Group(request):
         kwargs = {"bucket": bucket, "domain": domain}
         group_id, domain, obj_json = await getObjectIdByPath(app, group_id, h5path, **kwargs)
 
-        if not isValidUuid(group_id, "Group"):
+        if not isValidUuid(group_id, obj_class="groups"):
             msg = f"No group exist with the path: {h5path}"
             log.warn(msg)
             raise HTTPNotFound()
@@ -296,7 +296,7 @@ async def DELETE_Group(request):
         msg = "Missing group id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(group_id, "Group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
