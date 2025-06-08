@@ -18,7 +18,8 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
-from .util.idUtil import isValidUuid, validateUuid
+from h5json.objid import isValidUuid, validateUuid
+
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from .datanode_lib import delete_metadata_obj, check_metadata_obj
 from .util.domainUtil import isValidBucketName
@@ -33,7 +34,7 @@ async def GET_Datatype(request):
     params = request.rel_url.query
     ctype_id = get_obj_id(request)
 
-    if not isValidUuid(ctype_id, obj_class="type"):
+    if not isValidUuid(ctype_id, obj_class="datatypes"):
         log.error(f"Unexpected type_id: {ctype_id}")
         raise HTTPInternalServerError()
 
@@ -90,15 +91,21 @@ async def POST_Datatype(request):
         raise HTTPBadRequest(reason=msg)
 
     ctype_id = get_obj_id(request, body=body)
-    if not isValidUuid(ctype_id, obj_class="datatype"):
+    if not isValidUuid(ctype_id, obj_class="datatypes"):
         log.error("Unexpected type_id: {ctype_id}")
         raise HTTPInternalServerError()
+
+    deleted_ids = app["deleted_ids"]
+    if ctype_id in deleted_ids:
+        log.warn(f"POST Dataset has id: {ctype_id} that has previously been deleted")
+        deleted_ids.remove(ctype_id)
 
     # verify the id doesn't already exist
     obj_found = await check_metadata_obj(app, ctype_id, bucket=bucket)
     if obj_found:
-        log.error(f"Post with existing type_id: {ctype_id}")
-        raise HTTPInternalServerError()
+        msg = f"Post with existing type_id: {ctype_id}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     root_id = None
 
@@ -120,10 +127,17 @@ async def POST_Datatype(request):
         raise HTTPInternalServerError()
     type_json = body["type"]
 
+    if "attributes" in body:
+        # initialize attributes
+        attrs = body["attributes"]
+        log.debug(f"POST datatype with attributes: {attrs}")
+    else:
+        attrs = {}
+
     # ok - all set, create committed type obj
     now = getNow(app)
 
-    log.info(f"POST_datatype, typejson: {type_json}")
+    log.info(f"POST_datatype, type_json: {type_json}")
 
     ctype_json = {
         "id": ctype_id,
@@ -131,7 +145,7 @@ async def POST_Datatype(request):
         "created": now,
         "lastModified": now,
         "type": type_json,
-        "attributes": {},
+        "attributes": attrs,
     }
 
     kwargs = {"bucket": bucket, "notify": True, "flush": True}
@@ -143,7 +157,7 @@ async def POST_Datatype(request):
     resp_json["created"] = ctype_json["created"]
     resp_json["lastModified"] = ctype_json["lastModified"]
     resp_json["type"] = type_json
-    resp_json["attributeCount"] = 0
+    resp_json["attributeCount"] = len(attrs)
     resp = json_response(resp_json, status=201)
 
     log.response(request, resp=resp)

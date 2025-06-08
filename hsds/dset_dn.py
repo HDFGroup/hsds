@@ -17,8 +17,8 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPConflict
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
+from h5json.objid import isValidUuid, validateUuid
 
-from .util.idUtil import isValidUuid, validateUuid
 from .util.domainUtil import isValidBucketName
 from .util.timeUtil import getNow
 from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj
@@ -33,7 +33,7 @@ async def GET_Dataset(request):
     params = request.rel_url.query
     dset_id = get_obj_id(request)
 
-    if not isValidUuid(dset_id, obj_class="dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         log.error(f"Unexpected dataset_id: {dset_id}")
         raise HTTPInternalServerError()
     if "bucket" in params:
@@ -94,15 +94,21 @@ async def POST_Dataset(request):
         raise HTTPBadRequest(reason=msg)
 
     dset_id = get_obj_id(request, body=body)
-    if not isValidUuid(dset_id, obj_class="dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         log.error(f"Unexpected dataset_id: {dset_id}")
         raise HTTPInternalServerError()
+
+    deleted_ids = app["deleted_ids"]
+    if dset_id in deleted_ids:
+        log.warn(f"POST Dataset has id: {dset_id} that has previously been deleted")
+        deleted_ids.remove(dset_id)
 
     # verify the id doesn't already exist
     obj_found = await check_metadata_obj(app, dset_id, bucket=bucket)
     if obj_found:
-        log.error("Post with existing dset_id: {}".format(dset_id))
-        raise HTTPInternalServerError()
+        msg = f"Post with existing dset_id: {dset_id}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     if "root" not in body:
         msg = "POST_Dataset with no root"
@@ -134,7 +140,14 @@ async def POST_Dataset(request):
     # ok - all set, create committed type obj
     now = getNow(app)
 
-    log.debug(f"POST_dataset typejson: {type_json}, shapejson: {shape_json}")
+    if "attributes" in body:
+        # initialize attributes
+        attrs = body["attributes"]
+        log.debug(f"POST Dataset with attributes: {attrs}")
+    else:
+        attrs = {}
+
+    log.debug(f"POST_dataset type_json: {type_json}, shape_json: {shape_json}")
 
     dset_json = {
         "id": dset_id,
@@ -143,7 +156,7 @@ async def POST_Dataset(request):
         "lastModified": now,
         "type": type_json,
         "shape": shape_json,
-        "attributes": {},
+        "attributes": attrs,
     }
 
     if "creationProperties" in body:
@@ -161,7 +174,9 @@ async def POST_Dataset(request):
     resp_json["type"] = type_json
     resp_json["shape"] = shape_json
     resp_json["lastModified"] = dset_json["lastModified"]
-    resp_json["attributeCount"] = 0
+    resp_json["attributeCount"] = len(attrs)
+    if layout is not None:
+        resp_json["layout"] = layout
 
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
@@ -176,7 +191,7 @@ async def DELETE_Dataset(request):
     dset_id = request.match_info.get("id")
     log.info(f"DELETE dataset: {dset_id}")
 
-    if not isValidUuid(dset_id, obj_class="dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         log.error(f"Unexpected dataset id: {dset_id}")
         raise HTTPInternalServerError()
 
@@ -220,7 +235,7 @@ async def PUT_DatasetShape(request):
     params = request.rel_url.query
     dset_id = request.match_info.get("id")
 
-    if not isValidUuid(dset_id, obj_class="dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         log.error(f"Unexpected dset_id: {dset_id}")
         raise HTTPInternalServerError()
 

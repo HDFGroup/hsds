@@ -19,12 +19,13 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPNotFound, H
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
+from h5json.hdf5dtype import getItemSize, createDataType
+from h5json.array_util import arrayToBytes, jsonToArray, decodeData
+from h5json.array_util import bytesToArray, bytesArrayToList, getNumElements
+
 from .util.attrUtil import validateAttributeName, isEqualAttr
-from .util.hdf5dtype import getItemSize, createDataType
 from .util.globparser import globmatch
 from .util.dsetUtil import getShapeDims
-from .util.arrayUtil import arrayToBytes, jsonToArray, decodeData
-from .util.arrayUtil import bytesToArray, bytesArrayToList, getNumElements
 from .util.domainUtil import isValidBucketName
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import hsds_logger as log

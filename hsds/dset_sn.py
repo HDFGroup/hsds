@@ -14,224 +14,27 @@
 # handles dataset requests
 #
 
-import math
 from json import JSONDecodeError
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalServerError
+
+from h5json.hdf5dtype import createDataType
+from h5json.array_util import getNumElements, jsonToArray
+from h5json.objid import isValidUuid, isSchema2Id
 
 from .util.httpUtil import getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse, getBooleanParam
-from .util.idUtil import isValidUuid, isSchema2Id
-from .util.dsetUtil import getPreviewQuery, getFilterItem, getShapeDims
-from .util.arrayUtil import getNumElements, getNumpyValue
-from .util.chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
-from .util.chunkUtil import getContiguousLayout
+from .util.dsetUtil import getPreviewQuery, getShapeDims
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
-from .util.storUtil import getSupportedFilters
-from .util.hdf5dtype import validateTypeItem, createDataType, getBaseTypeJson
-from .util.hdf5dtype import getItemSize
-from .util.linkUtil import validateLinkName
 from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
 from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo
-from .servicenode_lib import createObject, createObjectByPath, deleteObject
-from .dset_lib import updateShape, deleteAllChunks
-from . import config
+from .servicenode_lib import getDatasetCreateArgs, createDataset, deleteObject
+from .dset_lib import updateShape, deleteAllChunks, doHyperslabWrite
+from .post_crawl import createDatasets
+from .domain_crawl import DomainCrawler
 from . import hsds_logger as log
-
-
-async def validateChunkLayout(app, shape_json, item_size, layout, bucket=None):
-    """
-    Use chunk layout given in the creationPropertiesList (if defined and
-    layout is valid).
-    Return chunk_layout_json
-    """
-
-    rank = 0
-    space_dims = None
-    chunk_dims = None
-    max_dims = None
-
-    if "dims" in shape_json:
-        space_dims = shape_json["dims"]
-        rank = len(space_dims)
-
-    if "maxdims" in shape_json:
-        max_dims = shape_json["maxdims"]
-    if "dims" in layout:
-        chunk_dims = layout["dims"]
-
-    if chunk_dims:
-        # validate that the chunk_dims are valid and correlates with the
-        # dataset shape
-        if isinstance(chunk_dims, int):
-            chunk_dims = [
-                chunk_dims,
-            ]  # promote to array
-        if len(chunk_dims) != rank:
-            msg = "Layout rank does not match shape rank"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        for i in range(rank):
-            dim_extent = space_dims[i]
-            chunk_extent = chunk_dims[i]
-            if not isinstance(chunk_extent, int):
-                msg = "Layout dims must be integer or integer array"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            if chunk_extent <= 0:
-                msg = "Invalid layout value"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            if max_dims is None:
-                if chunk_extent > dim_extent:
-                    msg = "Invalid layout value"
-                    log.warn(msg)
-                    raise HTTPBadRequest(reason=msg)
-            elif max_dims[i] != 0:
-                if chunk_extent > max_dims[i]:
-                    msg = "Invalid layout value for extensible dimension"
-                    log.warn(msg)
-                    raise HTTPBadRequest(reason=msg)
-            else:
-                pass  # allow any positive value for unlimited dimensions
-
-    if "class" not in layout:
-        msg = "class key not found in layout for creation property list"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-
-    layout_class = layout["class"]
-
-    if layout_class == "H5D_CONTIGUOUS_REF":
-        # reference to a dataset in a traditional HDF5 files with
-        # contigious storage
-        if item_size == "H5T_VARIABLE":
-            # can't be used with variable types...
-            msg = "Datsets with variable types cannot be used with "
-            msg += "reference layouts"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if "file_uri" not in layout:
-            # needed for H5D_CONTIGUOUS_REF
-            msg = "'file_uri' key must be provided for "
-            msg += "H5D_CONTIGUOUS_REF layout"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if "offset" not in layout:
-            # needed for H5D_CONTIGUOUS_REF
-            msg = "'offset' key must be provided for "
-            msg += "H5D_CONTIGUOUS_REF layout"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if "size" not in layout:
-            # needed for H5D_CONTIGUOUS_REF
-            msg = "'size' key must be provided for "
-            msg += "H5D_CONTIGUOUS_REF layout"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if "dims" in layout:
-            # used defined chunk layout not allowed for H5D_CONTIGUOUS_REF
-            msg = "'dims' key can not be provided for "
-            msg += "H5D_CONTIGUOUS_REF layout"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-    elif layout_class == "H5D_CHUNKED_REF":
-        # reference to a dataset in a traditional HDF5 files with
-        # chunked storage
-        if item_size == "H5T_VARIABLE":
-            # can't be used with variable types..
-            msg = "Datsets with variable types cannot be used with "
-            msg += "reference layouts"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if "file_uri" not in layout:
-            # needed for H5D_CHUNKED_REF
-            msg = "'file_uri' key must be provided for "
-            msg += "H5D_CHUNKED_REF layout"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if "dims" not in layout:
-            # needed for H5D_CHUNKED_REF
-            msg = "'dimns' key must be provided for "
-            msg += "H5D_CHUNKED_REF layout"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if "chunks" not in layout:
-            msg = "'chunks' key must be provided for "
-            msg += "H5D_CHUNKED_REF layout"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-    elif layout_class == "H5D_CHUNKED_REF_INDIRECT":
-        # reference to a dataset in a traditional HDF5 files with chunked
-        # storage using an auxillary dataset
-        if item_size == "H5T_VARIABLE":
-            # can't be used with variable types..
-            msg = "Datsets with variable types cannot be used with "
-            msg += "reference layouts"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if "dims" not in layout:
-            # needed for H5D_CHUNKED_REF_INDIRECT
-            msg = "'dimns' key must be provided for "
-            msg += "H5D_CHUNKED_REF_INDIRECT layout"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if "chunk_table" not in layout:
-            msg = "'chunk_table' key must be provided for "
-            msg += "H5D_CHUNKED_REF_INDIRECT layout"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        chunktable_id = layout["chunk_table"]
-        if not isValidUuid(chunktable_id, "Dataset"):
-            msg = f"Invalid chunk table id: {chunktable_id}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        # verify the chunk table exists and is of reasonable shape
-        try:
-            chunktable_json = await getDsetJson(app, chunktable_id, bucket=bucket)
-        except HTTPNotFound:
-            msg = f"chunk table id: {chunktable_id} not found"
-            log.warn(msg)
-            raise
-        chunktable_shape = chunktable_json["shape"]
-        if chunktable_shape["class"] == "H5S_NULL":
-            msg = "Null space datasets can not be used as chunk tables"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
-        chunktable_dims = getShapeDims(chunktable_shape)
-        if len(chunktable_dims) != len(space_dims):
-            msg = "Chunk table rank must be same as dataspace rank"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-    elif layout_class == "H5D_CHUNKED":
-        if "dims" not in layout:
-            msg = "dims key not found in layout for creation property list"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if shape_json["class"] != "H5S_SIMPLE":
-            msg = "Bad Request: chunked layout not valid with shape class: "
-            msg += f"{shape_json['class']}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-    elif layout_class == "H5D_CONTIGUOUS":
-        if "dims" in layout:
-            msg = "dims key found in layout for creation property list "
-            msg += "for H5D_CONTIGUOUS storage class"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-    elif layout_class == "H5D_COMPACT":
-        if "dims" in layout:
-            msg = "dims key found in layout for creation property list "
-            msg += "for H5D_COMPACT storage class"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-    else:
-        msg = f"Unexpected layout: {layout_class}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
 
 
 async def getDatasetDetails(app, dset_id, root_id, bucket=None):
@@ -282,7 +85,7 @@ async def GET_Dataset(request):
         include_attrs = True
 
     if dset_id:
-        if not isValidUuid(dset_id, "Dataset"):
+        if not isValidUuid(dset_id, obj_class="datasets"):
             msg = f"Invalid dataset id: {dset_id}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -293,7 +96,7 @@ async def GET_Dataset(request):
         group_id = None
         if "grpid" in params:
             group_id = params["grpid"]
-            if not isValidUuid(group_id, "Group"):
+            if not isValidUuid(group_id, obj_class="groups"):
                 msg = f"Invalid parent group id: {group_id}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
@@ -337,7 +140,7 @@ async def GET_Dataset(request):
         # throws 404 if not found
         kwargs = {"bucket": bucket, "domain": domain}
         dset_id, domain, _ = await getObjectIdByPath(app, group_id, h5path, **kwargs)
-        if not isValidUuid(dset_id, "Dataset"):
+        if not isValidUuid(dset_id, obj_class="datasets"):
             msg = f"No dataset exist with the path: {h5path}"
             log.warn(msg)
             raise HTTPNotFound()
@@ -425,7 +228,7 @@ async def GET_DatasetType(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(dset_id, "Dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -477,7 +280,7 @@ async def GET_DatasetShape(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(dset_id, "Dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -534,7 +337,7 @@ async def PUT_DatasetShape(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(dset_id, "Dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -688,472 +491,200 @@ async def POST_Dataset(request):
 
     verifyRoot(domain_json)
 
-    #
-    # validate type input
-    #
-    if "type" not in body:
-        msg = "POST Dataset has no type key in body"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
+    # allow parent group creation or not
+    implicit = getBooleanParam(params, "implicit")
 
-    datatype = body["type"]
-    log.debug(f"got datatype: {datatype}")
-    if isinstance(datatype, str) and datatype.startswith("t-"):
-        # Committed type - fetch type json from DN
-        ctype_id = datatype
-        log.debug(f"got ctypeid: {ctype_id}")
-        ctype_json = await getObjectJson(app, ctype_id, bucket=bucket)
-        log.debug(f"ctype: {ctype_json}")
-        if ctype_json["root"] != root_id:
-            msg = "Referenced committed datatype must belong in same domain"
+    post_rsp = None
+
+    datatype_json = None
+    init_values = []    # value initializer for each object
+
+    def _updateInitValuesList(kwargs):
+        # remove value key from kwargs and append
+        # to init_values list
+        if "value" in kwargs:
+            init_values.append(kwargs["value"])
+            del kwargs["value"]
+        else:
+            # add a placeholder
+            init_values.append(None)
+
+    #
+    # handle case of committed type input
+    #
+    if isinstance(body, dict) and "type" in body:
+
+        body_type = body["type"]
+        log.debug(f"got datatype: {body_type}")
+        if isinstance(body_type, str) and body_type.startswith("t-"):
+            ctype_id = body_type
+            # Committed type - fetch type json from DN
+            log.debug(f"got ctype_id: {ctype_id}")
+            ctype_json = await getObjectJson(app, ctype_id, bucket=bucket)
+            log.debug(f"ctype: {ctype_json}")
+            if ctype_json["root"] != root_id:
+                msg = "Referenced committed datatype must belong in same domain"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            datatype_json = ctype_json["type"]
+            # add the ctype_id to type type
+            datatype_json["id"] = ctype_id
+        else:
+            pass  # we'll fetch type in getDatasetCreateArgs
+
+    if isinstance(body, list):
+        count = len(body)
+        log.debug(f"multiple dataset create: {count} items")
+        if count == 0:
+            # equivalent to no body
+            msg = "POST Dataset with no body"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        datatype = ctype_json["type"]
-        # add the ctype_id to type type
-        datatype["id"] = ctype_id
-    elif isinstance(datatype, str):
+        elif count == 1:
+            # just create one object in typical way
+            kwargs = getDatasetCreateArgs(body[0],
+                                          root_id=root_id,
+                                          type=datatype_json,
+                                          bucket=bucket,
+                                          implicit=implicit)
+            _updateInitValuesList(kwargs)
+        else:
+            # create multiple dataset objects
+            kwarg_list = []  # list of kwargs for each object
+
+            for item in body:
+                log.debug(f"item: {item}")
+                if not isinstance(item, dict):
+                    msg = f"Post_Dataset - invalid item type: {type(item)}"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+                kwargs = getDatasetCreateArgs(item,
+                                              root_id=root_id,
+                                              type=datatype_json,
+                                              bucket=bucket)
+                _updateInitValuesList(kwargs)
+                kwargs["ignore_link"] = True
+                kwarg_list.append(kwargs)
+            kwargs = {"bucket": bucket, "root_id": root_id}
+            if datatype_json:
+                kwargs["type"] = datatype_json
+            log.debug(f"createDatasetObjects, items: {kwarg_list}")
+            post_rsp = await createDatasets(app, kwarg_list, **kwargs)
+    else:
+        # single object create
+        kwargs = getDatasetCreateArgs(body,
+                                      root_id=root_id,
+                                      type=datatype_json,
+                                      bucket=bucket,
+                                      implicit=implicit)
+        _updateInitValuesList(kwargs)
+        log.debug(f"kwargs for dataset create: {kwargs}")
+
+    if post_rsp is None:
+        # Handle cases other than multi ctype create here
+        post_rsp = await createDataset(app, **kwargs)
+
+    log.debug(f"returning resp: {post_rsp}")
+
+    if "objects" in post_rsp:
+        # add any links in multi request
+        objects = post_rsp["objects"]
+        obj_count = len(objects)
+        log.debug(f"Post dataset multi create: {obj_count} objects")
+        if len(body) != obj_count:
+            msg = f"Expected {obj_count} objects but got {len(body)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        obj_count = 1  # single object create
+        objects = [post_rsp, ]  # treat as an array to make the following code more consistent
+
+    if len(init_values) != obj_count:
+        msg = f"Expected {obj_count} init values"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    # write any init data values
+    for index in range(obj_count):
+        init_data = init_values[index]
+        if init_data is None:
+            continue
+        dset_json = objects[index]
+        log.debug(f"init value, post_rsp: {dset_json}")
+        shape_json = dset_json["shape"]
+        type_json = dset_json["type"]
+        arr_dtype = createDataType(type_json)
+        dims = getShapeDims(shape_json)
         try:
-            # convert predefined type string (e.g. "H5T_STD_I32LE") to
-            # corresponding json representation
-            datatype = getBaseTypeJson(datatype)
-            log.debug(f"got datatype: {datatype}")
+            input_arr = jsonToArray(dims, arr_dtype, init_data)
+        except ValueError:
+            log.warn(f"ValueError: {msg}")
+            raise HTTPBadRequest(reason=msg)
         except TypeError:
-            msg = "POST Dataset with invalid predefined type"
+            log.warn(f"TypeError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        except IndexError:
+            log.warn(f"IndexError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"got json arr: {input_arr.shape}")
+
+        # write data if provided
+        log.debug(f"write input_arr: {input_arr}")
+        # make selection for entire dataspace
+        dims = getShapeDims(shape_json)
+        slices = []
+        for dim in dims:
+            s = slice(0, dim, 1)
+            slices.append(s)
+        # make a one page list to handle the write in one chunk crawler run
+        # (larger write request should user binary streaming)
+        kwargs = {"page_number": 0, "page": slices}
+        kwargs["dset_json"] = dset_json
+        kwargs["bucket"] = bucket
+        kwargs["select_dtype"] = input_arr.dtype
+        kwargs["data"] = input_arr
+        # do write
+        await doHyperslabWrite(app, request, **kwargs)
+
+    if "objects" in post_rsp:
+        # add any links in multi request
+        objects = post_rsp["objects"]
+        obj_count = len(objects)
+        log.debug(f"Post datatype multi create: {obj_count} objects")
+        if len(body) != obj_count:
+            msg = f"Expected {obj_count} objects but got {len(body)}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        parent_ids = {}
+        for index in range(obj_count):
+            item = body[index]
+            if "link" in item:
+                link_item = item["link"]
+                parent_id = link_item.get("id")
+                title = link_item.get("name")
+                if parent_id and title:
+                    # add a hard link
+                    object = objects[index]
+                    obj_id = object["id"]
+                    if parent_id not in parent_ids:
+                        parent_ids[parent_id] = {}
+                    links = parent_ids[parent_id]
+                    links[title] = {"id": obj_id}
+        if parent_ids:
+            log.debug(f"POST dataset multi - adding links: {parent_ids}")
+            kwargs = {"action": "put_link", "bucket": bucket}
+            kwargs["replace"] = True
 
-    try:
-        validateTypeItem(datatype)
-    except KeyError as ke:
-        msg = f"KeyError creating type: {ke}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    except TypeError as te:
-        msg = f"TypeError creating type: {te}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    except ValueError as ve:
-        msg = f"ValueError creating type: {ve}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
+            crawler = DomainCrawler(app, parent_ids, **kwargs)
 
-    item_size = getItemSize(datatype)
+            # will raise exception on not found, server busy, etc.
+            await crawler.crawl()
+            status = crawler.get_status()
 
-    #
-    # Validate shape input
-    #
-    dims = None
-    shape_json = {}
-    rank = 0
-    chunk_size = None
-
-    if "shape" not in body:
-        shape_json["class"] = "H5S_SCALAR"
-    else:
-        shape = body["shape"]
-        log.debug(f"got shape: {shape}")
-        if isinstance(shape, int):
-            shape_json["class"] = "H5S_SIMPLE"
-            dims = [shape, ]
-            shape_json["dims"] = dims
-            rank = 1
-        elif isinstance(shape, str):
-            # only valid string value is H5S_NULL or H5S_SCALAR
-            if shape == "H5S_NULL":
-                shape_json["class"] = "H5S_NULL"
-            elif shape == "H5S_SCALAR":
-                shape_json["class"] = "H5S_SCALAR"
-            else:
-                msg = "POST Datset with invalid shape value"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-        elif isinstance(shape, list):
-            if len(shape) == 0:
-                shape_json["class"] = "H5S_SCALAR"
-            else:
-                shape_json["class"] = "H5S_SIMPLE"
-                shape_json["dims"] = shape
-                dims = shape
-                rank = len(dims)
-        else:
-            msg = "Bad Request: shape is invalid"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
-    if dims is not None:
-        for i in range(rank):
-            extent = dims[i]
-            if not isinstance(extent, int):
-                msg = "Invalid shape type"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            if extent < 0:
-                msg = "shape dimension is negative"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-    maxdims = None
-    if "maxdims" in body:
-        if dims is None:
-            msg = "Maxdims cannot be supplied if space is NULL"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
-        maxdims = body["maxdims"]
-        if isinstance(maxdims, int):
-            dim1 = maxdims
-            maxdims = [dim1]
-        elif isinstance(maxdims, list):
-            pass  # can use as is
-        else:
-            msg = "Bad Request: maxdims is invalid"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        if len(dims) != len(maxdims):
-            msg = "Maxdims rank doesn't match Shape"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
-    if maxdims is not None:
-        for extent in maxdims:
-            if not isinstance(extent, int):
-                msg = "Invalid maxdims type"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            if extent < 0:
-                msg = "maxdims dimension is negative"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-        if len(maxdims) != len(dims):
-            msg = "Bad Request: maxdims array length must equal "
-            msg += "shape array length"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        shape_json["maxdims"] = []
-        for i in range(rank):
-            maxextent = maxdims[i]
-            if not isinstance(maxextent, int):
-                msg = "Bad Request: maxdims must be integer type"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            elif maxextent == 0:
-                # unlimited dimension
-                shape_json["maxdims"].append(0)
-            elif maxextent < dims[i]:
-                msg = "Bad Request: maxdims extent can't be smaller "
-                msg += "than shape extent"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            else:
-                shape_json["maxdims"].append(maxextent)
-
-    layout_props = None
-    min_chunk_size = int(config.get("min_chunk_size"))
-    max_chunk_size = int(config.get("max_chunk_size"))
-    if "creationProperties" in body:
-        creationProperties = body["creationProperties"]
-        log.debug(f"got creationProperties: {creationProperties}")
-        if "layout" in creationProperties:
-            layout_props = creationProperties["layout"]
-            await validateChunkLayout(app, shape_json, item_size, layout_props, bucket=bucket)
-    else:
-        creationProperties = {}
-
-    # TBD: check for invalid layout class...
-    if layout_props:
-        if layout_props["class"] == "H5D_CONTIGUOUS":
-            # treat contiguous as chunked
-            layout_class = "H5D_CHUNKED"
-        else:
-            layout_class = layout_props["class"]
-    elif shape_json["class"] != "H5S_NULL":
-        layout_class = "H5D_CHUNKED"
-    else:
-        layout_class = None
-
-    if layout_class == "H5D_COMPACT":
-        layout = {"class": "H5D_COMPACT"}
-    elif layout_class:
-        # initialize to H5D_CHUNKED
-        layout = {"class": "H5D_CHUNKED"}
-    else:
-        # null space - no layout
-        layout = None
-
-    if layout_props and "dims" in layout_props:
-        chunk_dims = layout_props["dims"]
-    else:
-        chunk_dims = None
-
-    if layout_class == "H5D_CONTIGUOUS_REF":
-        kwargs = {"chunk_min": min_chunk_size, "chunk_max": max_chunk_size}
-        chunk_dims = getContiguousLayout(shape_json, item_size, **kwargs)
-        layout["dims"] = chunk_dims
-        log.debug(f"autoContiguous layout: {layout}")
-
-    if layout_class == "H5D_CHUNKED" and chunk_dims is None:
-        # do autochunking
-        chunk_dims = guessChunk(shape_json, item_size)
-        log.debug(f"initial autochunk layout: {chunk_dims}")
-
-    if layout_class == "H5D_CHUNKED":
-        chunk_size = getChunkSize(chunk_dims, item_size)
-
-        msg = f"chunk_size: {chunk_size}, min: {min_chunk_size}, "
-        msg += f"max: {max_chunk_size}"
-        log.debug(msg)
-        # adjust the chunk shape if chunk size is too small or too big
-        adjusted_chunk_dims = None
-        if chunk_size < min_chunk_size:
-            msg = f"chunk size: {chunk_size} less than min size: "
-            msg += f"{min_chunk_size}, expanding"
-            log.debug(msg)
-            kwargs = {"chunk_min": min_chunk_size, "layout_class": layout_class}
-            adjusted_chunk_dims = expandChunk(chunk_dims, item_size, shape_json, **kwargs)
-        elif chunk_size > max_chunk_size:
-            msg = f"chunk size: {chunk_size} greater than max size: "
-            msg += f"{max_chunk_size}, shrinking"
-            log.debug(msg)
-            kwargs = {"chunk_max": max_chunk_size}
-            adjusted_chunk_dims = shrinkChunk(chunk_dims, item_size, **kwargs)
-        if adjusted_chunk_dims:
-            msg = f"requested chunk_dimensions: {chunk_dims} modified "
-            msg += f"dimensions: {adjusted_chunk_dims}"
-            log.debug(msg)
-            layout["dims"] = adjusted_chunk_dims
-        else:
-            layout["dims"] = chunk_dims  # don't need to adjust chunk size
-
-        # set partition_count if needed:
-        max_chunks_per_folder = int(config.get("max_chunks_per_folder"))
-        set_partition = False
-        if max_chunks_per_folder > 0:
-            if "dims" in shape_json and "dims" in layout:
-                set_partition = True
-
-        if set_partition:
-            chunk_dims = layout["dims"]
-            shape_dims = shape_json["dims"]
-            if "maxdims" in shape_json:
-                max_dims = shape_json["maxdims"]
-            else:
-                max_dims = None
-            num_chunks = 1
-            rank = len(shape_dims)
-            unlimited_count = 0
-            if max_dims:
-                for i in range(rank):
-                    if max_dims[i] == 0:
-                        unlimited_count += 1
-                msg = f"number of unlimited dimensions: {unlimited_count}"
-                log.debug(msg)
-
-            for i in range(rank):
-                max_dim = 1
-                if max_dims:
-                    max_dim = max_dims[i]
-                    if max_dim == 0:
-                        # don't really know what the ultimate extent
-                        # could be, but assume 10^6 for total number of
-                        # elements and square-shaped array...
-                        MAX_ELEMENT_GUESS = 10.0 ** 6
-                        exp = 1 / unlimited_count
-                        max_dim = int(math.pow(MAX_ELEMENT_GUESS, exp))
-                else:
-                    max_dim = shape_dims[i]
-                num_chunks *= math.ceil(max_dim / chunk_dims[i])
-
-            if num_chunks > max_chunks_per_folder:
-                partition_count = math.ceil(num_chunks / max_chunks_per_folder)
-                msg = f"set partition count to: {partition_count}, "
-                msg += f"num_chunks: {num_chunks}"
-                log.info(msg)
-                layout["partition_count"] = partition_count
-            else:
-                msg = "do not need chunk partitions, num_chunks: "
-                msg += f"{num_chunks} max_chunks_per_folder: "
-                msg += f"{max_chunks_per_folder}"
-                log.info(msg)
-
-    if layout_class in ("H5D_CHUNKED_REF", "H5D_CHUNKED_REF_INDIRECT"):
-        chunk_size = getChunkSize(chunk_dims, item_size)
-
-        msg = f"chunk_size: {chunk_size}, min: {min_chunk_size}, "
-        msg += f"max: {max_chunk_size}"
-        log.debug(msg)
-        # nothing to do about inefficiently small chunks, but large chunks
-        # can be subdivided
-        if chunk_size < min_chunk_size:
-            msg = f"chunk size: {chunk_size} less than min size: "
-            msg += f"{min_chunk_size} for {layout_class} dataset"
-            log.warn(msg)
-        elif chunk_size > max_chunk_size:
-            msg = f"chunk size: {chunk_size} greater than max size: "
-            msg += f"{max_chunk_size}, for {layout_class} dataset"
-            log.warn(msg)
-        layout["dims"] = chunk_dims
-
-    if creationProperties:
-        # TBD - validate all creationProperties
-        if "fillValue" in creationProperties:
-            # validate fill value compatible with type
-            dt = createDataType(datatype)
-            fill_value = creationProperties["fillValue"]
-            if "fillValue_encoding" in creationProperties:
-                fill_value_encoding = creationProperties["fillValue_encoding"]
-
-                if fill_value_encoding not in ("None", "base64"):
-                    msg = f"unexpected value for fill_value_encoding: {fill_value_encoding}"
-                    log.warn(msg)
-                    raise HTTPBadRequest(reason=msg)
-                else:
-                    # should see a string in this case
-                    if not isinstance(fill_value, str):
-                        msg = f"unexpected fill value: {fill_value} "
-                        msg += f"for encoding: {fill_value_encoding}"
-                        log.warn(msg)
-                        raise HTTPBadRequest(reason=msg)
-            else:
-                fill_value_encoding = None
-
-            try:
-                getNumpyValue(fill_value, dt=dt, encoding=fill_value_encoding)
-            except ValueError:
-                msg = f"invalid fill value: {fill_value}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-        if "filters" in creationProperties:
-            # convert to standard representation
-            # refer to https://hdf5-json.readthedocs.io/en/latest/bnf/\
-            # filters.html#grammar-token-filter_list
-            f_in = creationProperties["filters"]
-            supported_filters = getSupportedFilters(include_compressors=True)
-            log.debug(f"supported_compressors: {supported_filters}")
-
-            log.debug(f"filters provided in creationProperties: {f_in}")
-
-            if not isinstance(f_in, list):
-                msg = "Expected filters in creationProperties to be a list"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-            if f_in and chunk_size is None:
-                # filters can only be used with chunked datasets
-                msg = "Filters can only be used with chunked datasets"
-                log.warning(msg)
-                raise HTTPBadRequest(reason=msg)
-
-            f_out = []
-            for filter in f_in:
-                if isinstance(filter, int) or isinstance(filter, str):
-                    item = getFilterItem(filter)
-                    if not item:
-                        msg = f"filter {filter} not recognized"
-                        log.warn(msg)
-                        raise HTTPBadRequest(reason=msg)
-
-                    if item["name"] not in supported_filters:
-                        msg = f"filter {filter} is not supported"
-                        log.warn(msg)
-                        raise HTTPBadRequest(reason=msg)
-                    f_out.append(item)
-                elif isinstance(filter, dict):
-                    if "class" not in filter:
-                        msg = "expected 'class' key for filter property"
-                        log.warn(msg)
-                        raise HTTPBadRequest(reason=msg)
-                    if filter["class"] != "H5Z_FILTER_USER":
-                        item = getFilterItem(filter["class"])
-                    elif "id" in filter:
-                        item = getFilterItem(filter["id"])
-                    elif "name" in filter:
-                        item = getFilterItem(filter["name"])
-                    else:
-                        item = None
-                    if not item:
-                        msg = f"filter {filter['class']} not recognized"
-                        log.warn(msg)
-                        raise HTTPBadRequest(reason=msg)
-                    if "id" not in filter:
-                        filter["id"] = item["id"]
-                    elif item["id"] != filter["id"]:
-                        msg = f"Expected {filter['class']} to have id: "
-                        msg += f"{item['id']} but got {filter['id']}"
-                        log.warn(msg)
-                        raise HTTPBadRequest(reason=msg)
-                    if "name" not in filter:
-                        filter["name"] = item["name"]
-                    if filter["name"] not in supported_filters:
-                        msg = f"filter {filter} is not supported"
-                        log.warn(msg)
-                        raise HTTPBadRequest(reason=msg)
-
-                    f_out.append(filter)
-                else:
-                    msg = f"Unexpected type for filter: {filter}"
-                    log.warn(msg)
-                    raise HTTPBadRequest(reason=msg)
-            # replace filters with our starndardized list
-            log.debug(f"setting filters to: {f_out}")
-            creationProperties["filters"] = f_out
-
-        log.debug(f"set dataset json creationPropries: {creationProperties}")
-
-    parent_id = None
-    link_title = None
-    h5path = None
-    if "link" in body:
-        if "h5path" in body:
-            msg = "link can't be used with h5path"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        link_body = body["link"]
-        if "id" in link_body:
-            parent_id = link_body["id"]
-        if "name" in link_body:
-            link_title = link_body["name"]
-            try:
-                # will throw exception if there's a slash in the name
-                validateLinkName(link_title)
-            except ValueError:
-                msg = f"invalid link title: {link_title}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-        if parent_id and link_title:
-            log.debug(f"parent id: {parent_id}, link_title: {link_title}")
-            h5path = link_title  # just use the link name as the h5path
-
-    if "h5path" in body:
-        h5path = body["h5path"]
-        if "parent_id" not in body:
-            parent_id = root_id
-        else:
-            parent_id = body["parent_id"]
-
-    # setup args to createObject
-    kwargs = {"bucket": bucket, "obj_type": datatype, "obj_shape": shape_json}
-    if creationProperties:
-        kwargs["creation_props"] = creationProperties
-    if layout:
-        kwargs["layout"] = layout
-
-    if parent_id:
-        kwargs["parent_id"] = parent_id
-        kwargs["h5path"] = h5path
-        # allow parent group creation or not
-        implicit = getBooleanParam(params, "implicit")
-        if implicit:
-            kwargs["implicit"] = True
-        dset_json = await createObjectByPath(app, **kwargs)
-    else:
-        # create an anonymous datatype
-        kwargs["root_id"] = root_id
-        dset_json = await createObject(app, **kwargs)
+            log.info(f"DomainCrawler done for put_links action, status: {status}")
 
     # dataset creation successful
-    resp = await jsonResponse(request, dset_json, status=201)
+    resp = await jsonResponse(request, post_rsp, status=201)
     log.response(request, resp=resp)
 
     return resp
@@ -1169,7 +700,7 @@ async def DELETE_Dataset(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(dset_id, "Dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

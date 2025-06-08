@@ -13,13 +13,15 @@ import unittest
 import json
 import time
 import numpy as np
+
+from h5json.objid import createObjId
+
 import helper
 import config
 
 # min/max chunk size - these can be set by config, but
-# practially the min config value should be larger than
-# CHUNK_MIN and the max config value should less than
-# CHUNK_MAX
+# practically the min config value should be larger than
+# CHUNK_MIN and the max config value should less than CHUNK_MAX
 CHUNK_MIN = 1024  # lower limit  (1024b)
 CHUNK_MAX = 50 * 1024 * 1024  # upper limit (50M)
 
@@ -61,6 +63,24 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.post(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
+
+        expected_keys = [
+            "id",
+            "shape",
+            "layout",
+            "attributeCount",
+            "created",
+            "lastModified",
+            "root",
+        ]
+        for name in expected_keys:
+            self.assertTrue(name in rspJson)
+
+        # additional keys expected for GET response
+        expected_keys.append("hrefs")
+        expected_keys.append("creationProperties")
+        expected_keys.append("domain")
+
         self.assertEqual(rspJson["attributeCount"], 0)
         dset_id = rspJson["id"]
         self.assertTrue(helper.validateId(dset_id))
@@ -71,21 +91,6 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
 
-        expected_keys = [
-            "id",
-            "shape",
-            "hrefs",
-            "layout",
-            "creationProperties",
-            "attributeCount",
-            "created",
-            "lastModified",
-            "root",
-            "domain",
-        ]
-
-        for name in expected_keys:
-            self.assertTrue(name in rspJson)
         self.assertEqual(rspJson["id"], dset_id)
         self.assertEqual(rspJson["root"], root_uuid)
         self.assertEqual(rspJson["domain"], domain)
@@ -189,6 +194,159 @@ class DatasetTest(unittest.TestCase):
         # a get for the dataset should now return 410 (GONE)
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 410)
+
+    def testPostDatasetWithId(self):
+        # Test creation of a dataset obj with client creating obj id
+        domain = self.base_domain + "/testPostDatasetWithId.h5"
+        helper.setupDomain(domain)
+        print("testPostDatasetWithId", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # make a new dataset id
+        dset_id = createObjId("datasets", root_id=root_uuid)
+
+        # create a dataset obj
+        data = {"id": dset_id, "type": "H5T_IEEE_F32LE", "shape": "H5S_SCALAR"}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        self.assertEqual(rspJson["id"], dset_id)
+
+        # read back the obj
+        req = self.endpoint + "/datasets/" + dset_id
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        expected_keys = [
+            "id",
+            "shape",
+            "hrefs",
+            "layout",
+            "creationProperties",
+            "attributeCount",
+            "created",
+            "lastModified",
+            "root",
+            "domain",
+        ]
+
+        for name in expected_keys:
+            self.assertTrue(name in rspJson)
+        self.assertEqual(rspJson["id"], dset_id)
+        self.assertEqual(rspJson["root"], root_uuid)
+        self.assertEqual(rspJson["domain"], domain)
+        self.assertEqual(rspJson["attributeCount"], 0)
+        shape_json = rspJson["shape"]
+        self.assertTrue(shape_json["class"], "H5S_SCALAR")
+        self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
+
+        # Get the type
+        rsp = self.session.get(req + "/type", headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("type" in rspJson)
+        self.assertTrue(rspJson["type"], "H5T_IEEE_F32LE")
+        self.assertTrue("hrefs" in rspJson)
+        hrefs = rspJson["hrefs"]
+        self.assertEqual(len(hrefs), 3)
+
+        # Get the shape
+        rsp = self.session.get(req + "/shape", headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("created" in rspJson)
+        self.assertTrue("lastModified" in rspJson)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("shape" in rspJson)
+        shape_json = rspJson["shape"]
+        self.assertTrue(shape_json["class"], "H5S_SCALAR")
+
+        # try getting verbose info
+        params = {"verbose": 1}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        for name in expected_keys:
+            self.assertTrue(name in rspJson)
+
+        # flush to storage and force an immediate rescan
+        domain_req = self.endpoint + "/"
+        domain_params = {"flush": 1, "rescan": 1}
+        rsp = self.session.put(domain_req, params=domain_params, headers=headers)
+        # should get a NO_CONTENT code,
+        self.assertEqual(rsp.status_code, 204)
+
+        # do a get and verify the additional keys are present
+        expected_keys.append("num_chunks")
+        expected_keys.append("allocated_size")
+
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        for name in expected_keys:
+            self.assertTrue(name in rspJson)
+
+    def testPostDatasetWithAttributes(self):
+        # test POST with attribute initialization
+        domain = self.base_domain + "/testPostDatasetWithAttributes.h5"
+        helper.setupDomain(domain)
+        print("testPostDatasetWithAttributes", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        # get root id
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # setup some attributes to include
+        attr_count = 4
+        attributes = {}
+        extent = 10
+        for i in range(attr_count):
+            value = [i * 10 + j for j in range(extent)]
+            data = {"type": "H5T_STD_I32LE", "shape": extent, "value": value}
+            attr_name = f"attr{i + 1:04d}"
+            attributes[attr_name] = data
+
+        # create new dataset
+        payload = {"type": "H5T_IEEE_F32LE", "shape": "H5S_SCALAR"}
+        payload["attributes"] = attributes
+        payload["link"] = {"id": root_uuid, "name": "linked_datatype"}
+
+        req = helper.getEndpoint() + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["attributeCount"], 4)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # fetch the attributes
+        req = f"{helper.getEndpoint()}/datasets/{dset_id}/attributes"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertFalse("type" in rspJson)
+        self.assertFalse("shape" in rspJson)
+        self.assertTrue("attributes") in rspJson
+        self.assertEqual(len(rspJson["attributes"]), attr_count)
 
     def testScalarEmptyDimsDataset(self):
         # Test creation/deletion of scalar dataset obj
@@ -2592,7 +2750,7 @@ class DatasetTest(unittest.TestCase):
         req = self.endpoint + "/datasets"
         # 50K x 80K x 90K dataset
         dims = [0, 80000, 90000]
-        # unlimited extend in dim 0, fixeed in dimension 2, extenbile by 10x in dim 3
+        # unlimited extend in dim 0, fixeed in dimension 2, extensible by 10x in dim 3
         max_dims = [0, 80000, 900000]
         payload = {"type": "H5T_IEEE_F32LE", "shape": dims, "maxdims": max_dims}
 
@@ -2655,6 +2813,88 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         # Should fail with Bad Request due to invalid layout value
         self.assertEqual(rsp.status_code, 400)  # create dataset
+
+    def testDatasetPostMulti(self):
+        # test POST with multi-object creation
+        domain = self.base_domain + "/testDatasetPostMulti.h5"
+        helper.setupDomain(domain)
+        print("testDatasetPostMulti", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        req = helper.getEndpoint() + "/"
+
+        # get root ids
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # get root group and verify link count is 0
+        req = helper.getEndpoint() + "/groups/" + root_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], 0)
+
+        dataset_count = 3
+        datatype = "H5T_STD_I32LE"
+        payload = []
+        for _ in range(dataset_count):
+            dataset_args = {"type": datatype}
+            payload.append(dataset_args)
+
+        req = helper.getEndpoint() + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("objects" in rspJson)
+        rsp_objs = rspJson["objects"]
+        self.assertEqual(len(rsp_objs), dataset_count)
+
+        expected_keys = [
+            "id",
+            "shape",
+            "layout",
+            "attributeCount",
+            "created",
+            "lastModified",
+            "root",
+        ]
+
+        for i in range(dataset_count):
+            obj_json = rsp_objs[i]
+            self.assertEqual(obj_json["attributeCount"], 0)
+            dset_id = obj_json["id"]
+            self.assertTrue(helper.validateId(dset_id))
+            self.assertTrue(dset_id.startswith("d-"))
+            for key in expected_keys:
+                self.assertTrue(key in obj_json)
+
+        # create a set of linked datasets
+        for i in range(dataset_count):
+            item = payload[i]
+            item["link"] = {"id": root_uuid, "name": f"dset_{i + 1}"}
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("objects" in rspJson)
+        rsp_objs = rspJson["objects"]
+        self.assertEqual(len(rsp_objs), dataset_count)
+        for i in range(dataset_count):
+            json_rsp = rsp_objs[i]
+            self.assertEqual(json_rsp["attributeCount"], 0)
+            dset_id = json_rsp["id"]
+            self.assertTrue(helper.validateId(dset_id))
+            for key in expected_keys:
+                self.assertTrue(key in obj_json)
+
+        # get root group and verify link count is dataset_count
+        req = helper.getEndpoint() + "/groups/" + root_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["linkCount"], dataset_count)
 
 
 if __name__ == "__main__":

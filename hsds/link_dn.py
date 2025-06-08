@@ -20,7 +20,8 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPGone, HTTPC
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
-from .util.idUtil import isValidUuid
+from h5json.objid import isValidUuid
+
 from .util.globparser import globmatch
 from .util.linkUtil import validateLinkName, getLinkClass, isEqualLink
 from .util.domainUtil import isValidBucketName
@@ -74,7 +75,7 @@ async def GET_Links(request):
     log.debug(f"GET_Links params: {params}")
     group_id = get_obj_id(request)
     log.info(f"GET links: {group_id}")
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
@@ -170,7 +171,7 @@ async def POST_Links(request):
     group_id = get_obj_id(request)
     log.info(f"POST_Links: {group_id}")
 
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
@@ -285,7 +286,7 @@ async def PUT_Links(request):
     group_id = get_obj_id(request)
     log.info(f"PUT links: {group_id}")
 
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
@@ -378,7 +379,6 @@ async def PUT_Links(request):
     if new_links:
         # update the group lastModified
         group_json["lastModified"] = create_time
-        log.debug(f"tbd: group_json: {group_json}")
 
         # write back to S3, save to metadata cache
         await save_metadata_obj(app, group_id, group_json, bucket=bucket)
@@ -405,7 +405,7 @@ async def DELETE_Links(request):
     group_id = get_obj_id(request)
     log.info(f"DELETE links: {group_id}")
 
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         msg = f"Unexpected group_id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

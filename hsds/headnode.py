@@ -22,7 +22,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 
 from . import config
 from .util.timeUtil import unixTimeToUTC, elapsedTime
-from .util.idUtil import createNodeId
+from .util.nodeUtil import createNodeId
 from . import hsds_logger as log
 from .util import query_marathon as marathonClient
 

@@ -20,11 +20,12 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web import json_response, StreamResponse
 
+from h5json.hdf5dtype import createDataType, getSubType
+from h5json.array_util import bytesToArray, arrayToBytes, getBroadcastShape
+from h5json.objid import getS3Key, isValidUuid
+
 from .util.httpUtil import request_read, getContentType
-from .util.arrayUtil import bytesToArray, arrayToBytes, getBroadcastShape
-from .util.idUtil import getS3Key, validateInPartition, isValidUuid
 from .util.storUtil import isStorObj, deleteStorObj
-from .util.hdf5dtype import createDataType, getSubType
 from .util.dsetUtil import getSelectionList, getChunkLayout, getShapeDims
 from .util.dsetUtil import getSelectionShape, getChunkInitializer
 from .util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
@@ -32,6 +33,7 @@ from .util.chunkUtil import chunkWriteSelection, chunkReadSelection
 from .util.chunkUtil import chunkWritePoints, chunkReadPoints
 from .util.domainUtil import isValidBucketName
 from .util.boolparser import BooleanParser
+from .util.nodeUtil import validateInPartition
 from .datanode_lib import get_metadata_obj, get_chunk, save_chunk
 
 from . import hsds_logger as log
@@ -63,7 +65,7 @@ async def PUT_Chunk(request):
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
 
-    if not isValidUuid(chunk_id, "Chunk"):
+    if not isValidUuid(chunk_id, obj_class="chunks"):
         msg = f"Invalid chunk id: {chunk_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -337,7 +339,7 @@ async def GET_Chunk(request):
         msg = "Missing chunk id"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(chunk_id, "Chunk"):
+    if not isValidUuid(chunk_id, obj_class="chunks"):
         msg = f"Invalid chunk id: {chunk_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -653,7 +655,7 @@ async def POST_Chunk(request):
     chunk_index = getChunkIndex(chunk_id)
     log.debug(f"chunk_index: {chunk_index}")
 
-    if not isValidUuid(chunk_id, "Chunk"):
+    if not isValidUuid(chunk_id, obj_class="chunks"):
         msg = f"Invalid chunk id: {chunk_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -840,7 +842,7 @@ async def DELETE_Chunk(request):
         raise HTTPBadRequest(reason=msg)
     log.info(f"DELETE chunk: {chunk_id}")
 
-    if not isValidUuid(chunk_id, "Chunk"):
+    if not isValidUuid(chunk_id, obj_class="chunks"):
         msg = f"Invalid chunk id: {chunk_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

@@ -13,18 +13,15 @@ import unittest
 import json
 import helper
 import numpy as np
-import sys
 
-sys.path.append("../..")
-from hsds.util.arrayUtil import arrayToBytes, bytesToArray
-from hsds.util.hdf5dtype import createDataType
+from h5json.hdf5dtype import createDataType
+from h5json.array_util import arrayToBytes, bytesToArray
 
 
 class VlenTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(VlenTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
-        print(self.base_domain)
         helper.setupDomain(self.base_domain)
         self.endpoint = helper.getEndpoint()
 

@@ -19,29 +19,26 @@ import math
 import numpy as np
 
 from json import JSONDecodeError
-from asyncio import IncompleteReadError
 from aiohttp.web_exceptions import HTTPException, HTTPBadRequest
 from aiohttp.web_exceptions import HTTPRequestEntityTooLarge
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 from aiohttp.web import StreamResponse
 
+from h5json.hdf5dtype import getItemSize, getDtypeItemSize, getSubType, createDataType
+from h5json.array_util import bytesArrayToList, jsonToArray, getNumElements, arrayToBytes
+from h5json.array_util import bytesToArray, squeezeArray, getBroadcastShape
+from h5json.objid import isValidUuid
+
 from .util.httpUtil import getHref, getAcceptType, getContentType
 from .util.httpUtil import request_read, jsonResponse, isAWSLambda
-from .util.idUtil import isValidUuid
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
-from .util.hdf5dtype import getItemSize, getDtypeItemSize, getSubType, createDataType
 from .util.dsetUtil import isNullSpace, isScalarSpace, get_slices, getShapeDims
 from .util.dsetUtil import isExtensible, getSelectionPagination
 from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
-from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
-from .util.arrayUtil import bytesArrayToList, jsonToArray
-from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
-from .util.arrayUtil import squeezeArray, getBroadcastShape
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .servicenode_lib import getDsetJson, validateAction
-from .dset_lib import getSelectionData, getParser, extendShape
-from .chunk_crawl import ChunkCrawler
+from .dset_lib import getSelectionData, getParser, extendShape, doPointWrite, doHyperslabWrite
 from . import config
 from . import hsds_logger as log
 
@@ -464,188 +461,6 @@ async def arrayResponse(arr, request, dset_json):
     return resp
 
 
-async def _doPointWrite(app,
-                        request,
-                        points=None,
-                        data=None,
-                        dset_json=None,
-                        bucket=None
-                        ):
-    """ write the given points to the dataset """
-
-    num_points = len(points)
-    log.debug(f"doPointWrite - num_points: {num_points}")
-    dset_id = dset_json["id"]
-    layout = getChunkLayout(dset_json)
-    datashape = dset_json["shape"]
-    dims = getShapeDims(datashape)
-    rank = len(dims)
-
-    chunk_dict = {}  # chunk ids to list of points in chunk
-
-    for pt_indx in range(num_points):
-        if rank == 1:
-            point = int(points[pt_indx])
-        else:
-            point_tuple = points[pt_indx]
-            point = []
-            for i in range(len(point_tuple)):
-                point.append(int(point_tuple[i]))
-        if rank == 1:
-            if point < 0 or point >= dims[0]:
-                msg = f"PUT Value point: {point} is not within the "
-                msg += "bounds of the dataset"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-        else:
-            if len(point) != rank:
-                msg = "PUT Value point value did not match dataset rank"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            for i in range(rank):
-                if point[i] < 0 or point[i] >= dims[i]:
-                    msg = f"PUT Value point: {point} is not within the "
-                    msg += "bounds of the dataset"
-                    log.warn(msg)
-                    raise HTTPBadRequest(reason=msg)
-        chunk_id = getChunkId(dset_id, point, layout)
-        # get the pt_indx element from the input data
-        value = data[pt_indx]
-        if chunk_id not in chunk_dict:
-            point_list = [point, ]
-            point_data = [value, ]
-            chunk_dict[chunk_id] = {"indices": point_list, "points": point_data}
-        else:
-            item = chunk_dict[chunk_id]
-            point_list = item["indices"]
-            point_list.append(point)
-            point_data = item["points"]
-            point_data.append(value)
-
-    num_chunks = len(chunk_dict)
-    log.debug(f"num_chunks: {num_chunks}")
-    max_chunks = int(config.get("max_chunks_per_request", default=1000))
-    if num_chunks > max_chunks:
-        msg = f"PUT value request with more than {max_chunks} chunks"
-        log.warn(msg)
-
-    chunk_ids = list(chunk_dict.keys())
-    chunk_ids.sort()
-
-    crawler = ChunkCrawler(
-        app,
-        chunk_ids,
-        dset_json=dset_json,
-        bucket=bucket,
-        points=chunk_dict,
-        action="write_point_sel",
-    )
-    await crawler.crawl()
-
-    crawler_status = crawler.get_status()
-
-    if crawler_status not in (200, 201):
-        msg = f"doPointWritte raising HTTPInternalServerError for status: {crawler_status}"
-        log.error(msg)
-        raise HTTPInternalServerError()
-    else:
-        log.info("doPointWrite success")
-
-
-async def _doHyperslabWrite(app,
-                            request,
-                            page_number=0,
-                            page=None,
-                            data=None,
-                            dset_json=None,
-                            select_dtype=None,
-                            bucket=None
-                            ):
-    """ write the given page selection to the dataset """
-    dset_id = dset_json["id"]
-    log.info(f"_doHyperslabWrite on {dset_id} - page: {page_number}")
-    type_json = dset_json["type"]
-
-    if select_dtype is not None:
-        item_size = getDtypeItemSize(select_dtype)
-    else:
-        item_size = getItemSize(type_json)
-    if item_size == "H5T_VARIABLE" and data is None:
-        msg = "unexpected call to _doHyperslabWrite for variable length data"
-        log.error(msg)
-        raise HTTPInternalServerError()
-
-    layout = getChunkLayout(dset_json)
-
-    num_chunks = getNumChunks(page, layout)
-    log.debug(f"num_chunks: {num_chunks}")
-    max_chunks = int(config.get("max_chunks_per_request", default=1000))
-    if num_chunks > max_chunks:
-        msg = f"PUT value chunk count: {num_chunks} exceeds max_chunks: {max_chunks}"
-        log.warn(msg)
-    select_shape = getSelectionShape(page)
-    log.debug(f"got select_shape: {select_shape} for page: {page_number}")
-
-    if data is None:
-        num_bytes = math.prod(select_shape) * item_size
-        log.debug(f"reading {num_bytes} from request stream")
-        # read page of data from input stream
-        try:
-            page_bytes = await request_read(request, count=num_bytes)
-        except HTTPRequestEntityTooLarge as tle:
-            msg = "Got HTTPRequestEntityTooLarge exception during "
-            msg += f"binary read: {tle}) for page: {page_number}"
-            log.warn(msg)
-            raise  # re-throw
-        except IncompleteReadError as ire:
-            msg = "Got asyncio.IncompleteReadError during binary "
-            msg += f"read: {ire} for page: {page_number}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        log.debug(f"read {len(page_bytes)} for page: {page_number}")
-        try:
-            arr = bytesToArray(page_bytes, select_dtype, select_shape)
-        except ValueError as ve:
-            msg = f"bytesToArray value error for page: {page_number}: {ve}"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-    else:
-        arr = data  # use array provided to function
-
-    try:
-        chunk_ids = getChunkIds(dset_id, page, layout)
-    except ValueError:
-        log.warn("getChunkIds failed")
-        raise HTTPInternalServerError()
-    if len(chunk_ids) < 10:
-        log.debug(f"chunk_ids: {chunk_ids}")
-    else:
-        log.debug(f"chunk_ids: {chunk_ids[:10]} ...")
-    if len(chunk_ids) > max_chunks:
-        msg = f"got {len(chunk_ids)} for page: {page_number}.  max_chunks: {max_chunks}"
-        log.warn(msg)
-
-    crawler = ChunkCrawler(
-        app,
-        chunk_ids,
-        dset_json=dset_json,
-        bucket=bucket,
-        slices=page,
-        arr=arr,
-        action="write_chunk_hyperslab",
-    )
-    await crawler.crawl()
-
-    crawler_status = crawler.get_status()
-
-    if crawler_status not in (200, 201):
-        msg = f"crawler failed for page: {page_number} with status: {crawler_status}"
-        log.error(msg)
-        raise HTTPInternalServerError()
-    else:
-        log.info("crawler write_chunk_hyperslab successful")
-
-
 async def PUT_Value(request):
     """
     Handler for PUT /<dset_uuid>/value request
@@ -682,7 +497,7 @@ async def PUT_Value(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(dset_id, "Dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -700,6 +515,7 @@ async def PUT_Value(request):
     # get state for dataset from DN - will need this to validate
     # some of the query parameters
     dset_json = await getDsetJson(app, dset_id, bucket=bucket)
+    log.debug(f"got dset_json: {dset_json}")
 
     datashape = dset_json["shape"]
     if isNullSpace(dset_json):
@@ -841,7 +657,7 @@ async def PUT_Value(request):
                 log.warn(f"bytesToArray value error: {ve}")
                 raise HTTPBadRequest()
         else:
-            # fixed item size
+            # fixed item size - check against number of bytes
             if len(input_data) % item_size != 0:
                 msg = f"Expected request size to be a multiple of {item_size}, "
                 msg += f"but {len(input_data)} bytes received"
@@ -852,8 +668,7 @@ async def PUT_Value(request):
                 msg = f"expected {item_size * num_elements} bytes but got {len(input_data)}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-
-            arr = np.fromstring(input_data, dtype=dset_dtype)
+            arr = np.frombuffer(input_data, dtype=dset_dtype)
             log.debug(f"read fixed type array: {arr}")
 
         if bc_shape:
@@ -940,13 +755,13 @@ async def PUT_Value(request):
             else:
                 kwargs["data"] = None
             # do write for one page selection
-            await _doHyperslabWrite(app, request, **kwargs)
+            await doHyperslabWrite(app, request, **kwargs)
     else:
         #
         # Do point put
         #
         kwargs = {"points": points, "data": arr, "dset_json": dset_json, "bucket": bucket}
-        await _doPointWrite(app, request, **kwargs)
+        await doPointWrite(app, request, **kwargs)
 
     # write successful
 
@@ -968,7 +783,7 @@ async def GET_Value(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(dset_id, "Dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -1089,7 +904,6 @@ async def GET_Value(request):
         arr = None  # will be set based on returned data
 
         if stream_pagination:
-            # example
             # get binary data a page at a time and write back to response
             if item_size == "H5T_VARIABLE":
                 page_item_size = VARIABLE_AVG_ITEM_SIZE  # random guess of avg item_size
@@ -1247,7 +1061,7 @@ async def POST_Value(request):
         msg = "Missing dataset id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(dset_id, "Dataset"):
+    if not isValidUuid(dset_id, obj_class="datasets"):
         msg = f"Invalid dataset id: {dset_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -1351,7 +1165,7 @@ async def POST_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         num_points = request.content_length // point_dt.itemsize
-        points = np.fromstring(binary_data, dtype=point_dt)
+        points = np.frombuffer(binary_data, dtype=point_dt)
         # reshape the data based on the rank (num_points x rank)
         if rank > 1:
             if len(points) % rank != 0:

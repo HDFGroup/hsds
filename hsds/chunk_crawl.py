@@ -24,16 +24,17 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPServiceUnav
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.client_exceptions import ClientError
 
+from h5json.hdf5dtype import createDataType
+from h5json.array_util import jsonToArray, getNumpyValue
+from h5json.array_util import getNumElements, arrayToBytes, bytesToArray
+
+from .util.nodeUtil import getDataNodeUrl, getNodeCount
 from .util.httpUtil import http_get, http_put, http_post, get_http_client
 from .util.httpUtil import isUnixDomainUrl
-from .util.idUtil import getDataNodeUrl, getNodeCount
-from .util.hdf5dtype import createDataType
 from .util.dsetUtil import getSliceQueryParam, getShapeDims
 from .util.dsetUtil import getSelectionShape, getChunkLayout
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getChunkIdForPartition, getQueryDtype
-from .util.arrayUtil import jsonToArray, getNumpyValue
-from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
 
 from . import config
 from . import hsds_logger as log
@@ -83,6 +84,7 @@ async def write_chunk_hyperslab(
 
     msg = f"write_chunk_hyperslab, chunk_id: {chunk_id}, slices: {slices}, "
     msg += f"bucket: {bucket}"
+    msg += f" dset_json: {dset_json}"
     log.info(msg)
     if "layout" not in dset_json:
         log.error(f"No layout found in dset_json: {dset_json}")

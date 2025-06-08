@@ -18,8 +18,10 @@ import asyncio
 from aiohttp.web_exceptions import HTTPServiceUnavailable, HTTPConflict, HTTPBadRequest
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNotFound, HTTPGone
 
+from h5json.objid import getCollectionForId
+
+from .util.nodeUtil import getDataNodeUrl
 from .util.httpUtil import isOK
-from .util.idUtil import getCollectionForId, getDataNodeUrl
 from .util.globparser import globmatch
 from .servicenode_lib import getObjectJson, getAttributes, putAttributes, getLinks, putLinks
 from . import hsds_logger as log
@@ -246,7 +248,7 @@ class DomainCrawler:
     async def get_obj_json(self, obj_id):
         """ get the given obj_json for the obj_id.
             for each group found, search the links if follow_links is set """
-        log.debug(f"get_obj_json: {obj_id}")
+        log.debug(f"DomainCrawler get_obj_json: {obj_id}")
         collection = getCollectionForId(obj_id)
         kwargs = {"bucket": self._bucket, "include_attrs": self._include_attrs}
 
@@ -406,7 +408,7 @@ class DomainCrawler:
 
     async def put_links(self, grp_id, link_items):
         # write the given links for the obj_id
-        log.debug(f"put_links for {grp_id}, {len(link_items)} links")
+        log.debug(f"DomainCrawler put_links for {grp_id}, {len(link_items)} links")
         req = getDataNodeUrl(self._app, grp_id)
         req += f"/groups/{grp_id}/links"
         kwargs = {"bucket": self._bucket}
@@ -464,7 +466,7 @@ class DomainCrawler:
                     pass  # ok
                 elif status == 400:
                     log.warn("DomainCrawler - BadRequest")
-                    raise HTTPBadRequest(reason="unkown")
+                    raise HTTPBadRequest(reason="unknown")
                 elif status == 404:
                     log.warn("DomainCrawler - not found")
                     raise HTTPNotFound()

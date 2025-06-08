@@ -16,17 +16,19 @@
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 from json import JSONDecodeError
 
+from h5json.objid import isValidUuid
+
 from .util.httpUtil import getHref, jsonResponse, getBooleanParam
-from .util.idUtil import isValidUuid
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain, getPathForDomain, verifyRoot
-from .util.linkUtil import validateLinkName
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction
-from .servicenode_lib import getObjectIdByPath, getPathForObjectId
-from .servicenode_lib import createObject, createObjectByPath, deleteObject
+from .servicenode_lib import getObjectIdByPath, getPathForObjectId, deleteObject
+from .servicenode_lib import getCreateArgs, createGroup
 from . import hsds_logger as log
+from .post_crawl import createGroups
+from .domain_crawl import DomainCrawler
 
 
 async def GET_Group(request):
@@ -50,7 +52,7 @@ async def GET_Group(request):
     if group_id:
         log.info(f"GET_Group, id: {group_id}")
         # is the id a group id and not something else?
-        if not isValidUuid(group_id, "Group"):
+        if not isValidUuid(group_id, obj_class="groups"):
             msg = f"Invalid group id: {group_id}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -97,7 +99,7 @@ async def GET_Group(request):
         kwargs = {"bucket": bucket, "domain": domain}
         group_id, domain, obj_json = await getObjectIdByPath(app, group_id, h5path, **kwargs)
 
-        if not isValidUuid(group_id, "Group"):
+        if not isValidUuid(group_id, obj_class="groups"):
             msg = f"No group exist with the path: {h5path}"
             log.warn(msg)
             raise HTTPNotFound()
@@ -173,6 +175,7 @@ async def POST_Group(request):
     bucket = getBucketForDomain(domain)
 
     domain_json = await getDomainJson(app, domain, reload=True)
+    log.debug(f"got domain_json: {domain_json}")
 
     # throws exception if not allowed
     aclCheck(app, domain_json, "create", username)
@@ -182,11 +185,8 @@ async def POST_Group(request):
 
     # allow parent group creation or not
     implicit = getBooleanParam(params, "implicit")
-
-    parent_id = None
-    h5path = None
-    creation_props = None
-
+    kwargs = {}
+    post_rsp = None
     if request.has_body:
         try:
             body = await request.json()
@@ -197,55 +197,91 @@ async def POST_Group(request):
 
         log.info(f"POST Group body: {body}")
         if body:
-            if "link" in body:
-                if "h5path" in body:
-                    msg = "link can't be used with h5path"
-                    log.warn(msg)
-                    raise HTTPBadRequest(reason=msg)
-                link_body = body["link"]
-                log.debug(f"link_body: {link_body}")
-                if "id" in link_body:
-                    parent_id = link_body["id"]
-                if "name" in link_body:
-                    link_title = link_body["name"]
-                    try:
-                        # will throw exception if there's a slash in the name
-                        validateLinkName(link_title)
-                    except ValueError:
-                        msg = f"invalid link title: {link_title}"
-                        log.warn(msg)
-                        raise HTTPBadRequest(reason=msg)
-
-                if parent_id and link_title:
-                    log.debug(f"parent id: {parent_id}, link_title: {link_title}")
-                    h5path = link_title  # just use the link name as the h5path
-
-            if "h5path" in body:
-                h5path = body["h5path"]
-                if "parent_id" not in body:
-                    parent_id = root_id
+            if isinstance(body, list):
+                count = len(body)
+                log.debug(f"multiple group create: {count} items")
+                if count == 0:
+                    # equivalent to no body, anonymous group case
+                    kwargs = {"root_id": root_id, "bucket": bucket}
+                elif count == 1:
+                    # just create one object in typical way
+                    kwargs = getCreateArgs(body[0],
+                                           root_id=root_id,
+                                           bucket=bucket,
+                                           implicit=implicit)
                 else:
-                    parent_id = body["parent_id"]
-            if "creationProperties" in body:
-                creation_props = body["creationProperties"]
+                    # create multiple group objects
+                    kwarg_list = []  # list of kwargs for each object
 
-    if parent_id:
-        kwargs = {"bucket": bucket, "parent_id": parent_id, "h5path": h5path}
-        if creation_props:
-            kwargs["creation_props"] = creation_props
-        if implicit:
-            kwargs["implicit"] = True
-        group_json = await createObjectByPath(app, **kwargs)
+                    for item in body:
+                        log.debug(f"item: {item}")
+                        if not isinstance(item, dict):
+                            msg = f"PostGroup - invalid item type: {type(item)}"
+                            log.warn(msg)
+                            raise HTTPBadRequest(reason=msg)
+                        kwargs = getCreateArgs(item, root_id=root_id, bucket=bucket)
+                        kwargs["ignore_link"] = True
+                        kwarg_list.append(kwargs)
+                        kwargs = {"bucket": bucket, "root_id": root_id}
+                    post_rsp = await createGroups(app, kwarg_list, **kwargs)
+            else:
+                kwargs = getCreateArgs(body, root_id=root_id, bucket=bucket, implicit=implicit)
+        else:
+            kwargs["root_id"] = root_id
+            kwargs["bucket"] = bucket
     else:
-        # create an anonymous group
-        kwargs = {"bucket": bucket, "root_id": root_id}
-        if creation_props:
-            kwargs["creation_props"] = creation_props
-        group_json = await createObject(app, **kwargs)
+        kwargs = {"root_id": root_id, "bucket": bucket}
 
-    log.debug(f"returning resp: {group_json}")
+    if post_rsp is None:
+        # Handle cases other than multi-group create here
+        if "type" in kwargs:
+            msg = "type key is not allowed for Group creation"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        post_rsp = await createGroup(app, **kwargs)
+
+    log.debug(f"returning resp: {post_rsp}")
+
+    if "objects" in post_rsp:
+        # add any links in multi request
+        objects = post_rsp["objects"]
+        obj_count = len(objects)
+        log.debug(f"Post group multi create: {obj_count} objects")
+        if len(body) != obj_count:
+            msg = f"Expected {obj_count} objects but got {len(body)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        parent_ids = {}
+        for index in range(obj_count):
+            item = body[index]
+            if "link" in item:
+                link_item = item["link"]
+                parent_id = link_item.get("id")
+                title = link_item.get("name")
+                if parent_id and title:
+                    # add a hard link
+                    object = objects[index]
+                    obj_id = object["id"]
+                    if parent_id not in parent_ids:
+                        parent_ids[parent_id] = {}
+                    links = parent_ids[parent_id]
+                    links[title] = {"id": obj_id}
+        if parent_ids:
+            log.debug(f"POST group multi - adding links: {parent_ids}")
+            kwargs = {"action": "put_link", "bucket": bucket}
+            kwargs["replace"] = True
+
+            crawler = DomainCrawler(app, parent_ids, **kwargs)
+
+            # will raise exception on not found, server busy, etc.
+            await crawler.crawl()
+
+            status = crawler.get_status()
+
+            log.info(f"DomainCrawler done for put_links action, status: {status}")
+
     # group creation successful
-    resp = await jsonResponse(request, group_json, status=201)
+    resp = await jsonResponse(request, post_rsp, status=201)
     log.response(request, resp=resp)
     return resp
 
@@ -260,7 +296,7 @@ async def DELETE_Group(request):
         msg = "Missing group id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(group_id, "Group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

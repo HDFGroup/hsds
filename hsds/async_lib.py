@@ -15,11 +15,13 @@ import numpy as np
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPForbidden
-from .util.idUtil import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey
-from .util.idUtil import getObjId, isValidChunkId, getCollectionForId
+from h5json.hdf5dtype import getItemSize
+from h5json.hdf5dtype import createDataType
+from h5json.array_util import getNumElements, bytesToArray
+from h5json.objid import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey
+from h5json.objid import getObjId, isValidChunkId, getCollectionForId
+
 from .util.chunkUtil import getDatasetId, getNumChunks, ChunkIterator
-from .util.hdf5dtype import getItemSize, createDataType
-from .util.arrayUtil import getNumElements, bytesToArray
 from .util.dsetUtil import getHyperslabSelection, getFilterOps, getChunkDims, getFilters
 from .util.dsetUtil import getDatasetLayoutClass, getDatasetLayout, getShapeDims
 from .util.storUtil import getStorKeys, putStorJSONObj, getStorJSONObj

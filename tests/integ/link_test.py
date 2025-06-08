@@ -1767,7 +1767,6 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         links_json = rspJson["links"]
-        print("params:", params)
 
         # verify the links are in order
         for i in range(link_count - 1):

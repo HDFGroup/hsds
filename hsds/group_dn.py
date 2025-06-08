@@ -19,7 +19,8 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web import json_response
 
-from .util.idUtil import isValidUuid, isSchema2Id, isRootObjId, getRootObjId
+from h5json.objid import isValidUuid, isSchema2Id, isRootObjId, getRootObjId
+
 from .util.domainUtil import isValidBucketName
 from .util.timeUtil import getNow
 from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj
@@ -46,7 +47,7 @@ async def GET_Group(request):
 
     log.info(f"GET group: {group_id} bucket: {bucket}")
 
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
@@ -97,9 +98,13 @@ async def POST_Group(request):
         raise HTTPBadRequest(reason=msg)
 
     group_id = get_obj_id(request, body=body)
+    deleted_ids = app["deleted_ids"]
+    if group_id in deleted_ids:
+        log.warn(f"POST Group has id: {group_id} that has previously been deleted")
+        deleted_ids.remove(group_id)
 
-    log.info(f"POST group: {group_id} bucket: {bucket}")
-    if not isValidUuid(group_id, obj_class="group"):
+    log.info(f"POST group: {group_id} bucket: {bucket} body: {body}")
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
     if "root" not in body:
@@ -110,12 +115,13 @@ async def POST_Group(request):
     # verify the id doesn't already exist
     obj_found = await check_metadata_obj(app, group_id, bucket=bucket)
     if obj_found:
-        log.error(f"Post with existing group_id: {group_id}")
-        raise HTTPInternalServerError()
+        msg = f"Post with existing group_id: {group_id}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     root_id = body["root"]
 
-    if not isValidUuid(root_id, obj_class="group"):
+    if not isValidUuid(root_id, obj_class="groups"):
         msg = "Invalid root_id: " + root_id
         log.error(msg)
         raise HTTPInternalServerError()
@@ -123,13 +129,27 @@ async def POST_Group(request):
     # ok - all set, create group obj
     now = getNow(app)
 
+    if "attributes" in body:
+        # initialize attributes
+        attrs = body["attributes"]
+        log.debug(f"POST Group with attributes: {attrs}")
+    else:
+        attrs = {}
+
+    if "links" in body:
+        # initialize links
+        links = body["links"]
+        log.debug(f"POST Group with links: {links}")
+    else:
+        links = {}
+
     group_json = {
         "id": group_id,
         "root": root_id,
         "created": now,
         "lastModified": now,
-        "links": {},
-        "attributes": {},
+        "links": links,
+        "attributes": attrs,
     }
 
     if "creationProperties" in body:
@@ -144,8 +164,8 @@ async def POST_Group(request):
     resp_json["root"] = root_id
     resp_json["created"] = group_json["created"]
     resp_json["lastModified"] = group_json["lastModified"]
-    resp_json["linkCount"] = 0
-    resp_json["attributeCount"] = 0
+    resp_json["linkCount"] = len(links)
+    resp_json["attributeCount"] = len(attrs)
 
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)
@@ -178,7 +198,7 @@ async def PUT_Group(request):
     # don't really need bucket param since the dirty ids know which bucket
     # they should write too
 
-    if not isValidUuid(root_id, obj_class="group"):
+    if not isValidUuid(root_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {root_id}")
         raise HTTPInternalServerError()
 
@@ -247,7 +267,7 @@ async def DELETE_Group(request):
     params = request.rel_url.query
     group_id = get_obj_id(request)
 
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
