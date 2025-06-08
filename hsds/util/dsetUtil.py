@@ -19,7 +19,6 @@ from h5json.objid import isValidUuid
 from .. import hsds_logger as log
 from .. import config
 
-#from .chunkUtil import getChunkSize, guessChunk, expandChunk, shrinkChunk
 
 CHUNK_MIN = 512 * 1024  # Soft lower limit (512k)
 CHUNK_MAX = 2048 * 1024  # Hard upper limit (2M)
@@ -84,6 +83,7 @@ CHUNK_LAYOUT_CLASSES = (
     "H5D_CONTIGUOUS_REF",
 )
 
+
 def get_dset_size(shape_json, typesize):
     """Return the size of the dataspace.  For
     any unlimited dimensions, assume a value of 1.
@@ -106,6 +106,7 @@ def get_dset_size(shape_json, typesize):
         dset_size *= shape[n]
     return dset_size
 
+
 def getFilterItem(key):
     """
     Return filter code, id, and name, based on an id, a name or a code.
@@ -121,15 +122,15 @@ def getFilterItem(key):
 
 
 def getFiltersJson(create_props, supported_filters=None):
-    """ return standardized filter representation from creation properties 
+    """ return standardized filter representation from creation properties
         raise bad request if invalid """
-        
+
     # refer to https://hdf5-json.readthedocs.io/en/latest/bnf/\
     # filters.html#grammar-token-filter_list
 
     if "filters" not in create_props:
         return {}  # null set
-    
+
     f_in = create_props["filters"]
 
     log.debug(f"filters provided in creation_prop: {f_in}")
@@ -189,11 +190,11 @@ def getFiltersJson(create_props, supported_filters=None):
             msg = f"Unexpected type for filter: {filter}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        
+
     # return standardized filter representation
     log.debug(f"using filters: {f_out}")
     return f_out
-    
+
 
 def getFilters(dset_json):
     """Return list of filters, or empty list"""
@@ -298,7 +299,8 @@ def getFilterOps(app, dset_id, filters, dtype=None, chunk_shape=None):
         return filter_ops
     else:
         return None
-    
+
+
 def getShapeJson(body):
     """ Return normalized json description of data space """
 
@@ -310,8 +312,8 @@ def getShapeJson(body):
         shape_class = "H5S_SCALAR"
         log.debug("not shape given - using H5S_SCALAR")
         return {"class": shape_class}
-    
-    body_shape = body["shape"]    
+
+    body_shape = body["shape"]
     log.debug(f"got shape: {body_shape}")
 
     if isinstance(body_shape, int):
@@ -326,11 +328,11 @@ def getShapeJson(body):
         else:
             shape_class = "H5S_SIMPLE"
             dims = body_shape
-    else:        
+    else:
         msg = "invalid shape: {body_shape}"
         log.warn(msg)
         raise ValueError(msg)
-    
+
     if shape_class not in ("H5S_NULL", "H5S_SCALAR", "H5S_SIMPLE"):
         msg = f"invalid shape class: {shape_class}"
         log.warn(msg)
@@ -386,7 +388,7 @@ def getShapeJson(body):
             msg = "max_dims rank doesn't match dims"
             log.warn(msg)
             raise ValueError(msg)
-        
+
     # return json description of shape
     shape_json = {"class": shape_class}
     if shape_class == "H5S_SIMPLE":
@@ -396,6 +398,7 @@ def getShapeJson(body):
     log.debug(f"returning shape_json: {shape_json}")
     return shape_json
 
+
 def getShapeClass(data_shape):
     """ Return shape class of the given data shape """
 
@@ -404,11 +407,12 @@ def getShapeClass(data_shape):
 
     if "class" not in data_shape:
         raise KeyError("expected 'class' key for data shape")\
-        
+
     return data_shape["class"]
 
+
 def getRank(data_shape):
-    """ Return rank of given data shape_json """ 
+    """ Return rank of given data shape_json """
 
     shape_class = getShapeClass(data_shape)
 
@@ -422,6 +426,7 @@ def getRank(data_shape):
         return len(data_shape["dims"])
     else:
         raise ValueError(f"unexpected data shape class: {shape_class}")
+
 
 def getDsetRank(dset_json):
     """Get rank returning 0 for scalar or NULL data shapes"""
@@ -445,7 +450,7 @@ def isScalarSpace(dset_json):
     shape_class = getShapeClass(data_shape)
     if shape_class == "H5S_NULL":
         return False
-    
+
     rank = getRank(data_shape)
     return True if rank == 0 else False
 
@@ -458,7 +463,7 @@ def getContiguousLayout(shape_json, item_size, chunk_min=None, chunk_max=None):
         msg = "ContiguousLayout can only be used with fixed-length types"
         log.warn(msg)
         raise ValueError(msg)
-    
+
     if chunk_min is None:
         msg = "chunk_min not set"
         log.warn(msg)
@@ -470,7 +475,7 @@ def getContiguousLayout(shape_json, item_size, chunk_min=None, chunk_max=None):
 
     if chunk_max < chunk_min:
         raise ValueError("chunk_max cannot be less than chunk_min")
-    
+
     if shape_json is None or shape_json["class"] == "H5S_NULL":
         return None
     if shape_json["class"] == "H5S_SCALAR":
@@ -507,6 +512,7 @@ def getContiguousLayout(shape_json, item_size, chunk_min=None, chunk_max=None):
 
     return layout
 
+
 def getChunkSize(layout, type_size):
     """Return chunk size given layout.
     i.e. just the product of the values in the list.
@@ -520,6 +526,7 @@ def getChunkSize(layout, type_size):
             raise ValueError("Invalid chunk layout")
         chunk_size *= n
     return chunk_size
+
 
 def validateChunkLayout(shape_json, item_size, layout, chunk_table=None):
     """
@@ -668,7 +675,7 @@ def validateChunkLayout(shape_json, item_size, layout, chunk_table=None):
             msg = f"Invalid chunk table id: {chunk_table_id}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        
+
     elif layout_class == "H5D_CHUNKED":
         if "dims" not in layout:
             msg = "dims key not found in layout for creation property list"
@@ -695,7 +702,8 @@ def validateChunkLayout(shape_json, item_size, layout, chunk_table=None):
         msg = f"Unexpected layout: {layout_class}"
         log.warn(msg)
         raise ValueError(msg)
-    
+
+
 def expandChunk(layout, typesize, shape_json, chunk_min=CHUNK_MIN, layout_class="H5D_CHUNKED"):
     """Compute an increased chunk shape with a size in bytes greater than chunk_min."""
     if shape_json is None or shape_json["class"] == "H5S_NULL":
@@ -833,7 +841,7 @@ def guessChunk(shape_json, typesize):
 def getLayoutJson(creation_props, shape=None, type_json=None, chunk_min=None, chunk_max=None):
     """ Get the layout json given by creation_props.
         Raise bad request error if invalid """
-    
+
     min_chunk_size = int(config.get("min_chunk_size"))
     max_chunk_size = int(config.get("max_chunk_size"))
 
@@ -853,7 +861,7 @@ def getLayoutJson(creation_props, shape=None, type_json=None, chunk_min=None, ch
         layout_props = creation_props["layout"]
     else:
         layout_props = None
-        
+
     if layout_props:
         if "class" not in layout_props:
             msg = "expected class key in layout props"
