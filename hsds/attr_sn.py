@@ -1088,7 +1088,7 @@ async def PUT_AttributeValue(request):
             msg += f"but got {len(binary_data)}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        arr = np.fromstring(binary_data, dtype=np_dtype)
+        arr = np.frombuffer(binary_data, dtype=np_dtype)
         if attr_shape["class"] == "H5S_SCALAR":
             arr = arr.reshape([])
         else:

@@ -853,7 +853,7 @@ async def PUT_Value(request):
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
 
-            arr = np.fromstring(input_data, dtype=dset_dtype)
+            arr = np.frombuffer(input_data, dtype=dset_dtype)
             log.debug(f"read fixed type array: {arr}")
 
         if bc_shape:
@@ -1351,7 +1351,7 @@ async def POST_Value(request):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         num_points = request.content_length // point_dt.itemsize
-        points = np.fromstring(binary_data, dtype=point_dt)
+        points = np.frombuffer(binary_data, dtype=point_dt)
         # reshape the data based on the rank (num_points x rank)
         if rank > 1:
             if len(points) % rank != 0:
