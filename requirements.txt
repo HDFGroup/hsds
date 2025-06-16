@@ -11,7 +11,7 @@ psutil
 pyjwt
 pytz
 pyyaml
-requests<=2.31.0
+requests<=2.32.4
 requests-unixsocket
 simplejson
 s3fs
