@@ -15,4 +15,4 @@ requests<=2.31.0
 requests-unixsocket
 simplejson
 s3fs
-urllib3<2.0.0
+urllib3<3.0.0
