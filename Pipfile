@@ -5,7 +5,7 @@ name = "pypi"
 
 [packages]
 aiohttp = "==3.10.2"
-aiobotocore = "==2.5.0"
+aiobotocore = ">=2.13.0"
 aiohttp-cors = "*"
 aiofiles = "*"
 azure-storage-blob = "*"

@@ -35,7 +35,7 @@ version = "0.9.2"
 
 dependencies = [
     "aiohttp == 3.9.4",
-    "aiobotocore == 2.13.0",
+    "aiobotocore >= 2.13.0",
     "aiohttp_cors",
     "aiofiles",
     "azure-storage-blob",
