@@ -1,5 +1,5 @@
 aiohttp==3.9.4
-aiobotocore==2.13.0
+aiobotocore>=2.13.0
 aiohttp_cors
 aiofiles
 azure-storage-blob
@@ -11,8 +11,8 @@ psutil
 pyjwt
 pytz
 pyyaml
-requests<=2.31.0
-requests-unixsocket
+requests<=2.32.4
+requests-unixsocket2 @ git+https://gitlab.com/thelabnyc/requests-unixsocket2.git
 simplejson
 s3fs
-urllib3<2.0.0
+urllib3>=2.4.0,<3.0
