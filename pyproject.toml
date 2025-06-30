@@ -49,11 +49,11 @@ dependencies = [
     "pyjwt",
     "pytz",
     "pyyaml",
-    "requests <= 2.31.0",
-    "requests-unixsocket",
+    "requests <= 2.32.4",
+    "requests-unixsocket2 @ git+https://gitlab.com/thelabnyc/requests-unixsocket2.git",
     "simplejson",
     "s3fs",
-    "urllib3 < 2.0.0"
+    "urllib3 >= 2.4.0, < 3.0"
 ]
 
 [project.optional-dependencies]

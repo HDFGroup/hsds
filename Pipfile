@@ -19,9 +19,11 @@ psutil = "*"
 pyjwt = "*"
 pytz = "*"
 pyyaml = "*"
-requests-unixsocket = "*"
+requests = "<=2.32.4"
+requests-unixsocket2 = {git = "https://gitlab.com/thelabnyc/requests-unixsocket2.git"}
 simplejson = "*"
 s3fs = "*"
+urllib3 = ">=2.4.0,<3.0"
 
 [dev-packages]
 
