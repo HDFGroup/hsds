@@ -33,6 +33,7 @@ def validateLinkName(name):
 def getLinkClass(link_json):
     """ verify this is a valid link
         returns the link class """
+    log.debug(f"getLinkClass({link_json})")
     if "class" in link_json:
         link_class = link_json["class"]
     else:
@@ -183,7 +184,7 @@ def getRequestLink(title, link_json, predate_max_time=0.0):
     if "created" in link_json:
         created = link_json["created"]
         # allow "pre-dated" attributes if recent enough
-        if now - created > predate_max_time:
+        if now - created < predate_max_time:
             link_item["created"] = created
         else:
             log.warn("stale created timestamp for link, ignoring")

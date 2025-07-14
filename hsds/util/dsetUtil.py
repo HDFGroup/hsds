@@ -329,7 +329,7 @@ def getShapeJson(body):
             shape_class = "H5S_SIMPLE"
             dims = body_shape
     else:
-        msg = "invalid shape: {body_shape}"
+        msg = f"invalid shape: {body_shape}"
         log.warn(msg)
         raise ValueError(msg)
 

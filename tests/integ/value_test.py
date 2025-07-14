@@ -111,9 +111,7 @@ class ValueTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" in rspJson)
-        expect_value = [
-            0,
-        ]
+        expect_value = [0, ]
         expect_value *= data["shape"]
         self.assertEqual(rspJson["value"], expect_value)
 

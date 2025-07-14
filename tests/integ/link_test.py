@@ -68,6 +68,14 @@ class LinkTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 404)  # link doesn't exist yet
 
+        # try creating link with no body
+        rsp = self.session.put(req, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
+        # try creating link with no items
+        rsp = self.session.put(req, headers=headers, data=json.dumps({}))
+        self.assertEqual(rsp.status_code, 400)
+
         # try creating a link with a different user (should fail)
         if test_user2:
             headers = helper.getRequestHeaders(domain=domain, username=test_user2)
@@ -1481,7 +1489,14 @@ class LinkTest(unittest.TestCase):
         links = {}
         for i in range(grp_count):
             title = grp_names[i]
-            links[title] = {"id": grp_ids[i]}
+            if i%2 == 0:
+                # create a hardlink implicitly
+                links[title] = {"id": grp_ids[i]}
+            else:
+                # for variety, create a hardlink by providing full link json
+                links[title] = {"class": "H5L_TYPE_HARD", "id": grp_ids[i]}
+                print("putLinkMulti:", links[title])
+                self.assertTrue(False)
 
         # add a soft and external link as well
         links["softlink"] = {"h5path": "a_path"}

@@ -1020,10 +1020,13 @@ async def getAttributeFromRequest(app, req_json, obj_id=None, bucket=None):
         created = req_json["created"]
         # allow "pre-dated" attributes if the timestamp is within the last 10 seconds
         predate_max_time = config.get("predate_max_time", default=10.0)
-        if now - created > predate_max_time:
+        if now - created < predate_max_time:
             attr_item["created"] = created
         else:
-            log.warn("stale created timestamp for attribute, ignoring")
+            msg = "stale created timestamp for attribute, ignoring "
+            msg += f"predate config: {predate_max_time:6.2f} "
+            msg += f"age: {(now - created):6.2f}"
+            log.warn(msg)
     if "created" not in attr_item:
         attr_item["created"] = now
 

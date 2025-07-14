@@ -336,6 +336,16 @@ async def PUT_Links(request):
         msg = "Unable to load JSON body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    
+    if not body:
+        msg = "PUT links with empty body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    
+    if not isinstance(body, dict):
+        msg = f"PUT links expected dictionary body but got: {type(body)}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -432,6 +442,7 @@ async def PUT_Links(request):
                             link_item = link_items[title]
                             getLinkClass(link_item)
                         except ValueError:
+                            log.warn(f"invalid link for {title}: {link_item}")
                             raise HTTPBadRequest(reason="invalid link item")
                     grp_ids[grp_id] = link_items
 
