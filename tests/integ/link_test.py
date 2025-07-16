@@ -1489,14 +1489,12 @@ class LinkTest(unittest.TestCase):
         links = {}
         for i in range(grp_count):
             title = grp_names[i]
-            if i%2 == 0:
+            if i % 2 == 0:
                 # create a hardlink implicitly
                 links[title] = {"id": grp_ids[i]}
             else:
                 # for variety, create a hardlink by providing full link json
                 links[title] = {"class": "H5L_TYPE_HARD", "id": grp_ids[i]}
-                print("putLinkMulti:", links[title])
-                self.assertTrue(False)
 
         # add a soft and external link as well
         links["softlink"] = {"h5path": "a_path"}

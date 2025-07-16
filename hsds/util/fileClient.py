@@ -173,6 +173,12 @@ class FileClient:
             msg = f"Unexpected Exception {type(e)} get get_object {key}: {e}"
             log.error(msg)
             raise HTTPInternalServerError()
+
+        posix_delay = config.get("posix_delay", default=0.0)
+        if posix_delay > 0.0:
+            log.warn(f"posix_delay for get_object, sleep for: {posix_delay}")
+            await asyncio.sleep(posix_delay)
+
         return data
 
     def _mkdir(self, dirpath):
@@ -254,6 +260,12 @@ class FileClient:
             msg = f"fileClient.put_object {key} complete, "
             msg += f"write_rsp: {write_rsp}"
             log.debug(msg)
+
+        posix_delay = config.get("posix_delay", default=0.0)
+        if posix_delay > 0.0:
+            log.warn(f"posix_delay for put_object, sleep for: {posix_delay}")
+            await asyncio.sleep(posix_delay)
+
         return write_rsp
 
     async def delete_object(self, key, bucket=None):
@@ -294,7 +306,11 @@ class FileClient:
             msg = f"Unexpected Exception {type(e)} deleting file obj {key}: {e}"
             log.error(msg)
             raise HTTPInternalServerError()
-        await asyncio.sleep(0)  # for async compat
+
+        posix_delay = config.get("posix_delay", default=0.0)
+        if posix_delay > 0.0:
+            log.warn(f"posix_delay for delete_object , sleep for: {posix_delay}")
+        await asyncio.sleep(posix_delay)  # for async compat
 
     async def is_object(self, key, bucket=None):
         self._validateBucket(bucket)
@@ -428,6 +444,11 @@ class FileClient:
             msg = f"expected {count} keys in return list but "
             msg == f"got {len(key_names)}"
             log.warning(msg)
+
+        posix_delay = config.get("posix_delay", default=0.0)
+        if posix_delay > 0.0:
+            log.warn(f"posix_delay for list_keys, sleep for: {posix_delay}")
+            await asyncio.sleep(posix_delay)
 
         return key_names
 

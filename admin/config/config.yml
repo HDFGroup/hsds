@@ -70,7 +70,7 @@ admin_group: null # enable admin privileges for any user in this group
 openid_provider: azure # OpenID authentication provider
 openid_url: null # OpenID connect endpoint if provider is not azure or google
 openid_audience: null # OpenID audience. This is synonymous with azure_resource_id for azure
-openid_claims: unique_name,appid,roles # Comma seperated list of claims to resolve to usernames.
+openid_claims: unique_name,appid,roles # Comma separated list of claims to resolve to usernames.
 chaos_die: 0 # if > 0, have nodes randomly die after n seconds (for testing)
 standalone_app: false # True when run as a single application
 blosc_nthreads: 2 # number of threads to use for blosc compression.  Set to 0 to have blosc auto-determine thread count
@@ -89,6 +89,7 @@ allow_any_bucket_write: true # enable writes to buckets other than default bucke
 bit_shuffle_default_blocksize: 2048 # default blocksize for bitshuffle filter
 max_rangeget_gap: 1024 # max gap in byte for intelligent range get requests
 predate_maxtime: 10.0 # max delta between object created timestamp in request and actual time
+posix_delay: 0.0  # delay for POSIX IO operations for simulating cloud storage latencies
 # DEPRECATED - the remaining config values are not used in currently but kept for backward compatibility with older container images
 aws_lambda_chunkread_function: null # name of aws lambda function for chunk reading
 aws_lambda_threshold: 4 # number of chunks per node per request to reach before using lambda
