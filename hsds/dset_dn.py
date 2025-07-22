@@ -137,7 +137,7 @@ async def POST_Dataset(request):
     if "layout" in body:
         layout = body["layout"]  # client specified chunk layout
 
-    # ok - all set, create committed type obj
+    # ok - all set, create dataset obj
     now = getNow(app)
 
     if "attributes" in body:

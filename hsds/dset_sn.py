@@ -23,7 +23,8 @@ from h5json.objid import isValidUuid, isSchema2Id
 
 from .util.httpUtil import getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse, getBooleanParam
-from .util.dsetUtil import getPreviewQuery, getShapeDims
+from .util.chunkUtil import getChunkIds
+from .util.dsetUtil import getPreviewQuery, getShapeDims, getChunkLayout, getDatasetLayoutClass
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
@@ -31,7 +32,7 @@ from .util.domainUtil import getBucketForDomain, verifyRoot
 from .servicenode_lib import getDomainJson, getObjectJson, getDsetJson, getPathForObjectId
 from .servicenode_lib import getObjectIdByPath, validateAction, getRootInfo
 from .servicenode_lib import getDatasetCreateArgs, createDataset, deleteObject
-from .dset_lib import updateShape, deleteAllChunks, doHyperslabWrite
+from .dset_lib import updateShape, deleteAllChunks
 from .post_crawl import createDatasets
 from .domain_crawl import DomainCrawler
 from . import hsds_logger as log
@@ -605,12 +606,35 @@ async def POST_Dataset(request):
         raise HTTPInternalServerError()
 
     # write any init data values
+    init_chunks = {}
     for index in range(obj_count):
         init_data = init_values[index]
         if init_data is None:
-            continue
+            continue  # no data to initialize
         dset_json = objects[index]
+        dset_id = dset_json["id"]
         log.debug(f"init value, post_rsp: {dset_json}")
+        layout_class = getDatasetLayoutClass(dset_json)
+        log.debug(f"layout_class: {layout_class}")
+        if layout_class != "H5D_CHUNKED":
+            msg = f"dataset init_data used with unsupported layout_class: {layout_class}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        layout_dims = getChunkLayout(dset_json)
+        log.debug(f"init data layout is: {layout_dims}")
+        # make selection for entire dataspace
+        dims = getShapeDims(dset_json["shape"])
+        slices = []
+        for dim in dims:
+            s = slice(0, dim, 1)
+            slices.append(s)
+        chunk_ids = getChunkIds(dset_id, slices, layout_dims)
+        log.debug(f"init data, got chunk_ids: {chunk_ids}")
+        if not chunk_ids or len(chunk_ids) != 1:
+            msg = "expected one chunk for init_data but got: {chunk_ids}"
+            log.error(msg)
+            raise HTTPInternalServerError()
+        chunk_id = chunk_ids[0]
         shape_json = dset_json["shape"]
         type_json = dset_json["type"]
         arr_dtype = createDataType(type_json)
@@ -627,7 +651,8 @@ async def POST_Dataset(request):
             log.warn(f"IndexError: {msg}")
             raise HTTPBadRequest(reason=msg)
         log.debug(f"got json arr: {input_arr.shape}")
-
+        init_chunks[chunk_id] = input_arr
+        """
         # write data if provided
         log.debug(f"write input_arr: {input_arr}")
         # make selection for entire dataspace
@@ -636,7 +661,7 @@ async def POST_Dataset(request):
         for dim in dims:
             s = slice(0, dim, 1)
             slices.append(s)
-        # make a one page list to handle the write in one chunk crawler run
+        #make a one page list to handle the write in one chunk crawler run
         # (larger write request should user binary streaming)
         kwargs = {"page_number": 0, "page": slices}
         kwargs["dset_json"] = dset_json
@@ -645,6 +670,18 @@ async def POST_Dataset(request):
         kwargs["data"] = input_arr
         # do write
         await doHyperslabWrite(app, request, **kwargs)
+        """
+    if init_chunks:
+        # write dataset init values using the Domain Crawler
+        log.debug(f"POST dataset - setting init values: {list(init_chunks.keys())}")
+        kwargs = {"action": "put_data", "bucket": bucket}
+
+        crawler = DomainCrawler(app, init_chunks, **kwargs)
+
+        # will raise exception on not found, server busy, etc.
+        await crawler.crawl()
+        status = crawler.get_status()
+        log.info(f"DomainCrawler done for put_data action, status: {status}")
 
     if "objects" in post_rsp:
         # add any links in multi request

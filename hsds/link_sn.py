@@ -336,12 +336,12 @@ async def PUT_Links(request):
         msg = "Unable to load JSON body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    
+
     if not body:
         msg = "PUT links with empty body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    
+
     if not isinstance(body, dict):
         msg = f"PUT links expected dictionary body but got: {type(body)}"
         log.warn(msg)

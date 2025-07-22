@@ -19,9 +19,10 @@ from aiohttp.web_exceptions import HTTPServiceUnavailable, HTTPConflict, HTTPBad
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNotFound, HTTPGone
 
 from h5json.objid import getCollectionForId
+from h5json.array_util import arrayToBytes
 
 from .util.nodeUtil import getDataNodeUrl
-from .util.httpUtil import isOK
+from .util.httpUtil import isOK, http_put
 from .util.globparser import globmatch
 from .servicenode_lib import getObjectJson, getAttributes, putAttributes, getLinks, putLinks
 from . import hsds_logger as log
@@ -233,7 +234,7 @@ class DomainCrawler:
         try:
             status = await putAttributes(self._app, obj_id, attr_items, **kwargs)
         except HTTPConflict:
-            log.warn("DomainCrawler - got HTTPConflict from http_put")
+            log.warn("DomainCrawler - got HTTPConflict from putAttributers")
             status = 409
         except HTTPServiceUnavailable:
             status = 503
@@ -419,14 +420,48 @@ class DomainCrawler:
             log.warn("DomainCrawler - got HTTPConflict from http_put")
             status = 409
         except HTTPServiceUnavailable:
+            log.warn("DomainCrawler - got HTTPServiceUnavailable exception")
             status = 503
         except HTTPInternalServerError:
+            log.warn("DomainCrawler - got 500 error from DN")
             status = 500
         except Exception as e:
             log.error(f"unexpected exception {e}")
 
         log.debug(f"DomainCrawler fetch for {grp_id} - returning status: {status}")
         self._obj_dict[grp_id] = {"status": status}
+
+    async def put_data(self, chunk_id, arr):
+        # write a one-chunk dataset value
+        log.debug(f"DomainCrawler put_data for {chunk_id}, arr: {arr}")
+        req = getDataNodeUrl(self._app, chunk_id)
+        req += "/chunks/" + chunk_id
+        log.debug(f"put_data req: {req}")
+        params = {"bucket": self._bucket}
+
+        data = arrayToBytes(arr)
+
+        log.debug(f"DomainCrawler - put_data req: {req}, {len(data)} bytes")
+
+        try:
+            # TBD: setup an http client?
+            await http_put(self._app, req, data=data, params=params, client=None)
+            log.debug("http_put return")
+        except HTTPConflict:
+            log.warn("DomainCrawler - got HTTPConflict from http_put")
+            status = 409
+        except HTTPServiceUnavailable:
+            log.warn("DomainCrawler - got HTTPServiceUnavailable exception")
+            status = 503
+        except HTTPInternalServerError:
+            log.warn("DomainCrawler - got 500 error from DN")
+            status = 500
+        except Exception as e:
+            log.error(f"unexpected exception {e}")
+            status = 500
+
+        log.debug(f"DomainCrawler put_data for {chunk_id} - returning status: {status}")
+        self._obj_dict[chunk_id] = {"status": status}
 
     def get_status(self):
         """ return the highest status of any of the returned objects """
@@ -528,7 +563,7 @@ class DomainCrawler:
 
             await self.put_attributes(obj_id, attr_items)
         elif self._action == "get_link":
-            log.debug("DomainCrawlwer - get links")
+            log.debug("DomainCrawler - get links")
             log.debug(f"self._objs: {self._objs}, type: {type(self._objs)}")
 
             if self._objs is None or obj_id not in self._objs:
@@ -548,7 +583,7 @@ class DomainCrawler:
                 log.debug(f"DomainCrawler - get link titles: {link_titles}")
             await self.get_links(obj_id, link_titles)
         elif self._action == "put_link":
-            log.debug("DomainCrawlwer - put links")
+            log.debug("DomainCrawler - put links")
             # write links
             if self._objs and obj_id not in self._objs:
                 log.error(f"couldn't find {obj_id} in self._objs")
@@ -557,11 +592,21 @@ class DomainCrawler:
             log.debug(f"got {len(link_items)} link items for {obj_id}")
 
             await self.put_links(obj_id, link_items)
+        elif self._action == "put_data":
+            log.debug("DomainCrawler - put data")
+            # write one chunk per dataset
+            if self._objs and obj_id not in self._objs:
+                log.error(f"couldn't find {obj_id} in self._objs")
+                return
+            data = self._objs[obj_id]
+            log.debug(f"got {data} data for {obj_id}")
+
+            await self.put_data(obj_id, data)
         else:
             msg = f"DomainCrawler: unexpected action: {self._action}"
             log.error(msg)
 
         msg = f"DomainCrawler - fetch complete obj_id: {obj_id}, "
-        msg += f"{len(self._obj_dict)} objects found"
+        msg += f"{len(self._obj_dict)} objects processed"
         log.debug(msg)
         log.debug(f"obj_dict: {len(self._obj_dict)} items")
