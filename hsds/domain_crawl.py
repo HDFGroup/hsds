@@ -600,7 +600,7 @@ class DomainCrawler:
                 log.error(f"couldn't find {obj_id} in self._objs")
                 return
             data = self._objs[obj_id]
-            log.debug(f"got {data} data for {obj_id}")
+            log.debug(f"got {len(data)} data for {obj_id}")
 
             await self.put_data(obj_id, data)
         else:
