@@ -442,11 +442,10 @@ class DomainCrawler:
         data = arrayToBytes(arr)
 
         log.debug(f"DomainCrawler - put_data req: {req}, {len(data)} bytes")
-
         try:
-            # TBD: setup an http client?
-            await http_put(self._app, req, data=data, params=params, client=None)
-            log.debug("http_put return")
+            rsp = await http_put(self._app, req, data=data, params=params)
+            log.debug(f"http_put return: {rsp}")
+            status = 200
         except HTTPConflict:
             log.warn("DomainCrawler - got HTTPConflict from http_put")
             status = 409
@@ -459,6 +458,8 @@ class DomainCrawler:
         except Exception as e:
             log.error(f"unexpected exception {e}")
             status = 500
+        finally:
+            log.debug("DomainCrawler put_data end try")
 
         log.debug(f"DomainCrawler put_data for {chunk_id} - returning status: {status}")
         self._obj_dict[chunk_id] = {"status": status}
