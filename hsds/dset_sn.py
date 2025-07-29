@@ -652,25 +652,7 @@ async def POST_Dataset(request):
             raise HTTPBadRequest(reason=msg)
         log.debug(f"got json arr: {input_arr.shape}")
         init_chunks[chunk_id] = input_arr
-        """
-        # write data if provided
-        log.debug(f"write input_arr: {input_arr}")
-        # make selection for entire dataspace
-        dims = getShapeDims(shape_json)
-        slices = []
-        for dim in dims:
-            s = slice(0, dim, 1)
-            slices.append(s)
-        #make a one page list to handle the write in one chunk crawler run
-        # (larger write request should user binary streaming)
-        kwargs = {"page_number": 0, "page": slices}
-        kwargs["dset_json"] = dset_json
-        kwargs["bucket"] = bucket
-        kwargs["select_dtype"] = input_arr.dtype
-        kwargs["data"] = input_arr
-        # do write
-        await doHyperslabWrite(app, request, **kwargs)
-        """
+
     if init_chunks:
         # write dataset init values using the Domain Crawler
         log.debug(f"POST dataset - setting init values: {list(init_chunks.keys())}")

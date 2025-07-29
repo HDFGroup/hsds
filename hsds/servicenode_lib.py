@@ -1357,6 +1357,8 @@ def getCreateArgs(body,
     """ get args for createObject from request body """
 
     log.debug(f"getCreateArgs with body keys: {list(body.keys())}")
+    if ignore_link:
+        log.debug("getCreateArgs, ignore_link is set")
 
     kwargs = {"bucket": bucket}
     predate_max_time = config.get("predate_max_time", default=10.0)
@@ -1365,9 +1367,29 @@ def getCreateArgs(body,
     obj_id = None
     h5path = None
 
+    if "parent_id" not in body:
+        parent_id = root_id
+    else:
+        parent_id = body["parent_id"]
+
+    if "h5path" in body:
+        h5path = body["h5path"]
+        # normalize the h5path
+        if h5path.startswith("/"):
+            if parent_id == root_id:
+                # just adjust the path to be relative
+                h5path = h5path[1:]
+            else:
+                msg = f"PostCrawler expecting relative h5path, but got: {h5path}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+        if h5path.endswith("/"):
+            h5path = h5path[:-1]  # makes iterating through the links a bit easier
+
     if "link" in body:
         if "h5path" in body:
-            msg = "link can't be used with h5path"
+            msg = "'link' key in body can't be used with h5path"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         # if ignore_link is set, parent_links will be created post object creation
@@ -1389,26 +1411,7 @@ def getCreateArgs(body,
             log.debug(f"parent id: {parent_id}, link_title: {link_title}")
             if not ignore_link:
                 h5path = link_title  # just use the link name as the h5path
-
-    if "parent_id" not in body:
-        parent_id = root_id
-    else:
-        parent_id = body["parent_id"]
-
-    if "h5path" in body:
-        h5path = body["h5path"]
-        # normalize the h5path
-        if h5path.startswith("/"):
-            if parent_id == root_id:
-                # just adjust the path to be relative
-                h5path = h5path[1:]
-            else:
-                msg = f"PostCrawler expecting relative h5path, but got: {h5path}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-        if h5path.endswith("/"):
-            h5path = h5path[:-1]  # makes iterating through the links a bit easier
+                log.debug(f"set h5path to {link_title}")
 
     if parent_id and h5path:
         # these are used by createObjectByPath

@@ -233,6 +233,7 @@ async def POST_Group(request):
         kwargs = {"root_id": root_id, "bucket": bucket}
 
     if post_rsp is None:
+        log.debug(f"post_rsp is None, call createGroup with kwargs: {kwargs}")
         # Handle cases other than multi-group create here
         if "type" in kwargs:
             msg = "type key is not allowed for Group creation"
