@@ -213,11 +213,6 @@ jobs:
         run: |
           pip install -e .
 
-      # Requests 2.32.0 breaks requests-unixsocket, used by HSDS for socket connections
-      # - name: Fix requests version
-      #  run: |
-      #    pip install requests==2.31.0
-
       - name: Run HSDS unit tests
         shell: bash
         run: |
