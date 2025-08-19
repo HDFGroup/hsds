@@ -30,8 +30,8 @@ classifiers = [
     "Topic :: Database",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-requires-python = ">=3.8"
-version = "0.9.2"
+requires-python = ">=3.10"
+version = "0.9.3"
 
 dependencies = [
     "aiohttp == 3.9.4",
