@@ -31,7 +31,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 requires-python = ">=3.10"
-version = "0.9.3"
+version = "0.9.4"
 
 dependencies = [
     "aiohttp == 3.9.4",
@@ -44,12 +44,13 @@ dependencies = [
     "h5py >= 3.6.0",
     "importlib_resources",
     "numcodecs <= 0.15.1",
-    "numpy >=2.0.0rc1; python_version>='3.9'",
+    "numpy >=2.0.0",
     "psutil",
     "pyjwt",
     "pytz",
     "pyyaml",
     "requests <= 2.32.4",
+    "requests-unixsocket",
     "simplejson",
     "s3fs",
     "urllib3 >= 2.4.0, < 3.0"
