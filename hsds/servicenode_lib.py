@@ -448,7 +448,12 @@ async def getLink(app, group_id, title, bucket=None):
     return link_json
 
 
-async def putLink(app, group_id, title, tgt_id=None, h5path=None, h5domain=None, bucket=None):
+async def putLink(app, group_id, title,
+                  tgt_id=None,
+                  h5path=None,
+                  h5domain=None,
+                  bucket=None,
+                  created=None):
     """ create a new link.  Return 201 if this is a new link,
     or 200 if it's a duplicate of an existing link. """
 
@@ -469,6 +474,8 @@ async def putLink(app, group_id, title, tgt_id=None, h5path=None, h5domain=None,
         link_json["h5path"] = h5path
     if h5domain:
         link_json["h5domain"] = h5domain
+    if created:
+        link_json["created"] = created
 
     try:
         link_class = getLinkClass(link_json)

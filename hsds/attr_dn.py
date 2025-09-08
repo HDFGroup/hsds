@@ -12,7 +12,6 @@
 #
 # attribute handling routines
 #
-import time
 from bisect import bisect_left
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPNotFound, HTTPGone
@@ -28,6 +27,8 @@ from .util.globparser import globmatch
 from .util.dsetUtil import getShapeDims
 from .util.domainUtil import isValidBucketName
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
+from .util.timeUtil import getNow
+from . import config
 from . import hsds_logger as log
 
 
@@ -362,6 +363,8 @@ async def PUT_Attributes(request):
     params = request.rel_url.query
     log.debug(f"got PUT_Attributes params: {params}")
     obj_id = get_obj_id(request)
+    now = getNow(app)
+    max_timestamp_drift = int(config.get("max_timestamp_drift", default=300))
 
     if not request.has_body:
         log.error("PUT_Attribute with no body")
@@ -459,11 +462,18 @@ async def PUT_Attributes(request):
 
     attributes = obj_json["attributes"]
 
-    create_time = time.time()
     # check for conflicts
     new_attributes = set()  # attribute names that are new or replacements
     for attr_name in items:
         attribute = items[attr_name]
+        if attribute.get("created"):
+            create_time = attribute["created"]
+            log.debug(f"attribute {attr_name} has create time: {create_time}")
+            if abs(create_time - now) > max_timestamp_drift:
+                log.warn(f"attribute {attr_name} create time stale, ignoring")
+                create_time = now
+        else:
+            create_time = now
         if attr_name in attributes:
             log.debug(f"attribute {attr_name} exists")
             old_item = attributes[attr_name]
@@ -511,7 +521,7 @@ async def PUT_Attributes(request):
 
     if new_attributes:
         # update the obj lastModified
-        now = time.time()
+        now = getNow(app)
         obj_json["lastModified"] = now
         # write back to S3, save to metadata cache
         await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
@@ -610,7 +620,7 @@ async def DELETE_Attributes(request):
 
     if save_obj:
         # update the object lastModified
-        now = time.time()
+        now = getNow(app)
         obj_json["lastModified"] = now
         await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
 

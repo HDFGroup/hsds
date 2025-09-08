@@ -12,6 +12,7 @@
 from copy import copy
 import unittest
 import json
+import time
 import numpy as np
 import base64
 import helper
@@ -499,6 +500,66 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(type_json["class"], "H5T_STRING")
         self.assertTrue("length" in type_json)
         self.assertEqual(type_json["length"], 7)
+
+    def testUseTimestamp(self):
+        # Test PUT value for 1d attribute with timestamp included
+        print("testUseTimestamp", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        def _create_attr(attr_name, ts=None):
+
+            # create attr
+            fixed_str_type = {
+                "charSet": "H5T_CSET_ASCII",
+                "class": "H5T_STRING",
+                "length": 12,
+                "strPad": "H5T_STR_NULLPAD",
+            }
+            data = {"type": fixed_str_type, "value": "XYZ"}
+            if ts:
+                data["created"] = ts
+            req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+            rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+
+        def _check_attr_ts(attr_name, min_ts=None, max_ts=None):
+            # read attr
+            req = self.endpoint + "/groups/" + root_uuid + "/attributes/" + attr_name
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertTrue("hrefs" in rspJson)
+            self.assertTrue("value" in rspJson)
+            self.assertEqual(rspJson["value"], "XYZ")
+            self.assertTrue("type" in rspJson)
+            self.assertTrue("created" in rspJson)
+            if min_ts:
+                self.assertGreaterEqual(rspJson["created"], min_ts)
+            if max_ts:
+                self.assertLessEqual(rspJson["created"], max_ts)
+
+        now = time.time()
+        # server-based timestamp
+        _create_attr("a1")
+        _check_attr_ts("a1", min_ts=(now - 1), max_ts=(now + 1))
+        # client assigned timestamp
+        _create_attr("a2", ts=now)
+        _check_attr_ts("a2", min_ts=now, max_ts=now)
+        # client assigned with small time-skew, ok
+        _create_attr("a3", ts=int(now))
+        _check_attr_ts("a3", min_ts=int(now), max_ts=int(now))
+        # client assigned with large time-skew, ignored
+        _create_attr("a4", ts=999)
+        _check_attr_ts("a4", min_ts=now, max_ts=(now + 1))
 
     def testPutFixedStringNullTerm(self):
         # Test PUT value for 1d attribute with fixed length string/null terminated types

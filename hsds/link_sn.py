@@ -299,6 +299,9 @@ async def PUT_Link(request):
     kwargs["tgt_id"] = body.get("id")
     kwargs["h5path"] = body.get("h5path")
     kwargs["h5domain"] = body.get("h5domain")
+    created = body.get("created")
+    if created:
+        kwargs["created"] = created
 
     status = await putLink(app, group_id, link_title, **kwargs)
 

@@ -27,6 +27,7 @@ from .util.linkUtil import validateLinkName, getLinkClass, isEqualLink
 from .util.domainUtil import isValidBucketName
 from .util.timeUtil import getNow
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
+from . import config
 from . import hsds_logger as log
 
 
@@ -285,6 +286,8 @@ async def PUT_Links(request):
     params = request.rel_url.query
     group_id = get_obj_id(request)
     log.info(f"PUT links: {group_id}")
+    now = getNow(app)
+    max_timestamp_drift = int(config.get("max_timestamp_drift", default=300))
 
     if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
@@ -365,11 +368,16 @@ async def PUT_Links(request):
         link_delete_set = deleted_links[group_id]
     else:
         link_delete_set = set()
-
-    create_time = getNow(app)
-
     for title in new_links:
         item = items[title]
+        if item.get("created"):
+            create_time = item["created"]
+            log.debug(f"link {title} has create time: {create_time}")
+            if abs(create_time - now) > max_timestamp_drift:
+                log.warn(f"link {title} create time stale, ignoring")
+                create_time = now
+        else:
+            create_time = now
         item["created"] = create_time
         links[title] = item
         log.debug(f"added link {title}: {item}")
@@ -378,7 +386,7 @@ async def PUT_Links(request):
 
     if new_links:
         # update the group lastModified
-        group_json["lastModified"] = create_time
+        group_json["lastModified"] = now
 
         # write back to S3, save to metadata cache
         await save_metadata_obj(app, group_id, group_json, bucket=bucket)

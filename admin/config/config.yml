@@ -91,6 +91,7 @@ max_rangeget_gap: 1024 # max gap in byte for intelligent range get requests
 predate_maxtime: 10.0 # max delta between object created timestamp in request and actual time
 posix_delay: 0.0  # delay for POSIX IO operations for simulating cloud storage latencies
 max_compact_dset_size: 65536  # size in bytes for maximum compact storage size
+max_timestamp_drift: 300  # number of seconds a client-based timestamp can differ from current time
 # DEPRECATED - the remaining config values are not used in currently but kept for backward compatibility with older container images
 aws_lambda_chunkread_function: null # name of aws lambda function for chunk reading
 aws_lambda_threshold: 4 # number of chunks per node per request to reach before using lambda
