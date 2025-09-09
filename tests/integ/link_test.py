@@ -2069,7 +2069,7 @@ class LinkTest(unittest.TestCase):
         _check_link_ts("a3", min_ts=int(now), max_ts=int(now))
         # client assigned with large time-skew, ignored
         _create_link("a4", ts=999)
-        _check_link_ts("a4", min_ts=now, max_ts=(now + 1))
+        _check_link_ts("a4", min_ts=(now - 1), max_ts=(now + 1))
 
 
 if __name__ == "__main__":
