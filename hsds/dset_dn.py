@@ -57,9 +57,12 @@ async def GET_Dataset(request):
     resp_json["shape"] = dset_json["shape"]
     resp_json["attributeCount"] = len(dset_json["attributes"])
     if "creationProperties" in dset_json:
-        resp_json["creationProperties"] = dset_json["creationProperties"]
+        cpl = dset_json["creationProperties"]
+    else:
+        cpl = {}
     if "layout" in dset_json:
-        resp_json["layout"] = dset_json["layout"]
+        cpl["layout"] = dset_json["layout"]
+    resp_json["creationProperties"] = cpl
     if "include_attrs" in params and params["include_attrs"]:
         resp_json["attributes"] = dset_json["attributes"]
 
@@ -133,9 +136,8 @@ async def POST_Dataset(request):
         raise HTTPInternalServerError()
     shape_json = body["shape"]
 
-    layout = None
     if "layout" in body:
-        layout = body["layout"]  # client specified chunk layout
+        log.error("unexpected key for POST Dataset: 'layout'")
 
     # ok - all set, create dataset obj
     now = getNow(app)
@@ -160,9 +162,10 @@ async def POST_Dataset(request):
     }
 
     if "creationProperties" in body:
-        dset_json["creationProperties"] = body["creationProperties"]
-    if layout is not None:
-        dset_json["layout"] = layout
+        cpl = body["creationProperties"]
+    else:
+        cpl = {}
+    dset_json["creationProperties"] = cpl
 
     kwargs = {"bucket": bucket, "notify": True, "flush": True}
     await save_metadata_obj(app, dset_id, dset_json, **kwargs)
@@ -175,8 +178,7 @@ async def POST_Dataset(request):
     resp_json["shape"] = shape_json
     resp_json["lastModified"] = dset_json["lastModified"]
     resp_json["attributeCount"] = len(attrs)
-    if layout is not None:
-        resp_json["layout"] = layout
+    resp_json["creationProperties"] = cpl
 
     resp = json_response(resp_json, status=201)
     log.response(request, resp=resp)

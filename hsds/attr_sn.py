@@ -22,6 +22,7 @@ from h5json.hdf5dtype import createDataType, getItemSize
 from h5json.array_util import jsonToArray, getNumElements
 from h5json.array_util import bytesToArray, arrayToBytes, decodeData, encodeData
 from h5json.objid import isValidUuid
+from h5json.shape_util import getShapeDims
 
 from .util.httpUtil import getAcceptType, jsonResponse, getHref, getBooleanParam
 from .util.globparser import globmatch
@@ -29,7 +30,6 @@ from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
 from .util.attrUtil import validateAttributeName, getRequestCollectionName
-from .util.dsetUtil import getShapeDims
 
 from .servicenode_lib import getDomainJson, getAttributeFromRequest, getAttributesFromRequest
 from .servicenode_lib import getAttributes, putAttributes, deleteAttributes, validateAction
@@ -358,7 +358,7 @@ async def PUT_Attribute(request):
     kwargs = {"bucket": bucket}
     if "replace" in params and params["replace"]:
         # allow attribute to be overwritten
-        log.debug("setting replace for PUT Atttribute")
+        log.debug("setting replace for PUT Attribute")
         kwargs["replace"] = True
     else:
         log.debug("replace is not set for PUT Attribute")
@@ -819,7 +819,7 @@ async def PUT_AttributeValue(request):
             log.debug("PUT AttributeValue - request_type is binary")
             request_type = "binary"
         elif "application/json" in content_type:
-            log.debug("PUT AttribueValue - request type is json")
+            log.debug("PUT AttributeValue - request type is json")
         else:
             msg = f"Unknown content_type: {content_type}"
             log.warn(msg)
@@ -896,6 +896,7 @@ async def PUT_AttributeValue(request):
     attr_body["value"] = data.decode("ascii")
     attr_body["encoding"] = "base64"
     attr_json = {attr_name: attr_body}
+    log.debug(f"putting attr {attr_name} to DN: {attr_json}")
 
     kwargs = {"bucket": bucket, "replace": True}
 

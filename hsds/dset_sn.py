@@ -20,11 +20,13 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalSer
 from h5json.hdf5dtype import createDataType
 from h5json.array_util import getNumElements, jsonToArray
 from h5json.objid import isValidUuid, isSchema2Id
+from h5json.shape_util import getShapeDims
+from h5json.dset_util import getChunkDims, getDatasetLayoutClass
 
 from .util.httpUtil import getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse, getBooleanParam
 from .util.chunkUtil import getChunkIds
-from .util.dsetUtil import getPreviewQuery, getShapeDims, getChunkLayout, getDatasetLayoutClass
+from .util.dsetUtil import getPreviewQuery
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
@@ -620,7 +622,7 @@ async def POST_Dataset(request):
             msg = f"dataset init_data used with unsupported layout_class: {layout_class}"
             log.error(msg)
             raise HTTPInternalServerError()
-        layout_dims = getChunkLayout(dset_json)
+        layout_dims = getChunkDims(dset_json)
         log.debug(f"init data layout is: {layout_dims}")
         # make selection for entire dataspace
         dims = getShapeDims(dset_json["shape"])

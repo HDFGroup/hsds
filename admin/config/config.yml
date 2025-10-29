@@ -47,6 +47,7 @@ flush_sleep_interval: 1 # time to wait between checking on dirty objects
 flush_timeout: 10 # max time to wait on all I/O operations to complete for a flush
 min_chunk_size: 1m # 1 MB
 max_chunk_size: 4m # 4 MB
+default_vlen_type_size: 128 # guess for average size of variable length types
 max_request_size: 100m # 100 MB - should be no smaller than client_max_body_size in nginx tmpl (if using nginx)
 max_chunks_per_folder: 0 # max number of chunks per s3 folder. 0 for unlimiited
 max_task_count: 100 # maximum number of concurrent tasks per node before server will return 503 error

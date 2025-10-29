@@ -20,12 +20,15 @@ from h5json.hdf5dtype import createDataType
 from h5json.array_util import getNumElements, bytesToArray
 from h5json.objid import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey
 from h5json.objid import getObjId, isValidChunkId, getCollectionForId
+from h5json.filters import getFilters
+from h5json.shape_util import getShapeDims
+from h5json.dset_util import getDatasetLayoutClass, getDatasetLayout, getChunkDims
 
 from .util.chunkUtil import getDatasetId, getNumChunks, ChunkIterator
-from .util.dsetUtil import getHyperslabSelection, getFilterOps, getChunkDims, getFilters
-from .util.dsetUtil import getDatasetLayoutClass, getDatasetLayout, getShapeDims
+from .util.dsetUtil import getHyperslabSelection
 from .util.storUtil import getStorKeys, putStorJSONObj, getStorJSONObj
 from .util.storUtil import deleteStorObj, getStorBytes, isStorObj
+from .datanode_lib import getFilterOps
 from . import hsds_logger as log
 from . import config
 import time

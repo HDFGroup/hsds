@@ -23,11 +23,12 @@ from aiohttp.web import json_response, StreamResponse
 from h5json.hdf5dtype import createDataType, getSubType
 from h5json.array_util import bytesToArray, arrayToBytes, getBroadcastShape
 from h5json.objid import getS3Key, isValidUuid
+from h5json.shape_util import getShapeDims
+from h5json.dset_util import getChunkDims
 
 from .util.httpUtil import request_read, getContentType
 from .util.storUtil import isStorObj, deleteStorObj
-from .util.dsetUtil import getSelectionList, getChunkLayout, getShapeDims
-from .util.dsetUtil import getSelectionShape, getChunkInitializer
+from .util.dsetUtil import getSelectionList, getSelectionShape, getChunkInitializer
 from .util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
 from .util.chunkUtil import chunkWriteSelection, chunkReadSelection
 from .util.chunkUtil import chunkWritePoints, chunkReadPoints
@@ -131,7 +132,7 @@ async def PUT_Chunk(request):
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
 
     # TBD - does this work with linked datasets?
-    dims = getChunkLayout(dset_json)
+    dims = getChunkDims(dset_json)
     rank = len(dims)
 
     type_json = dset_json["type"]
@@ -435,7 +436,7 @@ async def GET_Chunk(request):
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
     shape_dims = getShapeDims(dset_json["shape"])
     log.debug(f"shape_dims: {shape_dims}")
-    dims = getChunkLayout(dset_json)
+    dims = getChunkDims(dset_json)
     log.debug(f"GET_Chunk - got dims: {dims}")
 
     # get chunk selection from query params
@@ -682,7 +683,7 @@ async def POST_Chunk(request):
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
     log.debug(f"get_metadata_obj for {dset_id} returned {dset_json}")
-    dims = getChunkLayout(dset_json)
+    dims = getChunkDims(dset_json)
     rank = len(dims)
 
     type_json = dset_json["type"]

@@ -27,12 +27,13 @@ from aiohttp.client_exceptions import ClientError
 from h5json.hdf5dtype import createDataType
 from h5json.array_util import jsonToArray, getNumpyValue
 from h5json.array_util import getNumElements, arrayToBytes, bytesToArray
+from h5json.shape_util import getShapeDims
+from h5json.dset_util import getChunkDims
 
 from .util.nodeUtil import getDataNodeUrl, getNodeCount
 from .util.httpUtil import http_get, http_put, http_post, get_http_client
 from .util.httpUtil import isUnixDomainUrl
-from .util.dsetUtil import getSliceQueryParam, getShapeDims
-from .util.dsetUtil import getSelectionShape, getChunkLayout
+from .util.dsetUtil import getSliceQueryParam, getSelectionShape
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import getChunkIdForPartition, getQueryDtype
 
@@ -108,7 +109,7 @@ async def write_chunk_hyperslab(
         log.debug(f"setting fields_param to: {fields_param}")
         params["fields"] = fields_param
 
-    layout = getChunkLayout(dset_json)
+    layout = getChunkDims(dset_json)
     log.debug(f"getChunkCoverage({chunk_id}, {slices}, {layout})")
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
     if chunk_sel is None:

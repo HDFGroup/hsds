@@ -21,10 +21,10 @@ from aiohttp.web import json_response
 from h5json.hdf5dtype import getItemSize, createDataType
 from h5json.array_util import arrayToBytes, jsonToArray, decodeData
 from h5json.array_util import bytesToArray, bytesArrayToList, getNumElements
+from h5json.shape_util import getShapeDims
 
 from .util.attrUtil import validateAttributeName, isEqualAttr
 from .util.globparser import globmatch
-from .util.dsetUtil import getShapeDims
 from .util.domainUtil import isValidBucketName
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from .util.timeUtil import getNow
@@ -361,7 +361,7 @@ async def PUT_Attributes(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
-    log.debug(f"got PUT_Attributes params: {params}")
+    log.debug(f"got PUT_Attributes params: {dict(params)}")
     obj_id = get_obj_id(request)
     now = getNow(app)
     max_timestamp_drift = int(config.get("max_timestamp_drift", default=300))
@@ -371,7 +371,7 @@ async def PUT_Attributes(request):
         raise HTTPBadRequest(message="body expected")
 
     body = await request.json()
-    log.debug(f"got body: {body}")
+    log.debug(f"PUT_Attributes got body: {body}")
     if "bucket" in params:
         bucket = params["bucket"]
     elif "bucket" in body:
@@ -440,8 +440,8 @@ async def PUT_Attributes(request):
             data = arr.tolist()
             try:
                 json_data = bytesArrayToList(data)
-                log.debug(f"converted encoded data to {json_data}")
-                if attr_shape["class"] == "H5S_SCALAR":
+                log.debug(f"converted encoded data to '{json_data}'")
+                if attr_shape["class"] == "H5S_SCALAR" and isinstance(json_data, list):
                     attr_json["value"] = json_data[0]  # just store the scalar
                 else:
                     attr_json["value"] = json_data

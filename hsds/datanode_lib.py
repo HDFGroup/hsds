@@ -20,11 +20,14 @@ from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPForbidden
 from aiohttp.web_exceptions import HTTPServiceUnavailable, HTTPBadRequest
 
-from h5json.hdf5dtype import createDataType
+from h5json.hdf5dtype import createDataType, isVlen
 from h5json.array_util import arrayToBytes, bytesToArray, jsonToArray
+from h5json.filters import getFilters, getCompressionFilter, getShuffleFilter
 from h5json.objid import getS3Key, isValidUuid
 from h5json.objid import isValidChunkId, isSchema2Id
 from h5json.objid import getRootObjId, isRootObjId
+from h5json.shape_util import getShapeDims
+from h5json.dset_util import getChunkDims
 
 from .util.nodeUtil import getDataNodeUrl
 from .util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
@@ -33,8 +36,7 @@ from .util.storUtil import getBucketFromStorURI, getKeyFromStorURI, getURIFromKe
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
-from .util.dsetUtil import getChunkLayout, getFilterOps, getShapeDims
-from .util.dsetUtil import getChunkInitializer, getSliceQueryParam, getFilters
+from .util.dsetUtil import getChunkInitializer, getSliceQueryParam
 from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
 from .util.nodeUtil import validateInPartition
 from .util.rangegetUtil import ChunkLocation, chunkMunge, getHyperChunkIndex, getHyperChunkFactors
@@ -558,6 +560,54 @@ async def delete_metadata_obj(app, obj_id, notify=True, root_id=None, bucket=Non
     log.debug(f"delete_metadata_obj for {obj_id} done")
 
 
+def getFilterOps(app, dset_id, filters, dtype=None, chunk_shape=None):
+    """Get list of filter operations to be used for this dataset"""
+    filter_map = app["filter_map"]
+
+    if dset_id in filter_map:
+        return filter_map[dset_id]
+
+    compressionFilter = getCompressionFilter(filters)
+
+    filter_ops = {}
+
+    shuffleFilter = getShuffleFilter(filters)
+
+    if shuffleFilter and not isVlen(dtype):
+        shuffle_name = shuffleFilter["name"]
+        if shuffle_name == "shuffle":
+            filter_ops["shuffle"] = 1  # use regular shuffle
+        elif shuffle_name == "bitshuffle":
+            filter_ops["shuffle"] = 2  # use bitshuffle
+        else:
+            filter_ops["shuffle"] = 0  # no shuffle
+    else:
+        filter_ops["shuffle"] = 0  # no shuffle
+
+    if compressionFilter:
+        if compressionFilter["class"] == "H5Z_FILTER_DEFLATE":
+            filter_ops["compressor"] = "zlib"  # blosc compressor
+        else:
+            if "name" in compressionFilter:
+                filter_ops["compressor"] = compressionFilter["name"]
+            else:
+                filter_ops["compressor"] = "lz4"  # default to lz4
+        if "level" not in compressionFilter:
+            filter_ops["level"] = 5  # medium level
+        else:
+            filter_ops["level"] = int(compressionFilter["level"])
+
+    if filter_ops:
+        # save the chunk shape and dtype
+        filter_ops["chunk_shape"] = chunk_shape
+        filter_ops["dtype"] = dtype
+        filter_map[dset_id] = filter_ops  # save
+
+        return filter_ops
+    else:
+        return None
+
+
 def arange_chunk_init(
     app,
     initializer,
@@ -588,9 +638,8 @@ def arange_chunk_init(
         log.warn(msg)
         raise None
 
-    try:
-        chunk_layout = getChunkLayout(dset_json)
-    except HTTPInternalServerError:
+    chunk_layout = getChunkDims(dset_json)
+    if chunk_layout is None:
         msg = "non-chunked dataset"
         log.warning(msg)
         raise None
@@ -714,7 +763,7 @@ async def run_chunk_initializer(
     dims = getShapeDims(datashape)
     log.debug(f"dataset shape: {dims}")
     # get the chunk layout for this dataset
-    layout = getChunkLayout(dset_json)
+    layout = getChunkDims(dset_json)
     log.debug(f"chunk layout: {layout}")
 
     rank = len(dims)
@@ -1008,12 +1057,12 @@ async def get_chunk(
     log.debug(msg)
 
     chunk_arr = None
-    dims = getChunkLayout(dset_json)
+    dims = getChunkDims(dset_json)
     type_json = dset_json["type"]
     dt = createDataType(type_json)
     layout_json = dset_json["layout"]
     layout_class = layout_json.get("class")
-    chunk_dims = getChunkLayout(dset_json)
+    chunk_dims = getChunkDims(dset_json)
     fill_value = getFillValue(dset_json)
 
     # note - officially we should follow the order in which the filters are
@@ -1167,7 +1216,7 @@ def save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=None):
 
     dset_id = dset_json["id"]
     dtype = createDataType(dset_json["type"])
-    chunk_shape = getChunkLayout(dset_json)
+    chunk_shape = getChunkDims(dset_json)
 
     # will store filter options into app['filter_map']
     filters = getFilters(dset_json)

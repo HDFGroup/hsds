@@ -23,11 +23,12 @@ from aiohttp.web_exceptions import HTTPInternalServerError, HTTPRequestEntityToo
 from h5json.hdf5dtype import createDataType, getItemSize, getDtypeItemSize
 from h5json.array_util import getNumpyValue, bytesToArray
 from h5json.objid import isSchema2Id, getS3Key, getObjId
+from h5json.shape_util import isNullSpace, getShapeDims
+from h5json.dset_util import getChunkDims, getDatasetLayout, getDatasetLayoutClass
 
 from .util.nodeUtil import getDataNodeUrl
 from .util.boolparser import BooleanParser
-from .util.dsetUtil import isNullSpace, getDatasetLayout, getDatasetLayoutClass, get_slices
-from .util.dsetUtil import getShapeDims, getSelectionShape, getChunkLayout
+from .util.dsetUtil import get_slices, getSelectionShape
 from .util.chunkUtil import getChunkCoordinate, getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
@@ -370,7 +371,7 @@ def get_chunk_selections(chunk_map, chunk_ids, slices, dset_json):
         log.debug("no slices set, returning")
         return  # nothing to do
     log.debug(f"slices: {slices}")
-    layout = getChunkLayout(dset_json)
+    layout = getChunkDims(dset_json)
     for chunk_id in chunk_ids:
         if chunk_id in chunk_map:
             item = chunk_map[chunk_id]
@@ -448,7 +449,7 @@ async def getSelectionData(
         log.error("getSelectionData - expected either slices or points to be set")
         raise HTTPInternalServerError()
 
-    layout = getChunkLayout(dset_json)
+    layout = getChunkDims(dset_json)
 
     chunkinfo = {}
 
@@ -861,7 +862,15 @@ async def reduceShape(app, dset_json, shape_update, bucket=None):
         arr = np.zeros([1], dtype=dt, order="C")
 
     # and the chunk layout
-    layout = tuple(getChunkLayout(dset_json))
+    layout = getChunkDims(dset_json)
+    if not layout:
+        layout = dset_json.get("layout")  # older storage version put layout here
+        if layout:
+            log.warn(f"got layout for {dset_id} from dataset_json")
+    if not layout:
+        msg = f"no layout found for {dset_id}"
+        log.error(msg)
+        raise HTTPInternalServerError()
     log.debug(f"got layout: {layout}")
 
     # get all chunk ids for chunks that have been allocated
@@ -1073,7 +1082,7 @@ async def doPointWrite(app,
     num_points = len(points)
     log.debug(f"doPointWrite - num_points: {num_points}")
     dset_id = dset_json["id"]
-    layout = getChunkLayout(dset_json)
+    layout = getChunkDims(dset_json)
     datashape = dset_json["shape"]
     dims = getShapeDims(datashape)
     rank = len(dims)
@@ -1172,7 +1181,7 @@ async def doHyperslabWrite(app,
         log.error(msg)
         raise HTTPInternalServerError()
 
-    layout = getChunkLayout(dset_json)
+    layout = getChunkDims(dset_json)
 
     num_chunks = getNumChunks(page, layout)
     log.debug(f"num_chunks: {num_chunks}")

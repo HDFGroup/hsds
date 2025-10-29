@@ -29,8 +29,12 @@ from h5json.array_util import encodeData, decodeData, bytesToArray, bytesArrayTo
 from h5json.array_util import jsonToArray, getNumpyValue
 from h5json.objid import getCollectionForId, createObjId, getRootObjId
 from h5json.objid import isSchema2Id, getS3Key, isValidUuid
-from h5json.hdf5dtype import getBaseTypeJson, validateTypeItem, createDataType
-from h5json.hdf5dtype import getItemSize
+from h5json.hdf5dtype import getBaseTypeJson, validateTypeItem, createDataType, getItemSize
+from h5json.filters import getFiltersJson
+from h5json.shape_util import getShapeDims, getShapeClass
+from h5json.dset_util import guessChunk, getChunkSize
+from h5json.dset_util import validateChunkLayout, getDataSize, getDsetMaxDims
+from h5json.dset_util import LAYOUT_CLASSES
 
 from .util.nodeUtil import getDataNodeUrl
 from .util.authUtil import getAclKeys
@@ -39,10 +43,8 @@ from .util.storUtil import getStorJSONObj, isStorObj, getSupportedFilters
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
 from .util.domainUtil import getBucketForDomain, verifyRoot, getLimits
+from .util.dsetUtil import getShapeJson
 from .util.storUtil import getCompressors
-from .util.dsetUtil import getShapeDims, getShapeJson, getFiltersJson, validateChunkLayout
-from .util.dsetUtil import getContiguousLayout, guessChunk, getChunkSize
-from .util.dsetUtil import expandChunk, shrinkChunk
 
 from .basenode import getVersion
 from . import hsds_logger as log
@@ -976,8 +978,7 @@ def getShapeFromRequest(body):
                     raise HTTPBadRequest(reason=msg)
             elif shape_class == "H5S_SCALAR":
                 shape_json["class"] = "H5S_SCALAR"
-                dims = getShapeDims(shape_body)
-                if len(dims) != 1 or dims[0] != 1:
+                if "dims" in shape_body:
                     msg = "dimensions aren't valid for scalar attribute"
                     log.warn(msg)
                     raise HTTPBadRequest(reason=msg)
@@ -1230,7 +1231,7 @@ async def putAttributes(app,
     req = getDataNodeUrl(app, obj_id)
     collection = getCollectionForId(obj_id)
     req += f"/{collection}/{obj_id}/attributes"
-    log.info(f"putAttribute: {req}")
+    log.info(f"putAttributes: {req}")
 
     params = {}
     if replace:
@@ -1304,7 +1305,7 @@ async def deleteObject(app, obj_id, bucket=None):
 def validateDatasetCreationProps(creation_props, type_json=None, shape=None):
     """ validate creation props """
 
-    log.debug(f"validateCreationProps: {creation_props}")
+    log.debug(f"validateDatasetCreationProps: {creation_props}")
     if "fillValue" in creation_props:
         if not type_json or not shape:
             msg = "shape and type must be set to use fillValue"
@@ -1344,12 +1345,16 @@ def validateDatasetCreationProps(creation_props, type_json=None, shape=None):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-        supported_filters = getSupportedFilters()
-        # will raise bad request exception if not valid
         supported_filters = getSupportedFilters(include_compressors=True)
         log.debug(f"supported_filters: {supported_filters}")
-        filters_out = getFiltersJson(creation_props, supported_filters=supported_filters)
-        # replace filters with our starndardized list
+        try:
+            filters_out = getFiltersJson(creation_props, supported_filters=supported_filters)
+        except (KeyError, ValueError):
+            # raise bad request exception if not valid
+            msg = "invalid filter provided"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        # replace filters with our standardized list
         log.debug(f"setting filters to: {filters_out}")
         creation_props["filters"] = filters_out
 
@@ -1536,6 +1541,16 @@ def getDatasetCreateArgs(body,
 
     # will return scalar shape if no shape key in body
     shape_json = getShapeJson(body)
+    try:
+        shape_class = getShapeClass(shape_json)
+        shape_dims = getShapeDims(shape_json)
+    except (KeyError, TypeError, ValueError):
+        msg = f"Invalid shape: {shape_json}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    log.debug(f"got createArgs: {list(kwargs.keys())}")
+
     kwargs["shape"] = shape_json
 
     # get layout for dataset creation
@@ -1545,6 +1560,8 @@ def getDatasetCreateArgs(body,
     max_chunk_size = int(config.get("max_chunk_size"))
     type_json = kwargs["type"]
     item_size = getItemSize(type_json)
+    if item_size == "H5T_VARIABLE":
+        item_size = config.get("default_vlen_type_size", default=128)
     creation_props = kwargs["creation_props"]
     layout_props = None
 
@@ -1558,125 +1575,129 @@ def getDatasetCreateArgs(body,
                 msg = f"invalid chunk layout: {layout_props}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
+    else:
+        creation_props = {}
 
-    # TBD: check for invalid layout class...
+    layout_class = None
+    chunk_dims = None
     if layout_props:
-        if layout_props["class"] == "H5D_CONTIGUOUS":
-            # treat contiguous as chunked
-            layout_class = "H5D_CHUNKED"
+        layout_class = layout_props.get("class")
+
+    if layout_class:
+        if layout_class not in LAYOUT_CLASSES:
+            msg = f"unknown layout_class: {layout_class}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        # check dims is defined for any chunked layout
+        if layout_class.startswith("H5D_CHUNKED"):
+            if "dims" not in layout_props:
+                msg = "chunked layout specified without dims"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            chunk_dims = layout_props["dims"]
+            if len(chunk_dims) != len(shape_dims):
+                msg = "chunk dimensions have different rank than dataset"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+        elif layout_class == "H5D_CONTIGUOUS_REF" and getItemSize(type_json) == "H5T_VARIABLE":
+            # ref dataset does not work with vlen type
+            msg = "H5D_CONTIGUOUS_REF cannot be used with variable length types"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
         else:
-            layout_class = layout_props["class"]
-    elif shape_json["class"] != "H5S_NULL":
-        layout_class = "H5D_CHUNKED"
-    else:
+            pass
+
+    elif shape_class == "H5S_NULL":
         layout_class = None
-    log.debug(f"using layout_class: {layout_class}")
-
-    if layout_class == "H5D_COMPACT":
-        layout = {"class": "H5D_COMPACT"}
-    elif layout_class:
-        # initialize to H5D_CHUNKED
-        layout = {"class": "H5D_CHUNKED"}
-    else:
-        # null space - no layout
-        layout = None
-
-    if layout_props and "dims" in layout_props:
-        chunk_dims = layout_props["dims"]
-    else:
-        chunk_dims = None
-
-    if layout_class == "H5D_CONTIGUOUS_REF":
-        opts = {"chunk_min": min_chunk_size, "chunk_max": max_chunk_size}
-        chunk_dims = getContiguousLayout(shape_json, item_size, **opts)
-        layout["dims"] = chunk_dims
-        log.debug(f"autoContiguous layout: {layout}")
-
-    if layout_class == "H5D_CHUNKED" and chunk_dims is None:
-        # do auto-chunking
-        chunk_dims = guessChunk(shape_json, item_size)
-        log.debug(f"initial autochunk layout: {chunk_dims}")
-
-    if layout_class == "H5D_CHUNKED":
-        chunk_size = getChunkSize(chunk_dims, item_size)
-
-        msg = f"chunk_size: {chunk_size}, min: {min_chunk_size}, "
-        msg += f"max: {max_chunk_size}"
-        log.debug(msg)
-
-        # adjust the chunk shape if chunk size is too small or too big
-        adjusted_chunk_dims = None
-        if chunk_size < min_chunk_size:
-            msg = f"chunk size: {chunk_size} less than min size: "
-            msg += f"{min_chunk_size}, expanding"
-            log.debug(msg)
-            opts = {"chunk_min": min_chunk_size, "layout_class": layout_class}
-            adjusted_chunk_dims = expandChunk(chunk_dims, item_size, shape_json, **opts)
-        elif chunk_size > max_chunk_size:
-            msg = f"chunk size: {chunk_size} greater than max size: "
-            msg += f"{max_chunk_size}, shrinking"
-            log.debug(msg)
-            opts = {"chunk_max": max_chunk_size}
-            adjusted_chunk_dims = shrinkChunk(chunk_dims, item_size, **opts)
-
-        if adjusted_chunk_dims:
-            msg = f"requested chunk_dimensions: {chunk_dims} modified "
-            msg += f"dimensions: {adjusted_chunk_dims}"
-            log.debug(msg)
-            layout["dims"] = adjusted_chunk_dims
+        log.debug("using None layout for H5S_NULL dataset")
+    elif shape_class == "H5S_SCALAR":
+        layout_class = "H5D_CONTIGUOUS"
+        log.debug("Using H5D_CONTIGUOUS for H5S_SCALAR dataset")
+    elif shape_class == "H5S_SIMPLE":
+        dset_size = getDataSize(shape_dims, item_size)
+        if dset_size <= min_chunk_size:
+            # default to contiguous
+            layout_class = "H5D_CONTIGUOUS"
+            log.debug(f"Using H5D_CONTIGUOUS for small (<{min_chunk_size}) dataset")
         else:
-            layout["dims"] = chunk_dims  # don't need to adjust chunk size
+            layout_class = "H5D_CHUNKED"
+            log.debug(f"shape_json: {shape_json}")
+            log.debug(f"item_size: {item_size}")
+            log.debug(f"chunk_min: {min_chunk_size}")
+            log.debug(f"chunk_max: {max_chunk_size}")
+            kwargs = {"chunk_min": min_chunk_size, "chunk_max": max_chunk_size}
+            chunk_dims = guessChunk(shape_json, item_size, **kwargs)
+            log.debug(f"initial autochunk layout: {chunk_dims}")
+            chunk_size = getChunkSize(chunk_dims, item_size)
 
-        # set partition_count if needed:
-        max_chunks_per_folder = int(config.get("max_chunks_per_folder"))
-        set_partition = False
-        if max_chunks_per_folder > 0:
-            if "dims" in shape_json and "dims" in layout:
-                set_partition = True
-
-        if set_partition:
-            chunk_dims = layout["dims"]
-            shape_dims = shape_json["dims"]
-            if "maxdims" in shape_json:
-                max_dims = shape_json["maxdims"]
-            else:
-                max_dims = None
-            num_chunks = 1
-            rank = len(shape_dims)
-            unlimited_count = 0
-            if max_dims:
-                for i in range(rank):
-                    if max_dims[i] == 0:
-                        unlimited_count += 1
-                msg = f"number of unlimited dimensions: {unlimited_count}"
+            # log warning if the chunk shape if chunk size is too small or too big
+            if chunk_size < min_chunk_size:
+                msg = f"chunk size: {chunk_size} less than recommended min size: {min_chunk_size}"
+                log.warn(msg)
+            elif chunk_size > max_chunk_size:
+                msg = f"chunk size: {chunk_size} greater than recommended "
+                msg += f"max size: {max_chunk_size}"
                 log.debug(msg)
+    else:
+        msg = f"unexpected shape_class: {shape_class}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
+    if not layout_props:
+        layout_props = {"class": layout_class}
+    if chunk_dims:
+        layout_props["dims"] = chunk_dims
+    log.debug(f"using dataset layout: {layout_props}")
+    creation_props["layout"] = layout_props
+
+    # set partition_count if needed:
+    max_chunks_per_folder = int(config.get("max_chunks_per_folder"))
+    set_partition = False
+    if max_chunks_per_folder > 0:
+        if "dims" in layout_props:
+            set_partition = True
+
+    if set_partition:
+        log.debug(f"updating layout for partition constraint: {max_chunks_per_folder}")
+        shape_dims = getShapeDims(shape_json)
+        max_dims = getDsetMaxDims(shape_json)
+
+        num_chunks = 1
+        rank = len(shape_dims)
+        unlimited_count = 0
+        if max_dims:
             for i in range(rank):
-                max_dim = 1
-                if max_dims:
-                    max_dim = max_dims[i]
-                    if max_dim == 0:
-                        # don't really know what the ultimate extent
-                        # could be, but assume 10^6 for total number of
-                        # elements and square-shaped array...
-                        MAX_ELEMENT_GUESS = 10.0 ** 6
-                        exp = 1 / unlimited_count
-                        max_dim = int(math.pow(MAX_ELEMENT_GUESS, exp))
-                else:
-                    max_dim = shape_dims[i]
-                num_chunks *= math.ceil(max_dim / chunk_dims[i])
+                if max_dims[i] == 0:
+                    unlimited_count += 1
+            msg = f"number of unlimited dimensions: {unlimited_count}"
+            log.debug(msg)
 
-            if num_chunks > max_chunks_per_folder:
-                partition_count = math.ceil(num_chunks / max_chunks_per_folder)
-                msg = f"set partition count to: {partition_count}, "
-                msg += f"num_chunks: {num_chunks}"
-                log.info(msg)
-                layout["partition_count"] = partition_count
+        for i in range(rank):
+            max_dim = 1
+            if max_dims:
+                max_dim = max_dims[i]
+                if max_dim == 0:
+                    # don't really know what the ultimate extent
+                    # could be, but assume 10^6 for total number of
+                    # elements and square-shaped array...
+                    MAX_ELEMENT_GUESS = 10.0 ** 6
+                    exp = 1 / unlimited_count
+                    max_dim = int(math.pow(MAX_ELEMENT_GUESS, exp))
             else:
-                msg = "do not need chunk partitions, num_chunks: "
-                msg += f"{num_chunks} max_chunks_per_folder: "
-                msg += f"{max_chunks_per_folder}"
-                log.info(msg)
+                max_dim = shape_dims[i]
+            num_chunks *= math.ceil(max_dim / chunk_dims[i])
+
+        if num_chunks > max_chunks_per_folder:
+            partition_count = math.ceil(num_chunks / max_chunks_per_folder)
+            msg = f"set partition count to: {partition_count}, "
+            msg += f"num_chunks: {num_chunks}"
+            log.info(msg)
+            layout_props["partition_count"] = partition_count
+        else:
+            msg = "do not need chunk partitions, num_chunks: "
+            msg += f"{num_chunks} max_chunks_per_folder: "
+            msg += f"{max_chunks_per_folder}"
+            log.info(msg)
 
     if layout_class in ("H5D_CHUNKED_REF", "H5D_CHUNKED_REF_INDIRECT"):
         chunk_size = getChunkSize(chunk_dims, item_size)
@@ -1694,11 +1715,10 @@ def getDatasetCreateArgs(body,
             msg = f"chunk size: {chunk_size} greater than max size: "
             msg += f"{max_chunk_size}, for {layout_class} dataset"
             log.warn(msg)
-        layout["dims"] = chunk_dims
+        layout_props["dims"] = chunk_dims
 
-    if layout:
-        log.debug(f"setting layout to: {layout}")
-        kwargs["layout"] = layout
+    creation_props["layout"] = layout_props
+    kwargs["creation_props"] = creation_props
 
     #
     # get input data if present
@@ -1813,7 +1833,6 @@ async def createObject(app,
                        obj_id=None,
                        type=None,
                        shape=None,
-                       layout=None,
                        creation_props=None,
                        attrs=None,
                        links=None,
@@ -1846,8 +1865,6 @@ async def createObject(app,
         log.debug(f"    type: {type}")
     if shape:
         log.debug(f"    shape: {shape}")
-    if layout:
-        log.debug(f"    layout: {layout}")
     if creation_props:
         log.debug(f"    cprops: {creation_props}")
     if attrs:
@@ -1886,10 +1903,10 @@ async def createObject(app,
         obj_json["type"] = type
     if shape:
         obj_json["shape"] = shape
-    if layout:
-        obj_json["layout"] = layout
     if creation_props:
         obj_json["creationProperties"] = creation_props
+    else:
+        obj_json["creationProperties"] = {}
     if attrs:
         kwargs = {"obj_id": obj_id, "bucket": bucket}
         attrs_json = {"attributes": attrs}
@@ -1987,7 +2004,6 @@ async def createDataset(app,
                         h5path=None,
                         obj_id=None,
                         creation_props=None,
-                        layout=None,
                         attrs=None,
                         links=None,
                         implicit=None,
@@ -2011,7 +2027,6 @@ async def createDataset(app,
     kwargs["shape"] = shape
     kwargs["h5path"] = h5path
     kwargs["obj_id"] = obj_id
-    kwargs["layout"] = layout
     kwargs["creation_props"] = creation_props
     kwargs["attrs"] = attrs
     kwargs["links"] = links

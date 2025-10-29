@@ -19,12 +19,6 @@ from h5json.objid import createObjId
 import helper
 import config
 
-# min/max chunk size - these can be set by config, but
-# practically the min config value should be larger than
-# CHUNK_MIN and the max config value should less than CHUNK_MAX
-CHUNK_MIN = 1024  # lower limit  (1024b)
-CHUNK_MAX = 50 * 1024 * 1024  # upper limit (50M)
-
 
 class DatasetTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -67,7 +61,7 @@ class DatasetTest(unittest.TestCase):
         expected_keys = [
             "id",
             "shape",
-            "layout",
+            "creationProperties",
             "attributeCount",
             "created",
             "lastModified",
@@ -232,7 +226,6 @@ class DatasetTest(unittest.TestCase):
             "id",
             "shape",
             "hrefs",
-            "layout",
             "creationProperties",
             "attributeCount",
             "created",
@@ -423,7 +416,6 @@ class DatasetTest(unittest.TestCase):
             "id",
             "shape",
             "hrefs",
-            "layout",
             "creationProperties",
             "attributeCount",
             "created",
@@ -447,7 +439,8 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(shape["dims"], [10, 10])
         self.assertEqual(shape["maxdims"], [10, 10])
 
-        layout = rspJson["layout"]
+        cpl = rspJson["creationProperties"]
+        layout = cpl["layout"]
         self.assertEqual(layout["class"], "H5D_CHUNKED")
         self.assertEqual(layout["dims"], [10, 10])
         self.assertTrue("partition_count" not in layout)
@@ -517,7 +510,6 @@ class DatasetTest(unittest.TestCase):
             "id",
             "shape",
             "hrefs",
-            "layout",
             "creationProperties",
             "attributeCount",
             "created",
@@ -539,7 +531,6 @@ class DatasetTest(unittest.TestCase):
             "id",
             "shape",
             "hrefs",
-            "layout",
             "creationProperties",
             "attributeCount",
             "created",
@@ -601,7 +592,6 @@ class DatasetTest(unittest.TestCase):
             "id",
             "shape",
             "hrefs",
-            "layout",
             "creationProperties",
             "attributeCount",
             "created",
@@ -1265,6 +1255,95 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 409)  # tried to extend a non-extensible dimension
 
+    def testInvalidDatasetLayout(self):
+        # test that various invalid layouts fail with a 400 status
+        domain = self.base_domain + "/testInvalidDatasetLayout.h5"
+        helper.setupDomain(domain)
+
+        print("testInvalidDatasetLayout", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        # get domain
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+
+        # dataset create
+        req = self.endpoint + "/datasets"
+        dims = [365, 780, 1024]
+        maxdims = [0, 780, 1024]
+        payload = {
+            "type": "H5T_IEEE_F32LE",
+            "shape": dims,
+            "maxdims": maxdims,
+        }
+        # bad layout class
+        payload["creationProperties"] = {
+            "layout": {"class": "H5D_XYZ", "dims": [1, 390, 512]},
+        }
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 400)  # create dataset
+
+        # chunked layout with mismatched dimensions
+        payload["creationProperties"] = {
+            "layout": {"class": "H5D_XYZ", "dims": [1, 390]},
+        }
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 400)  # create dataset
+
+        # chunked layout with negative dimensions
+        payload["creationProperties"] = {
+            "layout": {"class": "H5D_XYZ", "dims": [100, 200, -300]},
+        }
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 400)  # create dataset
+
+        file_uri = "s3://a-storage-bucket/some-file.h5"
+        offset = 1234
+        size = dims[0] * dims[1] * dims[2] * 4
+
+        # H5D_CONTIGUOUS layout missing different required keys...
+        for key in ("file_uri", "offset", "size"):
+            layout = {"class": "H5D_CONTIGUOUS_REF"}
+            if key != "file_uri":
+                layout["file_uri"] = file_uri
+            elif key != "offset":
+                layout["offset"] = offset
+            elif key != "size":
+                layout["size"] = size
+            else:
+                self.assertTrue(False)  # one of the above should be true
+
+            payload["creationProperties"] = {
+                "layout": layout
+            }
+            rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 400)  # create dataset
+
+        # H5D_CONTIGOUS with a vlen type
+        type_vstr = {
+            "charSet": "H5T_CSET_ASCII",
+            "class": "H5T_STRING",
+            "strPad": "H5T_STR_NULLTERM",
+            "length": "H5T_VARIABLE",
+        }
+        payload = {
+            "type": type_vstr,
+            "shape": dims,
+        }
+        layout = {
+            "class": "H5D_CONTIGUOUS_REF",
+            "file_uri": file_uri,
+            "offset": offset,
+            "size": size
+        }
+        payload["creationProperties"] = {
+            "layout": layout
+        }
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 400)  # create dataset
+
     def testCreationPropertiesLayoutDataset(self):
         # test Dataset with creation property list
         domain = self.base_domain + "/testCreationPropertiesLayoutDataset.h5"
@@ -1288,6 +1367,7 @@ class DatasetTest(unittest.TestCase):
             "shape": [365, 780, 1024],
             "maxdims": [0, 780, 1024],
         }
+
         # define a chunk layout with 4 chunks per 'slice'
         # chunk size is 798720 bytes
         gzip_filter = {
@@ -1308,7 +1388,6 @@ class DatasetTest(unittest.TestCase):
                 fletcher32_filter,
             ],
         }
-        req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
@@ -1326,12 +1405,14 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
+        self.assertTrue("creationProperties" in rspJson)
+        cpl = rspJson["creationProperties"]
+        self.assertTrue("layout" in cpl)
+        layout_json = cpl["layout"]
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], "H5D_CHUNKED")
         self.assertTrue("dims" in layout_json)
-        self.assertEqual(layout_json["dims"], [1, 390, 1024])
+        self.assertEqual(layout_json["dims"], [1, 390, 512])
         if config.get("max_chunks_per_folder") > 0:
             self.assertTrue("partition_count" in layout_json)
             self.assertEqual(layout_json["partition_count"], 10)
@@ -1407,16 +1488,13 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
-        self.assertTrue("class" in layout_json)
-        self.assertEqual(layout_json["class"], "H5D_CHUNKED")
-        self.assertTrue("dims" in layout_json)
-        self.assertEqual(layout_json["dims"], [10, 20])
-        # verify creation properties are preserved
         self.assertTrue("creationProperties" in rspJson)
         cpl = rspJson["creationProperties"]
         self.assertTrue("layout" in cpl)
+        layout_json = cpl["layout"]
+        self.assertTrue("class" in layout_json)
+        self.assertEqual(layout_json["class"], "H5D_CONTIGUOUS")
+        self.assertFalse("dims" in layout_json)
 
     def testCompressionFiltersDataset(self):
         # test Dataset with creation property list
@@ -1463,10 +1541,12 @@ class DatasetTest(unittest.TestCase):
             rsp = self.session.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 200)
             rspJson = json.loads(rsp.text)
-            self.assertTrue("layout" in rspJson)
-            layout_json = rspJson["layout"]
+            self.assertTrue("creationProperties" in rspJson)
+            cpl = rspJson["creationProperties"]
+            self.assertTrue("layout" in cpl)
+            layout_json = cpl["layout"]
             self.assertTrue("class" in layout_json)
-            self.assertEqual(layout_json["class"], "H5D_CHUNKED")
+            self.assertEqual(layout_json["class"], "H5D_CONTIGUOUS")
 
             # verify compression
             self.assertTrue("creationProperties" in rspJson)
@@ -1525,10 +1605,13 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
+        self.assertTrue("creationProperties" in rspJson)
+        cpl = rspJson["creationProperties"]
+        self.assertTrue("layout" in cpl)
+        layout_json = cpl["layout"]
         self.assertTrue("class" in layout_json)
-        self.assertEqual(layout_json["class"], "H5D_CHUNKED")
+        self.assertEqual(layout_json["class"], "H5D_CONTIGUOUS")
+        self.assertFalse("dims" in layout_json)
 
         # verify compression
         self.assertTrue("creationProperties" in rspJson)
@@ -1762,9 +1845,7 @@ class DatasetTest(unittest.TestCase):
         req = self.endpoint + "/datasets"
         # 50K x 80K dataset
         extent = 1000 * 1000 * 1000
-        dims = [
-            extent,
-        ]
+        dims = [extent, ]
         fields = (
             {"name": "x", "type": "H5T_IEEE_F64LE"},
             {"name": "y", "type": "H5T_IEEE_F64LE"},
@@ -1773,13 +1854,12 @@ class DatasetTest(unittest.TestCase):
         datatype = {"class": "H5T_COMPOUND", "fields": fields}
 
         payload = {"type": datatype, "shape": dims}
-        # the following should get ignored as too small
+        # the following specifies an efficiently small chunk size
+        chunk_dims = [10,]
         payload["creationProperties"] = {
             "layout": {
                 "class": "H5D_CHUNKED",
-                "dims": [
-                    10,
-                ],
+                "dims": chunk_dims
             }
         }
         req = self.endpoint + "/datasets"
@@ -1802,19 +1882,14 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
+        self.assertTrue("creationProperties" in rspJson)
+        cpl = rspJson["creationProperties"]
+        self.assertTrue("layout" in cpl)
+        layout_json = cpl["layout"]
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], "H5D_CHUNKED")
         self.assertTrue("dims" in layout_json)
-        self.assertTrue("partition_count" not in layout_json)
-        layout = layout_json["dims"]
-        self.assertEqual(len(layout), 1)
-        self.assertTrue(layout[0] < dims[0])
-        chunk_size = layout[0] * 8 * 3  # three 64bit
-        # chunk size should be between chunk min and max
-        self.assertTrue(chunk_size >= CHUNK_MIN)
-        self.assertTrue(chunk_size <= CHUNK_MAX)
+        self.assertEqual(layout_json["dims"], chunk_dims)
 
     def testAutoChunk2dDataset(self):
         # test Dataset where chunk layout is set automatically
@@ -1855,8 +1930,10 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
+        self.assertTrue("creationProperties" in rspJson)
+        cpl = rspJson["creationProperties"]
+        self.assertTrue("layout" in cpl)
+        layout_json = cpl["layout"]
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], "H5D_CHUNKED")
         self.assertTrue("dims" in layout_json)
@@ -1865,64 +1942,10 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue(layout[0] < dims[0])
         self.assertTrue(layout[1] < dims[1])
         chunk_size = layout[0] * layout[1] * 4
-        # chunk size should be between chunk min and max
-        self.assertTrue(chunk_size >= CHUNK_MIN)
-        self.assertTrue(chunk_size <= CHUNK_MAX)
 
-    def testMinChunkSizeDataset(self):
-        # test Dataset where chunk layout is adjusted if provided
-        # layout is too small
-        domain = self.base_domain + "/testMinChunkSizeDataset.h5"
-        helper.setupDomain(domain)
-        print("testMinChunkSizeDataset", domain)
-        headers = helper.getRequestHeaders(domain=domain)
-        # get domain
-        req = helper.getEndpoint() + "/"
-        rsp = self.session.get(req, headers=headers)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("root" in rspJson)
-        root_uuid = rspJson["root"]
-
-        # create the dataset
-        req = self.endpoint + "/datasets"
-        # 50K x 80K dataset
-        dims = [50000, 80000]
-        payload = {"type": "H5T_IEEE_F32LE", "shape": dims}
-        # define a chunk layout with lots of small chunks
-        payload["creationProperties"] = {
-            "layout": {"class": "H5D_CHUNKED", "dims": [10, 10]}
-        }
-
-        req = self.endpoint + "/datasets"
-        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # create dataset
-        rspJson = json.loads(rsp.text)
-        dset_uuid = rspJson["id"]
-        self.assertTrue(helper.validateId(dset_uuid))
-
-        # link new dataset as 'dset'
-        name = "dset" + helper.getRandomName()
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
-        payload = {"id": dset_uuid}
-        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
-
-        # verify layout
-        req = helper.getEndpoint() + "/datasets/" + dset_uuid
-        rsp = self.session.get(req, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
-        self.assertTrue("class" in layout_json)
-        self.assertEqual(layout_json["class"], "H5D_CHUNKED")
-        self.assertTrue("dims" in layout_json)
-        layout = layout_json["dims"]
-        self.assertEqual(len(layout), 2)
-        self.assertTrue(layout[0] < dims[0])
-        self.assertTrue(layout[1] < dims[1])
-        chunk_size = layout[0] * layout[1] * 4
-        # chunk size should be between chunk min and max
+        # chunk size will be based on server config, but assume a min/max of 1MB to 1GB
+        CHUNK_MIN = 1024 * 1024
+        CHUNK_MAX = 1024 * 1024 * 1024
         self.assertTrue(chunk_size >= CHUNK_MIN)
         self.assertTrue(chunk_size <= CHUNK_MAX)
 
@@ -2307,17 +2330,13 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
+        self.assertTrue("creationProperties" in rspJson)
+        cpl = rspJson["creationProperties"]
+        self.assertTrue("layout" in cpl)
+        layout_json = cpl["layout"]
         self.assertTrue("class" in layout_json)
-        self.assertEqual(layout_json["class"], "H5D_CHUNKED")
-        self.assertTrue("dims" in layout_json)
-        chunk_dims = layout_json["dims"]
-        self.assertEqual(len(chunk_dims), 2)
-        chunk_size = chunk_dims[0] * chunk_dims[1] * 4
-        # chunk size should be between chunk min and max
-        self.assertTrue(chunk_size >= CHUNK_MIN)
-        self.assertTrue(chunk_size <= CHUNK_MAX)
+        self.assertEqual(layout_json["class"], "H5D_CONTIGUOUS_REF")
+        self.assertFalse("dims" in layout_json)
 
         # verify cpl
         self.assertTrue("creationProperties" in rspJson)
@@ -2380,23 +2399,13 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
-        # verify layout
+        # get dataset json
         req = helper.getEndpoint() + "/datasets/" + dset_uuid
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
-        self.assertTrue("class" in layout_json)
-        self.assertEqual(layout_json["class"], "H5D_CHUNKED")
-        self.assertTrue("dims" in layout_json)
-        chunk_dims = layout_json["dims"]
-        self.assertEqual(len(chunk_dims), 2)
-        # layout should be same as the dims
-        self.assertEqual(chunk_dims[0], dims[0])
-        self.assertEqual(chunk_dims[1], dims[1])
 
-        # verify cpl
+        # verify layout
         self.assertTrue("creationProperties" in rspJson)
         cpl = rspJson["creationProperties"]
         self.assertTrue("layout" in cpl)
@@ -2470,13 +2479,6 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
-        self.assertTrue("class" in layout_json)
-        self.assertEqual(layout_json["class"], "H5D_CHUNKED")
-        self.assertTrue("dims" in layout_json)
-        chunk_dims = layout_json["dims"]
-        self.assertEqual(len(chunk_dims), 2)
         self.assertTrue("creationProperties" in rspJson)
         cpl = rspJson["creationProperties"]
         self.assertTrue("layout" in cpl)
@@ -2549,21 +2551,15 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
-        # verify layout
+        # get dataset json
         req = helper.getEndpoint() + "/datasets/" + dset_uuid
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
-        self.assertTrue("class" in layout_json)
-        self.assertEqual(layout_json["class"], "H5D_CHUNKED")
-        self.assertTrue("chunks" not in layout_json)
-        chunk_dims = layout_json["dims"]
-        self.assertEqual(len(chunk_dims), 2)
 
         self.assertTrue("creationProperties" in rspJson)
         cpl = rspJson["creationProperties"]
+        self.assertTrue("layout")
         self.assertTrue("layout" in cpl)
         cpl_layout = cpl["layout"]
         self.assertTrue("class" in cpl_layout)
@@ -2645,19 +2641,11 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
-        # verify layout
+        # fetch dataset json
         req = helper.getEndpoint() + "/datasets/" + dset_uuid
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
-        self.assertTrue("class" in layout_json)
-        self.assertEqual(layout_json["class"], "H5D_CHUNKED")
-        self.assertTrue("chunks" not in layout_json)
-        self.assertTrue("dims" in layout_json)
-        chunk_dims = layout_json["dims"]
-        self.assertEqual(len(chunk_dims), 2)
 
         self.assertTrue("creationProperties" in rspJson)
         cpl = rspJson["creationProperties"]
@@ -2711,8 +2699,10 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
+        self.assertTrue("creationProperties" in rspJson)
+        cpl = rspJson["creationProperties"]
+        self.assertTrue("layout" in cpl)
+        layout_json = cpl["layout"]
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], "H5D_CHUNKED")
         self.assertTrue("dims" in layout_json)
@@ -2728,10 +2718,6 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue(layout[0] < dims[0])
         self.assertTrue(layout[1] < dims[1])
         self.assertTrue(layout[2] < dims[2])
-        chunk_size = layout[0] * layout[1] * layout[2] * 4
-        # chunk size should be between chunk min and max
-        self.assertTrue(chunk_size >= CHUNK_MIN)
-        self.assertTrue(chunk_size <= CHUNK_MAX)
 
     def testExtendibleDatasetChunkPartitioning(self):
         # test Dataset partitioning logic for large datasets
@@ -2750,9 +2736,17 @@ class DatasetTest(unittest.TestCase):
         req = self.endpoint + "/datasets"
         # 50K x 80K x 90K dataset
         dims = [0, 80000, 90000]
+
         # unlimited extend in dim 0, fixeed in dimension 2, extensible by 10x in dim 3
         max_dims = [0, 80000, 900000]
+        chunk_shape = [1000, 1000, 1000]
+        layout = {
+            "class": "H5D_CHUNKED",
+            "dims": chunk_shape
+        }
+        cpl = {"layout": layout}
         payload = {"type": "H5T_IEEE_F32LE", "shape": dims, "maxdims": max_dims}
+        payload["creationProperties"] = cpl
 
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
@@ -2774,8 +2768,10 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
+        self.assertTrue("creationProperties" in rspJson)
+        cpl = rspJson["creationProperties"]
+        self.assertTrue("layout" in cpl)
+        layout_json = cpl["layout"]
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], "H5D_CHUNKED")
         self.assertTrue("dims" in layout_json)
@@ -2785,10 +2781,6 @@ class DatasetTest(unittest.TestCase):
         layout = layout_json["dims"]
 
         self.assertEqual(len(layout), 3)
-        chunk_size = layout[0] * layout[1] * layout[2] * 4
-        # chunk size should be between chunk min and max
-        self.assertTrue(chunk_size >= CHUNK_MIN)
-        self.assertTrue(chunk_size <= CHUNK_MAX)
 
     def testDatasetEmptyChunkExtent(self):
         # Attempting to create 0-extent chunks should respond with Bad Request
@@ -2855,7 +2847,6 @@ class DatasetTest(unittest.TestCase):
         expected_keys = [
             "id",
             "shape",
-            "layout",
             "attributeCount",
             "created",
             "lastModified",

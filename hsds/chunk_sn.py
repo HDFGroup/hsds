@@ -28,14 +28,14 @@ from h5json.hdf5dtype import getItemSize, getDtypeItemSize, getSubType, createDa
 from h5json.array_util import bytesArrayToList, jsonToArray, getNumElements, arrayToBytes
 from h5json.array_util import bytesToArray, squeezeArray, getBroadcastShape
 from h5json.objid import isValidUuid
+from h5json.shape_util import isNullSpace, isScalar, getShapeDims
+from h5json.dset_util import getChunkDims, isExtensible, getDsetMaxDims
 
 from .util.httpUtil import getHref, getAcceptType, getContentType
 from .util.httpUtil import request_read, jsonResponse, isAWSLambda
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
-from .util.dsetUtil import isNullSpace, isScalarSpace, get_slices, getShapeDims
-from .util.dsetUtil import isExtensible, getSelectionPagination
-from .util.dsetUtil import getSelectionShape, getDsetMaxDims, getChunkLayout
+from .util.dsetUtil import getSelectionShape, getSelectionPagination, get_slices
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .servicenode_lib import getDsetJson, validateAction
 from .dset_lib import getSelectionData, getParser, extendShape, doPointWrite, doHyperslabWrite
@@ -819,7 +819,7 @@ async def GET_Value(request):
     log.debug(f"dset shape: {dims}")
     rank = len(dims)
 
-    layout = getChunkLayout(dset_json)
+    layout = getChunkDims(dset_json)
     log.debug(f"chunk layout: {layout}")
 
     await validateAction(app, domain, dset_id, username, "read")
@@ -1103,7 +1103,7 @@ async def POST_Value(request):
         msg = "POST value not supported for datasets with NULL shape"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if isScalarSpace(dset_json):
+    if isScalar(dset_json):
         msg = "POST value not supported for datasets with SCALAR shape"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
