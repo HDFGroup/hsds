@@ -5,6 +5,7 @@ aiofiles
 azure-storage-blob
 cryptography
 h5py>=3.6.0
+hdf5-json>1.0.0
 numcodecs
 numpy>=2.0.0rc1
 psutil
