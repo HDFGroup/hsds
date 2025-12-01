@@ -156,7 +156,7 @@ class FileClient:
             log.info(msg)
         except FileNotFoundError:
             msg = f"fileClient: {key} not found "
-            log.warn(msg)
+            log.info(msg)
             raise HTTPNotFound()
         except IOError as ioe:
             msg = f"fileClient: IOError reading {bucket}/{key}: {ioe}"
