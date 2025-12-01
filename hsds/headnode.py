@@ -289,8 +289,8 @@ async def register(request):
             # all the slots are filled, see if there is any unhealthy node
             # and remove that
             for i in range(len(active_list)):
-                node_id = active_list[i]
-                node = nodes[node_id]
+                id = active_list[i]
+                node = nodes[id]
                 if not node.is_healthy():
                     active_list[i] = None  # clear the slot
                     break
