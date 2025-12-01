@@ -134,7 +134,7 @@ class AzureBlobClient:
             if isinstance(e, AzureError):
                 if e.status_code == 404:
                     msg = f"storage key: {key} not found "
-                    log.warn(msg)
+                    log.info(msg)
                     raise HTTPNotFound()
                 elif e.status_code in (401, 403):
                     msg = f"azureBlobClient.access denied for get key: {key}"
