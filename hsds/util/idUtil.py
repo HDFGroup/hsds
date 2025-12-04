@@ -536,5 +536,9 @@ def getDataNodeUrl(app, obj_id):
         raise HTTPServiceUnavailable()
     dn_number = getObjPartition(obj_id, dn_node_count)
     url = dn_urls[dn_number]
+    if not url:
+        msg = "Service not ready (no DN url set)"
+        log.warn(msg)
+        raise HTTPServiceUnavailable()
     log.debug(f"got dn_url: {url} for obj_id: {obj_id}")
     return url
