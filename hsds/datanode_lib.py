@@ -275,7 +275,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
         log.debug(f"write_s3_obj {obj_id} finally block, success={success}")
         if obj_id in pending_s3_write:
             if pending_s3_write[obj_id] != now:
-                msg = f"pending_s3_write timestamp for got updated unexpectedly for {obj_id}"
+                msg = f"pending_s3_write timestamp got updated unexpectedly for {obj_id}"
                 log.error(msg)
             del pending_s3_write[obj_id]
         # clear task
