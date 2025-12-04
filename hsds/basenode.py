@@ -236,6 +236,8 @@ async def docker_update_dn_info(app):
         log.error("HEAD node seems to be down.")
         app["dn_urls"] = []
         app["dn_ids"] = []
+    except HTTPServiceUnavailable:
+        log.warn("Head ServiceUnavailable")
     except OSError:
         log.error("failed to register")
         app["dn_urls"] = []

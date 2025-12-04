@@ -149,8 +149,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
             bucket = domain_bucket
 
     if obj_id in pending_s3_write:
-        msg = f"write_s3_key - not expected for key {obj_id} to be in "
-        msg += "pending_s3_write map"
+        msg = f"write_s3_key - not expected for key {obj_id} to be in pending_s3_write map"
         log.error(msg)
         raise KeyError(msg)
 
@@ -172,12 +171,10 @@ async def write_s3_obj(app, obj_id, bucket=None):
         # timestamp is first element of two-tuple
         last_update_time = dirty_ids[obj_id][0]
     else:
-        msg = f"write_s3_obj - {obj_id} not in dirty_ids, "
-        msg += "assuming flush write"
+        msg = f"write_s3_obj - {obj_id} not in dirty_ids, assuming flush write"
         log.debug(msg)
     if last_update_time > now:
-        msg = f"last_update time {last_update_time} is in the future for "
-        msg += f"obj_id: {obj_id}"
+        msg = f"last_update time {last_update_time} is in the future for obj_id: {obj_id}"
         log.error(msg)
         raise ValueError(msg)
 
@@ -198,8 +195,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
             dset_id = getDatasetId(obj_id)
             if dset_id in filter_map:
                 filter_ops = filter_map[dset_id]
-                msg = f"write_s3_obj: got filter_op: {filter_ops} "
-                msg += f"for dset: {dset_id}"
+                msg = f"write_s3_obj: got filter_op: {filter_ops} for dset: {dset_id}"
                 log.debug(msg)
             else:
                 filter_ops = None
@@ -237,13 +233,11 @@ async def write_s3_obj(app, obj_id, bucket=None):
             # meta data update
             # check for object in meta cache
             if obj_id not in meta_cache:
-                msg = f"write_s3_obj: expected to find obj_id: {obj_id} "
-                msg += "in meta cache"
+                msg = f"write_s3_obj: expected to find obj_id: {obj_id} in meta cache"
                 log.error(msg)
                 raise KeyError(f"{obj_id} not found in meta cache")
             if not meta_cache.isDirty(obj_id):
-                msg = f"write_s3_obj: expected meta cache obj {obj_id} "
-                msg == "to be dirty"
+                msg = f"write_s3_obj: expected meta cache obj {obj_id} to be dirty"
                 log.error(msg)
                 raise ValueError("bad dirty state for obj")
             obj_json = meta_cache[obj_id]
@@ -264,8 +258,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
                 else:
                     timestamp = 0
                 if timestamp > last_update_time:
-                    msg = f"write_s3_obj: {obj_id} got updated while s3 "
-                    msg += "write was in progress"
+                    msg = f"write_s3_obj: {obj_id} got updated while s3 write was in progress"
                     log.info(msg)
                 else:
                     log.debug(f"write_s3obj: clear dirty for {obj_id} ")
@@ -279,11 +272,10 @@ async def write_s3_obj(app, obj_id, bucket=None):
 
     finally:
         # clear pending_s3_write item
-        log.debug(f"write_s3_obj finally block, success={success}")
+        log.debug(f"write_s3_obj {obj_id} finally block, success={success}")
         if obj_id in pending_s3_write:
             if pending_s3_write[obj_id] != now:
-                msg = "pending_s3_write timestamp got updated unexpectedly "
-                msg += f"for {obj_id}"
+                msg = f"pending_s3_write timestamp got updated unexpectedly for {obj_id}"
                 log.error(msg)
             del pending_s3_write[obj_id]
         # clear task
@@ -1259,10 +1251,9 @@ async def s3sync(app, s3_age_time=0):
 
         if obj_id in pending_s3_write:
             pending_time = s3sync_start - pending_s3_write[obj_id]
-            msg = f"s3sync - key {obj_id} has been pending for "
-            msg += f"{pending_time:.3f}"
+            msg = f"s3sync - key {obj_id} has been pending for {pending_time:.3f}"
             log.debug(msg)
-            if s3sync_start - pending_s3_write[obj_id] > s3_sync_task_timeout:
+            if pending_time > s3_sync_task_timeout:
                 msg = f"s3sync - obj {obj_id} has been in pending_s3_write "
                 msg += f"for {pending_time:.3f} seconds, restarting"
                 log.warn(msg)

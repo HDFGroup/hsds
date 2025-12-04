@@ -166,8 +166,8 @@ class FileClient:
         except CancelledError as cle:
             self._file_stats_increment("error_count")
             msg = f"CancelledError for get file obj {key}: {cle}"
-            log.error(msg)
-            raise HTTPInternalServerError()
+            log.warn(msg)
+            raise
         except Exception as e:
             self._file_stats_increment("error_count")
             msg = f"Unexpected Exception {type(e)} get get_object {key}: {e}"
@@ -227,8 +227,8 @@ class FileClient:
         except CancelledError as cle:
             # file_stats_increment(app, "error_count")
             msg = f"CancelledError for put file obj {key}: {cle}"
-            log.error(msg)
-            raise HTTPInternalServerError()
+            log.warn(msg)
+            raise
 
         except Exception as e:
             # file_stats_increment(app, "error_count")
@@ -274,8 +274,8 @@ class FileClient:
         except CancelledError as cle:
             self._file_stats_increment("error_count")
             msg = f"CancelledError deleting file obj {key}: {cle}"
-            log.error(msg)
-            raise HTTPInternalServerError()
+            log.warn(msg)
+            raise
 
         except Exception as e:
             self._file_stats_increment("error_count")
