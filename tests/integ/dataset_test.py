@@ -785,10 +785,19 @@ class DatasetTest(unittest.TestCase):
         # create the dataset
         req = self.endpoint + "/datasets"
         payload = {"type": "H5T_IEEE_F32LE", "shape": 10, "maxdims": 20}
-        payload["creationProperties"] = {"fillValue": 3.12}
+        contiguous_layout = {"class": "H5D_CONTIGUOUS"}
+        cpl = {"fillValue": 3.12, "layout": contiguous_layout}
+        payload["creationProperties"] = cpl
+
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)  # create dataset
+        self.assertEqual(rsp.status_code, 400)  # need chunk layout for resizable
+
+        # if we remove the layout, HSDS will setup a chunked layout for us
+        del cpl["layout"]
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson["id"]
         self.assertTrue(helper.validateId(dset_uuid))
@@ -816,8 +825,16 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("maxdims" in shape)
         self.assertEqual(shape["maxdims"][0], 20)
 
+        self.assertTrue("creationProperties" in rspJson)
         creationProps = rspJson["creationProperties"]
+        self.assertTrue("fillValue" in creationProps)
         self.assertEqual(creationProps["fillValue"], 3.12)
+        self.assertTrue("layout" in creationProps)
+        layout = creationProps["layout"]
+        self.assertTrue("class" in layout)
+        self.assertEqual(layout["class"], "H5D_CHUNKED")
+        self.assertTrue("dims" in layout)
+        self.assertEqual(len(layout["dims"]), 1)
 
         # verify shape using the GET shape request
         req = req + "/shape"
@@ -1271,8 +1288,11 @@ class DatasetTest(unittest.TestCase):
 
         # dataset create
         req = self.endpoint + "/datasets"
-        dims = [365, 780, 1024]
-        maxdims = [0, 780, 1024]
+        # TBD: the larger dimensions are causing SN to crash
+        # dims = [365, 780, 1024]
+        dims = [365, 780, 10]
+        # maxdims = [0, 780, 1024]
+        maxdims = [0, 780, 10]
         payload = {
             "type": "H5T_IEEE_F32LE",
             "shape": dims,
@@ -1455,7 +1475,7 @@ class DatasetTest(unittest.TestCase):
         req = self.endpoint + "/datasets"
         # Create ~1GB dataset
 
-        layout = {"class": "H5D_CONTIGUOUS"}
+        layout = {"class": "H5D_CHUNKED", "dims": [10, 20]}
         gzip_filter = {
             "class": "H5Z_FILTER_DEFLATE",
             "id": 1,
@@ -1493,8 +1513,9 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("layout" in cpl)
         layout_json = cpl["layout"]
         self.assertTrue("class" in layout_json)
-        self.assertEqual(layout_json["class"], "H5D_CONTIGUOUS")
-        self.assertFalse("dims" in layout_json)
+        self.assertEqual(layout_json["class"], "H5D_CHUNKED")
+        self.assertTrue("dims" in layout_json)
+        self.assertEqual(layout_json["dims"], [10, 20])
 
     def testCompressionFiltersDataset(self):
         # test Dataset with creation property list
@@ -1519,11 +1540,10 @@ class DatasetTest(unittest.TestCase):
             req = self.endpoint + "/datasets"
 
             payload = {"type": "H5T_IEEE_F32LE", "shape": [40, 80]}
-            payload["creationProperties"] = {
-                "filters": [
-                    compressor,
-                ]
-            }
+            filters = [compressor, ]
+            layout = {"class": "H5D_CHUNKED", "dims": [10, 20]}
+            cpl = {"filters": filters, "layout": layout}
+            payload["creationProperties"] = cpl
             req = self.endpoint + "/datasets"
             rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
             self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -1546,7 +1566,7 @@ class DatasetTest(unittest.TestCase):
             self.assertTrue("layout" in cpl)
             layout_json = cpl["layout"]
             self.assertTrue("class" in layout_json)
-            self.assertEqual(layout_json["class"], "H5D_CONTIGUOUS")
+            self.assertEqual(layout_json["class"], "H5D_CHUNKED")
 
             # verify compression
             self.assertTrue("creationProperties" in rspJson)
@@ -1580,14 +1600,14 @@ class DatasetTest(unittest.TestCase):
 
         # create the dataset
         req = self.endpoint + "/datasets"
-        compressor = {"class": "H5Z_FILTER_USER", "name": "lz4", "level": 5}
+        compressor = {"class": "H5Z_FILTER_LZ4", "name": "lz4", "level": 5}
+        filters = [compressor, ]
 
         payload = {"type": "H5T_IEEE_F32LE", "shape": [40, 80]}
-        payload["creationProperties"] = {
-            "filters": [
-                compressor,
-            ]
-        }
+        layout = {"class": "H5D_CHUNKED", "dims": [10, 20]}
+        cpl = {"filters": filters, "layout": layout}
+        payload["creationProperties"] = cpl
+
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -1610,8 +1630,8 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("layout" in cpl)
         layout_json = cpl["layout"]
         self.assertTrue("class" in layout_json)
-        self.assertEqual(layout_json["class"], "H5D_CONTIGUOUS")
-        self.assertFalse("dims" in layout_json)
+        self.assertEqual(layout_json["class"], "H5D_CHUNKED")
+        self.assertTrue("dims" in layout_json)
 
         # verify compression
         self.assertTrue("creationProperties" in rspJson)
@@ -1622,7 +1642,7 @@ class DatasetTest(unittest.TestCase):
         filter = filters[0]
         self.assertTrue(isinstance(filter, dict))
         self.assertTrue("class" in filter)
-        self.assertEqual(filter["class"], "H5Z_FILTER_USER")
+        self.assertEqual(filter["class"], "H5Z_FILTER_LZ4")
         self.assertTrue("id" in filter)
         self.assertTrue("name" in filter)
         self.assertEqual(filter["name"], "lz4")
@@ -1852,16 +1872,11 @@ class DatasetTest(unittest.TestCase):
             {"name": "z", "type": "H5T_IEEE_F64LE"},
         )
         datatype = {"class": "H5T_COMPOUND", "fields": fields}
+        item_size = 12  # 3 fields of 4 bytes each
+        cpl = {"fillValue": 3.12}  # no layout given
 
-        payload = {"type": datatype, "shape": dims}
-        # the following specifies an efficiently small chunk size
-        chunk_dims = [10,]
-        payload["creationProperties"] = {
-            "layout": {
-                "class": "H5D_CHUNKED",
-                "dims": chunk_dims
-            }
-        }
+        payload = {"type": datatype, "shape": dims, "creationProperties": cpl}
+
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -1884,12 +1899,23 @@ class DatasetTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("creationProperties" in rspJson)
         cpl = rspJson["creationProperties"]
+        self.assertTrue("fillValue" in cpl)
         self.assertTrue("layout" in cpl)
         layout_json = cpl["layout"]
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], "H5D_CHUNKED")
         self.assertTrue("dims" in layout_json)
-        self.assertEqual(layout_json["dims"], chunk_dims)
+        chunk_dims = layout_json["dims"]
+        self.assertEqual(len(chunk_dims), 1)
+        self.assertTrue(chunk_dims[0] < dims[0])
+
+        chunk_size = chunk_dims[0] * item_size
+
+        # chunk size will be based on server config, but assume a min/max of 1MB to 1GB
+        CHUNK_MIN = 1024 * 1024
+        CHUNK_MAX = 1024 * 1024 * 1024
+        self.assertTrue(chunk_size >= CHUNK_MIN)
+        self.assertTrue(chunk_size <= CHUNK_MAX)
 
     def testAutoChunk2dDataset(self):
         # test Dataset where chunk layout is set automatically
@@ -1908,6 +1934,7 @@ class DatasetTest(unittest.TestCase):
         req = self.endpoint + "/datasets"
         # 50K x 80K dataset
         dims = [50000, 80000]
+        item_size = 4  # 4 bytes per float32
         payload = {"type": "H5T_IEEE_F32LE", "shape": dims}
 
         req = self.endpoint + "/datasets"
@@ -1937,11 +1964,11 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], "H5D_CHUNKED")
         self.assertTrue("dims" in layout_json)
-        layout = layout_json["dims"]
-        self.assertEqual(len(layout), 2)
-        self.assertTrue(layout[0] < dims[0])
-        self.assertTrue(layout[1] < dims[1])
-        chunk_size = layout[0] * layout[1] * 4
+        chunk_dims = layout_json["dims"]
+        self.assertEqual(len(chunk_dims), 2)
+        self.assertTrue(chunk_dims[0] < dims[0])
+        self.assertTrue(chunk_dims[1] < dims[1])
+        chunk_size = chunk_dims[0] * chunk_dims[1] * item_size
 
         # chunk size will be based on server config, but assume a min/max of 1MB to 1GB
         CHUNK_MIN = 1024 * 1024

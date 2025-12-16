@@ -1842,7 +1842,6 @@ class LinkTest(unittest.TestCase):
                     self.assertTrue(False)  # unexpected
                 self.assertTrue("created" in ret_link)
                 self.assertTrue(ret_link["created"] in timestamps)
-                print(timestamps)
 
     def testDeleteLinkMultiple(self):
         domain = self.base_domain + "/testDeleteLinkMultiple.h5"

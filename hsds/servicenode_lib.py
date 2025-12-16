@@ -26,15 +26,14 @@ from aiohttp.client_exceptions import ClientOSError, ClientError
 from aiohttp import ClientResponseError
 
 from h5json.array_util import encodeData, decodeData, bytesToArray, bytesArrayToList
-from h5json.array_util import jsonToArray, getNumpyValue
+from h5json.array_util import jsonToArray
 from h5json.objid import getCollectionForId, createObjId, getRootObjId
 from h5json.objid import isSchema2Id, getS3Key, isValidUuid
 from h5json.hdf5dtype import getBaseTypeJson, validateTypeItem, createDataType, getItemSize
-from h5json.filters import getFiltersJson
 from h5json.shape_util import getShapeDims, getShapeClass
-from h5json.dset_util import guessChunk, getChunkSize
-from h5json.dset_util import validateChunkLayout, getDataSize, getDsetMaxDims
-from h5json.dset_util import LAYOUT_CLASSES
+from h5json.filters import getFiltersJson
+from h5json.dset_util import guessChunk, getChunkSize, validateDatasetCreationProps
+from h5json.dset_util import getDataSize, isExtensible
 
 from .util.nodeUtil import getDataNodeUrl
 from .util.authUtil import getAclKeys
@@ -1302,63 +1301,6 @@ async def deleteObject(app, obj_id, bucket=None):
         del meta_cache[obj_id]  # remove from cache
 
 
-def validateDatasetCreationProps(creation_props, type_json=None, shape=None):
-    """ validate creation props """
-
-    log.debug(f"validateDatasetCreationProps: {creation_props}")
-    if "fillValue" in creation_props:
-        if not type_json or not shape:
-            msg = "shape and type must be set to use fillValue"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
-        # validate fill value compatible with type
-        dt = createDataType(type_json)
-        fill_value = creation_props["fillValue"]
-        log.debug(f"got fill_value: {fill_value}")
-        if "fillValue_encoding" in creation_props:
-            fill_value_encoding = creation_props["fillValue_encoding"]
-            if fill_value_encoding not in ("None", "base64"):
-                msg = f"unexpected value for fill_value_encoding: {fill_value_encoding}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            else:
-                # should see a string in this case
-                if not isinstance(fill_value, str):
-                    msg = f"unexpected fill value: {fill_value} "
-                    msg += f"for encoding: {fill_value_encoding}"
-                    log.warn(msg)
-                    raise HTTPBadRequest(reason=msg)
-        else:
-            fill_value_encoding = None
-
-            try:
-                getNumpyValue(fill_value, dt=dt, encoding=fill_value_encoding)
-            except ValueError:
-                msg = f"invalid fill value: {fill_value}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-    if "filters" in creation_props:
-        if not type_json or not shape:
-            msg = "shape and type must be set to use filters"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
-        supported_filters = getSupportedFilters(include_compressors=True)
-        log.debug(f"supported_filters: {supported_filters}")
-        try:
-            filters_out = getFiltersJson(creation_props, supported_filters=supported_filters)
-        except (KeyError, ValueError):
-            # raise bad request exception if not valid
-            msg = "invalid filter provided"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        # replace filters with our standardized list
-        log.debug(f"setting filters to: {filters_out}")
-        creation_props["filters"] = filters_out
-
-
 def getCreateArgs(body,
                   root_id=None,
                   bucket=None,
@@ -1544,10 +1486,18 @@ def getDatasetCreateArgs(body,
     try:
         shape_class = getShapeClass(shape_json)
         shape_dims = getShapeDims(shape_json)
+        if "maxdims" in shape_json:
+            max_dims = shape_json["maxdims"]
+            is_extensible = isExtensible(shape_dims, max_dims)
+        else:
+            max_dims = None
+            is_extensible = False
     except (KeyError, TypeError, ValueError):
         msg = f"Invalid shape: {shape_json}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
+    
+    log.debug(f"shape_class: {shape_class}, shape_dims: {shape_dims}")
 
     log.debug(f"got createArgs: {list(kwargs.keys())}")
 
@@ -1555,58 +1505,73 @@ def getDatasetCreateArgs(body,
 
     # get layout for dataset creation
     log.debug("getting dataset creation settings")
-    layout_props = None
     min_chunk_size = int(config.get("min_chunk_size"))
     max_chunk_size = int(config.get("max_chunk_size"))
     type_json = kwargs["type"]
+
     item_size = getItemSize(type_json)
     if item_size == "H5T_VARIABLE":
         item_size = config.get("default_vlen_type_size", default=128)
+    if shape_dims is None:
+        dset_size = 0
+    else:
+        dset_size = getDataSize(shape_dims, item_size)
+
     creation_props = kwargs["creation_props"]
-    layout_props = None
+    layout_class = None
+    layout_json = {}
+    chunk_dims = None
+    partition_count = None
 
     if creation_props:
-        validateDatasetCreationProps(creation_props, type_json=type_json, shape=shape_json)
-        if "layout" in creation_props:
-            layout_props = creation_props["layout"]
-            try:
-                validateChunkLayout(shape_json, item_size, layout_props, chunk_table=chunk_table)
-            except ValueError:
-                msg = f"invalid chunk layout: {layout_props}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-    else:
-        creation_props = {}
-
-    layout_class = None
-    chunk_dims = None
-    if layout_props:
-        layout_class = layout_props.get("class")
-
-    if layout_class:
-        if layout_class not in LAYOUT_CLASSES:
-            msg = f"unknown layout_class: {layout_class}"
+        log.debug(f"POST_Dataset creation props: {creation_props}")
+        try:
+            validateDatasetCreationProps(creation_props, type_json=type_json, shape=shape_json)
+        except ValueError as ve:
+            msg = f"Provided creation properties are invalid: {ve}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        # check dims is defined for any chunked layout
-        if layout_class.startswith("H5D_CHUNKED"):
-            if "dims" not in layout_props:
-                msg = "chunked layout specified without dims"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            chunk_dims = layout_props["dims"]
-            if len(chunk_dims) != len(shape_dims):
-                msg = "chunk dimensions have different rank than dataset"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-        elif layout_class == "H5D_CONTIGUOUS_REF" and getItemSize(type_json) == "H5T_VARIABLE":
+        log.debug(f"create_props after validation: {creation_props}")
+        if creation_props.get("layout"):
+            layout_json = creation_props["layout"] 
+            layout_class = layout_json.get("class")
+        if "filters" in creation_props:
+            # normalize filter format
+            filters = getFiltersJson(creation_props)
+            supported_filters = getSupportedFilters()
+            log.debug(f"supported filters: {supported_filters}")
+            for filter_item in filters:
+                if filter_item["name"] not in supported_filters:
+                    msg = f"Unsupported filter id: {filter_item['id']}"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+            creation_props["filters"] = filters
+        log.debug(f"post validate creation properties: {creation_props}")
+
+    if layout_class:   
+        if layout_class == "H5D_CONTIGUOUS_REF" and getItemSize(type_json) == "H5T_VARIABLE":
             # ref dataset does not work with vlen type
-            msg = "H5D_CONTIGUOUS_REF cannot be used with variable length types"
+            msg = "H5D_CONTIGUOUS_REF datasets cannot be used with variable length types"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        
+        if "dims" in layout_json:
+            chunk_dims = layout_json["dims"]
+        if chunk_dims:
+            # log warning if the chunk shape if chunk size is too small or too big
+            chunk_size = getChunkSize(chunk_dims, item_size)
+            if chunk_size < min_chunk_size:
+                msg = f"chunk size: {chunk_size} less than recommended min size: {min_chunk_size}"
+                log.warn(msg)
+            elif chunk_size > max_chunk_size:
+                msg = f"chunk size: {chunk_size} greater than recommended "
+                msg += f"max size: {max_chunk_size}"
+                log.debug(msg)
         else:
-            pass
-
+            # log warning if contiguous layout used with too large datadset
+            if dset_size > max_chunk_size:
+                msg = f"dataset larger than recommended {max_chunk_size} for CONTIGUOUS storage"
+                log.warn(msg)
     elif shape_class == "H5S_NULL":
         layout_class = None
         log.debug("using None layout for H5S_NULL dataset")
@@ -1614,8 +1579,7 @@ def getDatasetCreateArgs(body,
         layout_class = "H5D_CONTIGUOUS"
         log.debug("Using H5D_CONTIGUOUS for H5S_SCALAR dataset")
     elif shape_class == "H5S_SIMPLE":
-        dset_size = getDataSize(shape_dims, item_size)
-        if dset_size <= min_chunk_size:
+        if dset_size <= min_chunk_size and not is_extensible:
             # default to contiguous
             layout_class = "H5D_CONTIGUOUS"
             log.debug(f"Using H5D_CONTIGUOUS for small (<{min_chunk_size}) dataset")
@@ -1625,42 +1589,25 @@ def getDatasetCreateArgs(body,
             log.debug(f"item_size: {item_size}")
             log.debug(f"chunk_min: {min_chunk_size}")
             log.debug(f"chunk_max: {max_chunk_size}")
-            kwargs = {"chunk_min": min_chunk_size, "chunk_max": max_chunk_size}
-            chunk_dims = guessChunk(shape_json, item_size, **kwargs)
+            args = {"chunk_min": min_chunk_size, "chunk_max": max_chunk_size}
+            chunk_dims = guessChunk(shape_json, item_size, **args)
             log.debug(f"initial autochunk layout: {chunk_dims}")
             chunk_size = getChunkSize(chunk_dims, item_size)
-
-            # log warning if the chunk shape if chunk size is too small or too big
-            if chunk_size < min_chunk_size:
-                msg = f"chunk size: {chunk_size} less than recommended min size: {min_chunk_size}"
-                log.warn(msg)
-            elif chunk_size > max_chunk_size:
-                msg = f"chunk size: {chunk_size} greater than recommended "
-                msg += f"max size: {max_chunk_size}"
-                log.debug(msg)
+            log.debug(f"chunk_size: {chunk_size}")
     else:
         msg = f"unexpected shape_class: {shape_class}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    if not layout_props:
-        layout_props = {"class": layout_class}
-    if chunk_dims:
-        layout_props["dims"] = chunk_dims
-    log.debug(f"using dataset layout: {layout_props}")
-    creation_props["layout"] = layout_props
-
     # set partition_count if needed:
     max_chunks_per_folder = int(config.get("max_chunks_per_folder"))
     set_partition = False
     if max_chunks_per_folder > 0:
-        if "dims" in layout_props:
+        if "dims" in layout_json:
             set_partition = True
 
-    if set_partition:
+    if set_partition and dset_size > max_chunk_size:
         log.debug(f"updating layout for partition constraint: {max_chunks_per_folder}")
-        shape_dims = getShapeDims(shape_json)
-        max_dims = getDsetMaxDims(shape_json)
 
         num_chunks = 1
         rank = len(shape_dims)
@@ -1692,33 +1639,22 @@ def getDatasetCreateArgs(body,
             msg = f"set partition count to: {partition_count}, "
             msg += f"num_chunks: {num_chunks}"
             log.info(msg)
-            layout_props["partition_count"] = partition_count
         else:
             msg = "do not need chunk partitions, num_chunks: "
             msg += f"{num_chunks} max_chunks_per_folder: "
             msg += f"{max_chunks_per_folder}"
             log.info(msg)
 
-    if layout_class in ("H5D_CHUNKED_REF", "H5D_CHUNKED_REF_INDIRECT"):
-        chunk_size = getChunkSize(chunk_dims, item_size)
-
-        msg = f"chunk_size: {chunk_size}, min: {min_chunk_size}, "
-        msg += f"max: {max_chunk_size}"
-        log.debug(msg)
-        # nothing to do about inefficiently small chunks, but large chunks
-        # can be subdivided
-        if chunk_size < min_chunk_size:
-            msg = f"chunk size: {chunk_size} less than min size: "
-            msg += f"{min_chunk_size} for {layout_class} dataset"
-            log.warn(msg)
-        elif chunk_size > max_chunk_size:
-            msg = f"chunk size: {chunk_size} greater than max size: "
-            msg += f"{max_chunk_size}, for {layout_class} dataset"
-            log.warn(msg)
-        layout_props["dims"] = chunk_dims
-
-    creation_props["layout"] = layout_props
+    if layout_class:
+        # should be set if shape is not H5S_NULL
+        if "class" not in layout_json:
+            layout_json["class"] = layout_class
+    if chunk_dims:
+        layout_json["dims"] = chunk_dims
+    log.debug(f"using dataset layout: {layout_json}")
+    creation_props["layout"] = layout_json
     kwargs["creation_props"] = creation_props
+    log.debug(f"updated creation props: {creation_props}")
 
     #
     # get input data if present
@@ -1733,9 +1669,7 @@ def getDatasetCreateArgs(body,
         input_data = body["value"]
         msg = "input data doesn't match request type and shape"
         dims = getShapeDims(shape_json)
-        if not dims:
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+
         arr_dtype = createDataType(type_json)
 
         try:

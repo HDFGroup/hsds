@@ -433,10 +433,9 @@ class DomainCrawler:
 
     async def put_data(self, chunk_id, arr):
         # write a one-chunk dataset value
-        log.debug(f"DomainCrawler put_data for {chunk_id}, arr: {arr}")
+        log.debug(f"DomainCrawler put_data for {chunk_id}, arr.shape: {arr.shape}")
         req = getDataNodeUrl(self._app, chunk_id)
         req += "/chunks/" + chunk_id
-        log.debug(f"put_data req: {req}")
         params = {"bucket": self._bucket}
 
         data = arrayToBytes(arr)
@@ -600,7 +599,9 @@ class DomainCrawler:
                 log.error(f"couldn't find {obj_id} in self._objs")
                 return
             data = self._objs[obj_id]
-            log.debug(f"got {len(data)} data for {obj_id}")
+            if data is None:
+                log.error(f"no data found for {obj_id}")
+                return
 
             await self.put_data(obj_id, data)
         else:

@@ -69,7 +69,7 @@ def getCompressors():
 def getSupportedFilters(include_compressors=True):
     """return list of other supported filters"""
     filters = [
-        # "bitshuffle",
+        "bitshuffle",
         "shuffle",
         "fletcher32",
         "nbit",        # No-op

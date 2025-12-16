@@ -58,6 +58,8 @@ class FilterTest(unittest.TestCase):
         # Create ~1MB dataset
 
         payload = {"type": "H5T_STD_I8LE", "shape": [1024, 1024]}
+        # use a chunked layout for compression
+        layout = {"class": "H5D_CHUNKED", "dims": [64, 64]}
         # define deflate compression
         gzip_filter = {
             "class": "H5Z_FILTER_DEFLATE",
@@ -65,7 +67,7 @@ class FilterTest(unittest.TestCase):
             "level": 9,
             "name": "deflate",
         }
-        payload["creationProperties"] = {"filters": [gzip_filter]}
+        payload["creationProperties"] = {"layout": layout, "filters": [gzip_filter]}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -120,7 +122,9 @@ class FilterTest(unittest.TestCase):
         payload = {"type": "H5T_STD_I32LE", "shape": [1024, 1024]}
         # define sshufle compression
         shuffle_filter = {"class": "H5Z_FILTER_SHUFFLE", "id": 2, "name": "shuffle"}
-        payload["creationProperties"] = {"filters": [shuffle_filter]}
+        # use chunked layout for compression
+        layout = {"class": "H5D_CHUNKED", "dims": [64, 64]}
+        payload["creationProperties"] = {"filters": [shuffle_filter], "layout": layout}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -182,7 +186,11 @@ class FilterTest(unittest.TestCase):
         }
         # and shuffle compression
         shuffle_filter = {"class": "H5Z_FILTER_SHUFFLE", "id": 2, "name": "shuffle"}
-        payload["creationProperties"] = {"filters": [shuffle_filter, gzip_filter]}
+        filters = [shuffle_filter, gzip_filter]
+        # use chunked layout
+        layout = {"class": "H5D_CHUNKED", "dims": [64, 64]}
+        payload["creationProperties"] = {"layout": layout, "filters": filters}
+
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -237,7 +245,9 @@ class FilterTest(unittest.TestCase):
 
         # bit shuffle
         bitshuffle_filter = {"class": "H5Z_FILTER_BITSHUFFLE", "id": 32008, "name": "bitshuffle"}
-        payload["creationProperties"] = {"filters": [bitshuffle_filter, ]}
+        # use chunked layout
+        layout = {"class": "H5D_CHUNKED", "dims": [64, 64]}
+        payload["creationProperties"] = {"filters": [bitshuffle_filter], "layout": layout}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -299,7 +309,10 @@ class FilterTest(unittest.TestCase):
         }
         # and bit shuffle
         bitshuffle_filter = {"class": "H5Z_FILTER_BITSHUFFLE", "id": 32008, "name": "bitshuffle"}
-        payload["creationProperties"] = {"filters": [bitshuffle_filter, gzip_filter]}
+        filters = [bitshuffle_filter, gzip_filter]
+        # use chunked layout
+        layout = {"class": "H5D_CHUNKED", "dims": [64, 64]}
+        payload["creationProperties"] = {"filters": filters, "layout": layout}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset

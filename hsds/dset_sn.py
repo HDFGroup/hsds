@@ -26,7 +26,7 @@ from h5json.dset_util import getChunkDims, getDatasetLayoutClass
 from .util.httpUtil import getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse, getBooleanParam
 from .util.chunkUtil import getChunkIds
-from .util.dsetUtil import getPreviewQuery
+from .util.dsetUtil import getPreviewQuery, getHyperslabSelection
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
@@ -476,7 +476,7 @@ async def POST_Dataset(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    log.debug(f"got body: {body}")
+    log.debug(f"POST_Dataset got body: {body}")
     # get domain, check authorization
     domain = getDomainFromRequest(request)
     if not isValidDomain(domain):
@@ -507,6 +507,7 @@ async def POST_Dataset(request):
         # to init_values list
         if "value" in kwargs:
             init_values.append(kwargs["value"])
+            log.debug(f"init value appended: {kwargs['value']}") 
             del kwargs["value"]
         else:
             # add a placeholder
@@ -613,12 +614,13 @@ async def POST_Dataset(request):
         init_data = init_values[index]
         if init_data is None:
             continue  # no data to initialize
+        log.debug(f"init data: {init_data}")
         dset_json = objects[index]
         dset_id = dset_json["id"]
         log.debug(f"init value, post_rsp: {dset_json}")
         layout_class = getDatasetLayoutClass(dset_json)
         log.debug(f"layout_class: {layout_class}")
-        if layout_class != "H5D_CHUNKED":
+        if layout_class not in ("H5D_CONTIGUOUS", "H5D_CHUNKED"):
             msg = f"dataset init_data used with unsupported layout_class: {layout_class}"
             log.error(msg)
             raise HTTPInternalServerError()
@@ -626,10 +628,8 @@ async def POST_Dataset(request):
         log.debug(f"init data layout is: {layout_dims}")
         # make selection for entire dataspace
         dims = getShapeDims(dset_json["shape"])
-        slices = []
-        for dim in dims:
-            s = slice(0, dim, 1)
-            slices.append(s)
+        slices = getHyperslabSelection(dims)
+        
         chunk_ids = getChunkIds(dset_id, slices, layout_dims)
         log.debug(f"init data, got chunk_ids: {chunk_ids}")
         if not chunk_ids or len(chunk_ids) != 1:

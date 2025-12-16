@@ -201,7 +201,7 @@ def _getSelect(params, dset_json, body=None):
     """ return selection region if any as a list
       of slices. """
     slices = None
-    log.debug(f"_getSelect  params: {params} body: {body}")
+    log.debug(f"_getSelect  params: {dict(params)} body: {body}")
     try:
         if body and isinstance(body, dict):
             if "select" in body and body["select"]:
@@ -214,6 +214,7 @@ def _getSelect(params, dset_json, body=None):
             if slices:
                 msg = "select defined in both request body and query parameters"
                 raise ValueError(msg)
+            log.debug(f"_getSelect - select param: {select}")
             slices = get_slices(select, dset_json)
     except ValueError as ve:
         log.warn(f"Invalid selection: {ve}")
@@ -226,12 +227,17 @@ def _getSelect(params, dset_json, body=None):
 
     if not slices:
         # just return the entire dataspace
+        log.debug("_getSelect - no selection, using entire dataspace")
         datashape = dset_json["shape"]
         dims = getShapeDims(datashape)
         slices = []
-        for dim in dims:
-            s = slice(0, dim, 1)
-            slices.append(s)
+        if dims:
+            for dim in dims:
+                s = slice(0, dim, 1)
+                slices.append(s)
+        else:
+            # scalar dataset
+            slices.append(slice(0, 1, 1))
     log.debug(f"_getSelect returning: {slices}")
     return slices
 

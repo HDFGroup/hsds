@@ -17,7 +17,7 @@ from h5json.shape_util import getShapeDims
 
 from .. import hsds_logger as log
 
- 
+
 def getShapeJson(body):
     """ Return normalized json description of data space """
 
@@ -27,11 +27,11 @@ def getShapeJson(body):
 
     if "shape" not in body:
         shape_class = "H5S_SCALAR"
-        log.debug("not shape given - using H5S_SCALAR")
+        log.debug("getShapeJson - no shape given, using H5S_SCALAR")
         return {"class": shape_class}
 
     body_shape = body["shape"]
-    log.debug(f"got shape: {body_shape}")
+    log.debug(f"getShapeJson - got shape: {body_shape}")
 
     if isinstance(body_shape, int):
         shape_class = "H5S_SIMPLE"
@@ -112,7 +112,7 @@ def getShapeJson(body):
         shape_json["dims"] = dims
     if maxdims:
         shape_json["maxdims"] = maxdims
-    log.debug(f"returning shape_json: {shape_json}")
+    log.debug(f"getShapeJson - returning shape_json: {shape_json}")
     return shape_json
 
 
@@ -123,6 +123,11 @@ def getHyperslabSelection(dims, start=None, stop=None, step=None):
     TBD: for step>1, adjust the slice to not extend beyond last
         data point returned
     """
+
+    if len(dims) == 0:
+        # scalar dataset
+        dims = (1,)
+
     rank = len(dims)
     if start:
         if not isinstance(start, (list, tuple)):
@@ -494,20 +499,25 @@ def get_slices(select, dset_json):
 
     dset_id = dset_json["id"]
     datashape = dset_json["shape"]
-    if datashape["class"] == "H5S_NULL":
+    shape_class = datashape["class"]
+    if shape_class == "H5S_NULL":
         msg = "Null space datasets can not be used as target for GET value"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
+    if shape_class == "H5S_SCALAR":
+        # return single slice
+        slices = [slice(0, 1, 1), ]
+    else:
+        dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
 
-    try:
-        slices = getSelectionList(select, dims)
-    except ValueError:
-        msg = f"Invalid selection: {select} on dims: {dims} "
-        msg += f"for dataset: {dset_id}"
-        log.warn(msg)
-        raise
+        try:
+            slices = getSelectionList(select, dims)
+        except ValueError:
+            msg = f"Invalid selection: {select} on dims: {dims} "
+            msg += f"for dataset: {dset_id}"
+            log.warn(msg)
+            raise
     return slices
 
 

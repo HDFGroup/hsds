@@ -115,10 +115,43 @@ class ChunkUtilTest(unittest.TestCase):
         selection = getHyperslabSelection(datashape, (0, 0), (100, 100), (20, 40))
         count = getNumChunks(selection, layout)
         self.assertEqual(count, 15)
+        # test with scalar
+        datashape = ()
+        layout = (1, )
+        selection = getHyperslabSelection(datashape, 0, 1)
+        print("selection:", selection)
+        count = getNumChunks(selection, layout)
+        self.assertEqual(count, 1)
 
     def testGetChunkIds(self):
         # getChunkIds(dset_id, selection, layout, dim=0, prefix=None, chunk_ids=None):
         dset_id = "d-12345678-1234-1234-1234-1234567890ab"
+
+        datashape = []
+        layout = (1,)
+
+        selection = getHyperslabSelection(datashape, 0, 1)
+        num_chunks = getNumChunks(selection, layout)
+
+        self.assertEqual(num_chunks, 1)
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 1)
+        chunk_id = chunk_ids[0]
+        self.assertTrue(chunk_id.startswith("c-"))
+        self.assertTrue(chunk_id.endswith("_0"))
+        self.assertEqual(chunk_id[2:-2], dset_id[2:])
+        self.assertEqual(len(chunk_id), 2 + 36 + 2)
+        self.assertEqual(getDatasetId(chunk_id), dset_id)
+
+        selection = getHyperslabSelection(datashape)
+        chunk_ids = getChunkIds(dset_id, selection, layout)
+        self.assertEqual(len(chunk_ids), 1)
+        chunk_id = chunk_ids[0]
+        self.assertTrue(chunk_id.startswith("c-"))
+        self.assertTrue(chunk_id.endswith("_0"))
+        self.assertEqual(chunk_id[2:-2], dset_id[2:])
+        self.assertEqual(len(chunk_id), 2 + 36 + 2)
+        self.assertEqual(getDatasetId(chunk_id), dset_id)
 
         datashape = [1,]
         layout = (1,)

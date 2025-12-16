@@ -27,7 +27,7 @@ from h5json.objid import getS3Key, isValidUuid
 from h5json.objid import isValidChunkId, isSchema2Id
 from h5json.objid import getRootObjId, isRootObjId
 from h5json.shape_util import getShapeDims
-from h5json.dset_util import getChunkDims
+from h5json.dset_util import getChunkDims, getDatasetLayoutClass
 
 from .util.nodeUtil import getDataNodeUrl
 from .util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
@@ -1060,8 +1060,7 @@ async def get_chunk(
     dims = getChunkDims(dset_json)
     type_json = dset_json["type"]
     dt = createDataType(type_json)
-    layout_json = dset_json["layout"]
-    layout_class = layout_json.get("class")
+    layout_class = getDatasetLayoutClass(dset_json)
     chunk_dims = getChunkDims(dset_json)
     fill_value = getFillValue(dset_json)
 

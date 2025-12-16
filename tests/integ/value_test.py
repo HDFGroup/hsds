@@ -982,7 +982,6 @@ class ValueTest(unittest.TestCase):
             "id",
             "shape",
             "hrefs",
-            "layout",
             "creationProperties",
             "attributeCount",
             "created",
@@ -1060,7 +1059,6 @@ class ValueTest(unittest.TestCase):
                 "id",
                 "shape",
                 "hrefs",
-                "layout",
                 "creationProperties",
                 "attributeCount",
                 "created",
@@ -2133,7 +2131,7 @@ class ValueTest(unittest.TestCase):
 
         # read values from the extended region
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        params = {"select": "[{}:{}]".format(0, num_elements)}
+        params = {"select": f"[0:{num_elements}]"}
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
@@ -3236,7 +3234,7 @@ class ValueTest(unittest.TestCase):
         extent = 1_000_000_000   # one billion elements
         dset_dims = [extent, ]
         layout = {"class": "H5D_CHUNKED"}
-        layout["dims"] = dset_dims
+        layout["dims"] = [1_000, ]
 
         range_start = 0  # -0.25
         range_step = 1
@@ -3286,6 +3284,7 @@ class ValueTest(unittest.TestCase):
 
     def testIntelligentRangeGet1D(self):
         test_name = "testIntelligentRangeGet1D"
+
         print(test_name, self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)

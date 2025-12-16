@@ -1370,8 +1370,10 @@ class PointSelTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
-        self.assertTrue("layout" in rspJson)
-        layout_json = rspJson["layout"]
+        self.assertTrue("creationProperties" in rspJson)
+        creation_props = rspJson["creationProperties"]
+        self.assertTrue("layout" in creation_props)
+        layout_json = creation_props["layout"]
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], "H5D_CHUNKED")
         self.assertTrue("dims" in layout_json)

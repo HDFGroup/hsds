@@ -14,7 +14,7 @@ import logging
 import sys
 
 sys.path.append("../..")
-from hsds.util.dsetUtil import getHyperslabSelection, getSelectionShape
+from hsds.util.dsetUtil import getHyperslabSelection, getSelectionShape, get_slices
 from hsds.util.dsetUtil import getSelectionList, ItemIterator, getSelectionPagination
 
 
@@ -25,8 +25,40 @@ class DsetUtilTest(unittest.TestCase):
         self.logger = logging.getLogger()
         self.logger.setLevel(logging.WARNING)
 
+    def testGetSlices(self):
+        dset_json = {"id": "d-b4b3b3d6-94343adc-1727-28bebf-12caac"}
+        datashape = {"class": "H5S_SCALAR"}
+        cprops = {"layout": {"class": "H5D_CONTIGUOUS"}}
+        dtype_json = {"class": "H5T_INTEGER", "base": "H5T_STD_I32LE"}
+        dset_json["shape"] = datashape
+        dset_json["creationProperties"] = cprops
+        dset_json["type"] = dtype_json
+
+        slices = get_slices("", dset_json)
+        self.assertEqual(len(slices), 1)
+        self.assertEqual(slices[0], slice(0, 1, 1))
+
+        slices = get_slices(None, dset_json)
+        self.assertEqual(len(slices), 1)
+        self.assertEqual(slices[0], slice(0, 1, 1))
+
     def testGetHyperslabSelection(self):
         # getHyperslabSelection(dsetshape, start, stop, step)
+
+        # Scalar case
+        datashape = []
+        slices = getHyperslabSelection(datashape)
+        self.assertEqual(len(slices), 1)
+        self.assertEqual(slices[0], slice(0, 1, 1))
+
+        slices = getHyperslabSelection(datashape, 0)
+        self.assertEqual(len(slices), 1)
+        self.assertEqual(slices[0], slice(0, 1, 1))
+
+        slices = getHyperslabSelection(datashape, 0, 1)
+        self.assertEqual(len(slices), 1)
+        self.assertEqual(slices[0], slice(0, 1, 1))
+
         # 1-D case
         datashape = [100,]
         slices = getHyperslabSelection(datashape)
