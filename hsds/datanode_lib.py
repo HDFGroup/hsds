@@ -28,6 +28,7 @@ from h5json.objid import isValidChunkId, isSchema2Id
 from h5json.objid import getRootObjId, isRootObjId
 from h5json.shape_util import getShapeDims
 from h5json.dset_util import getChunkDims, getDatasetLayoutClass
+from h5json.time_util import getNow
 
 from .util.nodeUtil import getDataNodeUrl
 from .util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
@@ -40,7 +41,7 @@ from .util.dsetUtil import getChunkInitializer, getSliceQueryParam
 from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
 from .util.nodeUtil import validateInPartition
 from .util.rangegetUtil import ChunkLocation, chunkMunge, getHyperChunkIndex, getHyperChunkFactors
-from .util.timeUtil import getNow
+
 from . import config
 from . import hsds_logger as log
 from .dset_lib import getFillValue

@@ -23,6 +23,7 @@ from h5json.objid import getObjId, isValidChunkId, getCollectionForId
 from h5json.filters import getFilters
 from h5json.shape_util import getShapeDims
 from h5json.dset_util import getDatasetLayoutClass, getDatasetLayout, getChunkDims
+from h5json.time_util import getNow
 
 from .util.chunkUtil import getDatasetId, getNumChunks, ChunkIterator
 from .util.dsetUtil import getHyperslabSelection
@@ -31,7 +32,7 @@ from .util.storUtil import deleteStorObj, getStorBytes, isStorObj
 from .datanode_lib import getFilterOps
 from . import hsds_logger as log
 from . import config
-import time
+
 
 # List all keys under given root and optionally update info.json
 # Note: only works with schema v2 domains!
@@ -78,7 +79,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         return
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
-    if "layout" not in dset_json:
+    if not getDatasetLayout(dset_json):
         msg = "updateDatasetInfo - expected to find layout in dataset_json "
         msg += f"for {dset_id}"
         log.warn(msg)
@@ -387,7 +388,7 @@ async def scanRoot(app, rootid, update=False, bucket=None):
     results["logical_bytes"] = 0
     results["checksums"] = {}  # map of objid to checksums
     results["bucket"] = bucket
-    results["scan_start"] = time.time()
+    results["scan_start"] = getNow(app=app)
 
     app["scanRoot_results"] = results
     app["scanRoot_keyset"] = set()
@@ -442,7 +443,7 @@ async def scanRoot(app, rootid, update=False, bucket=None):
     # free up memory used by the checksums
     del results["checksums"]
 
-    results["scan_complete"] = time.time()
+    results["scan_complete"] = getNow(app=app)
 
     if update:
         # write .info object back to S3

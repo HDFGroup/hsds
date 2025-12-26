@@ -21,11 +21,11 @@ from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
 from h5json.objid import isValidUuid
+from h5json.time_util import getNow
 
 from .util.globparser import globmatch
 from .util.linkUtil import validateLinkName, getLinkClass, isEqualLink
 from .util.domainUtil import isValidBucketName
-from .util.timeUtil import getNow
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import config
 from . import hsds_logger as log

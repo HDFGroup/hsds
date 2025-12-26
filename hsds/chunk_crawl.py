@@ -15,7 +15,6 @@
 #
 
 import asyncio
-import time
 import traceback
 import random
 from asyncio import CancelledError
@@ -29,6 +28,7 @@ from h5json.array_util import jsonToArray, getNumpyValue
 from h5json.array_util import getNumElements, arrayToBytes, bytesToArray
 from h5json.shape_util import getShapeDims
 from h5json.dset_util import getChunkDims
+from h5json.time_util import getNow
 
 from .util.nodeUtil import getDataNodeUrl, getNodeCount
 from .util.httpUtil import http_get, http_put, http_post, get_http_client
@@ -87,7 +87,7 @@ async def write_chunk_hyperslab(
     msg += f"bucket: {bucket}"
     msg += f" dset_json: {dset_json}"
     log.info(msg)
-    
+
     partition_chunk_id = getChunkIdForPartition(chunk_id, dset_json)
     if partition_chunk_id != chunk_id:
         log.debug(f"using partition_chunk_id: {partition_chunk_id}")
@@ -676,6 +676,9 @@ class ChunkCrawler:
             app["cc_clients"] = {}
         self._clients = app["cc_clients"]
 
+    def now(self):
+        return getNow(app=self._app)
+
     def get_status(self):
         if len(self._status_map) != len(self._chunk_ids):
             msg = "get_status code while crawler not complete"
@@ -720,7 +723,7 @@ class ChunkCrawler:
         log.info(f"ChunkCrawler - client_name: {client_name}")
         while True:
             try:
-                start = time.time()
+                start = self.now()
                 chunk_id = await self._q.get()
                 if self._limit > 0 and self._hits >= self._limit:
                     msg = f"ChunkCrawler - maxhits exceeded, skipping fetch for chunk: {chunk_id}"
@@ -745,7 +748,7 @@ class ChunkCrawler:
                     await self.do_work(chunk_id, client=client)
 
                 self._q.task_done()
-                elapsed = time.time() - start
+                elapsed = self.now() - start
                 msg = f"ChunkCrawler - task {chunk_id} start: {start:.3f} "
                 msg += f"elapsed: {elapsed:.3f}"
                 log.debug(msg)

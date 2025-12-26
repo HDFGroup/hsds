@@ -28,8 +28,8 @@ from h5json.hdf5dtype import getItemSize, getDtypeItemSize, getSubType, createDa
 from h5json.array_util import bytesArrayToList, jsonToArray, getNumElements, arrayToBytes
 from h5json.array_util import bytesToArray, squeezeArray, getBroadcastShape
 from h5json.objid import isValidUuid
-from h5json.shape_util import isNullSpace, isScalar, getShapeDims
-from h5json.dset_util import getChunkDims, isExtensible, getDsetMaxDims
+from h5json.shape_util import isNullSpace, isScalar, getShapeDims, getMaxDims
+from h5json.dset_util import getChunkDims, isExtensible
 
 from .util.httpUtil import getHref, getAcceptType, getContentType
 from .util.httpUtil import request_read, jsonResponse, isAWSLambda
@@ -163,8 +163,8 @@ def _getAppendRows(params, dset_json, body=None):
         datashape = dset_json["shape"]
         dims = getShapeDims(datashape)
         rank = len(dims)
-        maxdims = getDsetMaxDims(dset_json)
-        if not isExtensible(dims, maxdims):
+        maxdims = getMaxDims(datashape)
+        if not isExtensible(datashape):
             msg = "Dataset shape must be extensible for packet updates"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)

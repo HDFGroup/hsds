@@ -42,7 +42,7 @@ dependencies = [
     "bitshuffle >=0.5.2",
     "cryptography",
     "h5py >= 3.6.0",
-    "h5json@git+https://github.com/HDFGroup/hdf5-json@abstract",
+    "h5json >= 1.0.0",
     "importlib_resources",
     "numcodecs <= 0.15.1",
     "numpy >=2.0.0",

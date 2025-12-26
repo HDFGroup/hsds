@@ -1,11 +1,11 @@
 import sys
-import time
 import h5py
 import s3fs
 import numpy as np
 from . import config
 from . import hsds_logger as log
 
+from h5json.time_util import getNow
 from h5json.array_util import bytesArrayToList, getNumElements
 
 from .util.dsetUtil import getSelectionList, getSelectionShape
@@ -191,7 +191,7 @@ def main():
     prefix = config.get("log_prefix")
     log_timestamps = config.get("log_timestamps", default=False)
     log.setLogConfig(log_level, prefix=prefix, timestamps=log_timestamps)
-    start_time = time.time()
+    start_time = getNow()
     log.info(f"chunklocator start: {start_time:.2f}")
 
     cmd_options = get_cmd_options()
@@ -231,6 +231,6 @@ def main():
         sys.exit(1)
 
     log.info('done')
-    stop_time = time.time()
+    stop_time = getNow()
     log.info(f"chunklocator stop: {stop_time:.2f}")
     log.info(f"chunklocator elapsed: {(stop_time - start_time):.2f}")

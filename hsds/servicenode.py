@@ -14,9 +14,10 @@
 #
 
 import asyncio
-import time
 from aiohttp.web import run_app
 import aiohttp_cors
+from h5json.time_util import getNow
+
 from .util.lruCache import LruCache
 from .util.httpUtil import isUnixDomainUrl, bindToSocket, getPortFromUrl
 from .util.httpUtil import release_http_client, jsonResponse
@@ -217,10 +218,10 @@ async def preStop(request):
     log.request(request)
     app = request.app
 
-    shutdown_start = time.time()
+    shutdown_start = getNow()
     log.warn(f"preStop request calling on_shutdown at {shutdown_start:.2f}")
     await on_shutdown(app)
-    shutdown_elapse_time = time.time() - shutdown_start
+    shutdown_elapse_time = getNow() - shutdown_start
     msg = f"shutdown took: {shutdown_elapse_time:.2f} seconds"
     if shutdown_elapse_time > 2.0:
         # 2.0 is the default grace period for kubernetes

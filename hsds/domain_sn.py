@@ -24,6 +24,8 @@ from aiohttp.web import json_response
 
 from h5json.objid import createObjId, getCollectionForId
 from h5json.objid import isValidUuid, isRootObjId, isSchema2Id
+from h5json.time_util import getNow
+
 
 from .util.nodeUtil import getNodeCount, getDataNodeUrl
 from .util.httpUtil import getObjectClass, http_post, http_put, http_delete
@@ -37,7 +39,6 @@ from .util.domainUtil import getPathForDomain, getLimits
 from .util.storUtil import getStorKeys, getCompressors
 from .util.boolparser import BooleanParser
 from .util.globparser import globmatch
-from .util.timeUtil import getNow
 from .servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
 from .servicenode_lib import getRootInfo, checkBucketAccess, doFlush, getDomainResponse
 from .basenode import getVersion

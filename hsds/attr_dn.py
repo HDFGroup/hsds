@@ -22,12 +22,13 @@ from h5json.hdf5dtype import getItemSize, createDataType
 from h5json.array_util import arrayToBytes, jsonToArray, decodeData
 from h5json.array_util import bytesToArray, bytesArrayToList, getNumElements
 from h5json.shape_util import getShapeDims
+from h5json.time_util import getNow
 
 from .util.attrUtil import validateAttributeName, isEqualAttr
 from .util.globparser import globmatch
 from .util.domainUtil import isValidBucketName
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
-from .util.timeUtil import getNow
+
 from . import config
 from . import hsds_logger as log
 

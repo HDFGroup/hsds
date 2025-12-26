@@ -20,9 +20,9 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web import json_response
 
 from h5json.objid import isValidUuid, isSchema2Id, isRootObjId, getRootObjId
+from h5json.time_util import getNow
 
 from .util.domainUtil import isValidBucketName
-from .util.timeUtil import getNow
 from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj
 from .datanode_lib import save_metadata_obj, delete_metadata_obj
 from . import hsds_logger as log

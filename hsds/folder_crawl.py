@@ -13,12 +13,12 @@
 # service node of hsds cluster
 #
 
-import time
 import asyncio
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
 from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPServiceUnavailable
 
+from h5json.time_util import getNow
 from .servicenode_lib import getObjectJson, getDomainResponse, getDomainJson
 from .util.nodeUtil import getNodeCount
 
@@ -51,6 +51,9 @@ class FolderCrawler:
         else:
             self._max_tasks = len(domains)
 
+    def now(self):
+        return getNow(app=self._app)
+
     async def crawl(self):
         workers = [asyncio.Task(self.work()) for _ in range(self._max_tasks)]
         # When all work is done, exit.
@@ -68,11 +71,11 @@ class FolderCrawler:
 
     async def work(self):
         while True:
-            start = time.time()
+            start = self.now()
             domain = await self._q.get()
             await self.fetch(domain)
             self._q.task_done()
-            elapsed = time.time() - start
+            elapsed = self.now() - start
             msg = f"FolderCrawler - task {domain} start: {start:.3f} "
             msg += f"elapsed: {elapsed:.3f}"
             log.debug(msg)

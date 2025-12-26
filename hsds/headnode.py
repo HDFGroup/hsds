@@ -15,13 +15,12 @@
 
 import asyncio
 import os
-import time
 
 from aiohttp.web import Application, StreamResponse, run_app, json_response
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
+from h5json.time_util import unixTimeToUTC, elapsedTime, getNow
 
 from . import config
-from .util.timeUtil import unixTimeToUTC, elapsedTime
 from .util.nodeUtil import createNodeId
 from . import hsds_logger as log
 from .util import query_marathon as marathonClient
@@ -46,7 +45,7 @@ class Node:
         self._type = node_type
         self._host = node_host
         self._port = node_port
-        now = time.time()
+        now = getNow()
         self._create_time = now
         self._last_poll = now
         self._stats = {}
@@ -87,13 +86,13 @@ class Node:
         return info
 
     def poll_update(self):
-        now = time.time()
+        now = getNow()
         self._last_poll = now
 
     def is_healthy(self):
         sleep_sec = int(config.get("node_sleep_time"))
 
-        now = time.time()
+        now = getNow()
         if now - self._last_poll < sleep_sec * 2:
             return True
         else:
@@ -301,7 +300,7 @@ async def register(request):
     answer["dn_ids"] = dn_ids
     answer["req_ip"] = node_host
     log.debug(f"register returning: {answer}")
-    app["last_health_check"] = int(time.time())
+    app["last_health_check"] = int(getNow())
 
     resp = json_response(answer)
     log.response(request, resp=resp)
@@ -475,7 +474,7 @@ async def init():
 
     app["nodes"] = nodes
     app["dead_node_ids"] = set()
-    app["start_time"] = int(time.time())  # seconds after epoch
+    app["start_time"] = int(getNow())  # seconds after epoch
     app["last_health_check"] = 0
     app["max_task_count"] = config.get("max_task_count")
     app.router.add_get("/", info)

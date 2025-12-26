@@ -507,7 +507,7 @@ async def POST_Dataset(request):
         # to init_values list
         if "value" in kwargs:
             init_values.append(kwargs["value"])
-            log.debug(f"init value appended: {kwargs['value']}") 
+            log.debug(f"init value appended: {kwargs['value']}")
             del kwargs["value"]
         else:
             # add a placeholder
@@ -629,7 +629,7 @@ async def POST_Dataset(request):
         # make selection for entire dataspace
         dims = getShapeDims(dset_json["shape"])
         slices = getHyperslabSelection(dims)
-        
+
         chunk_ids = getChunkIds(dset_id, slices, layout_dims)
         log.debug(f"init data, got chunk_ids: {chunk_ids}")
         if not chunk_ids or len(chunk_ids) != 1:

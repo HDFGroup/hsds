@@ -15,6 +15,7 @@ import time
 import numpy as np
 
 from h5json.objid import createObjId
+from h5json.filters import getFilterItem
 
 import helper
 import config
@@ -1401,25 +1402,21 @@ class DatasetTest(unittest.TestCase):
             "id": 3,
             "name": "fletcher32"
         }
-        payload["creationProperties"] = {
-            "layout": {"class": "H5D_CHUNKED", "dims": [1, 390, 512]},
+        contiguous_layout = {"class": "H5D_CONTIGUOUS"}
+        chunked_layout = {"class": "H5D_CHUNKED", "dims": [1, 390, 512]}
+        creationProps = {
             "filters": [
                 gzip_filter,
                 fletcher32_filter,
             ],
         }
+        payload["creationProperties"] = creationProps
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
         rspJson = json.loads(rsp.text)
         dset_uuid = rspJson["id"]
         self.assertTrue(helper.validateId(dset_uuid))
 
-        # link new dataset as 'chunktest'
-        name = "chunktest"
-        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
-        payload = {"id": dset_uuid}
-        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
-        self.assertEqual(rsp.status_code, 201)
         # verify layout
         req = helper.getEndpoint() + "/datasets/" + dset_uuid
         rsp = self.session.get(req, headers=headers)
@@ -1431,11 +1428,40 @@ class DatasetTest(unittest.TestCase):
         layout_json = cpl["layout"]
         self.assertTrue("class" in layout_json)
         self.assertEqual(layout_json["class"], "H5D_CHUNKED")
+        self.assertTrue("dims" in layout_json)  # layout created automatically
+
+        # add an explicit layout to creation props and verify contiguous
+        creationProps["layout"] = contiguous_layout
+        payload["creationProperties"] = creationProps
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
+        # use a chunk layout to creation props and verify success
+        creationProps["layout"] = chunked_layout
+        payload["creationProperties"] = creationProps
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("creationProperties" in rspJson)
+        cpl = rspJson["creationProperties"]
+        self.assertTrue("layout" in cpl)
+        layout_json = cpl["layout"]
+        self.assertTrue("class" in layout_json)
+        self.assertEqual(layout_json["class"], "H5D_CHUNKED")
         self.assertTrue("dims" in layout_json)
+
         self.assertEqual(layout_json["dims"], [1, 390, 512])
         if config.get("max_chunks_per_folder") > 0:
             self.assertTrue("partition_count" in layout_json)
             self.assertEqual(layout_json["partition_count"], 10)
+
+        # link new dataset as 'chunktest'
+        name = "chunktest"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
 
         # verify compression
         self.assertTrue("creationProperties" in rspJson)
@@ -1540,7 +1566,8 @@ class DatasetTest(unittest.TestCase):
             req = self.endpoint + "/datasets"
 
             payload = {"type": "H5T_IEEE_F32LE", "shape": [40, 80]}
-            filters = [compressor, ]
+            filter_item = getFilterItem(compressor)
+            filters = [filter_item, ]
             layout = {"class": "H5D_CHUNKED", "dims": [10, 20]}
             cpl = {"filters": filters, "layout": layout}
             payload["creationProperties"] = cpl
@@ -1600,8 +1627,9 @@ class DatasetTest(unittest.TestCase):
 
         # create the dataset
         req = self.endpoint + "/datasets"
-        compressor = {"class": "H5Z_FILTER_LZ4", "name": "lz4", "level": 5}
-        filters = [compressor, ]
+        filter_item = getFilterItem("lz4", options={"level": 4})
+        print("filter_item:", filter_item)
+        filters = [filter_item, ]
 
         payload = {"type": "H5T_IEEE_F32LE", "shape": [40, 80]}
         layout = {"class": "H5D_CHUNKED", "dims": [10, 20]}
@@ -1661,25 +1689,15 @@ class DatasetTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertTrue("root" in rspJson)
 
-        bad_compressors = ("shrink-o-rama")
-        for compressor_name in bad_compressors:
-            # create the dataset
-            req = self.endpoint + "/datasets"
-            compressor = {
-                "class": "H5Z_FILTER_USER",
-                "name": compressor_name,
-                "level": 5,
-            }
+        filter_item = {'class': 'H5Z_FILTER_FOOBAR', 'id': 123, 'name': 'foobar'}
+        # create the dataset
+        req = self.endpoint + "/datasets"
 
-            payload = {"type": "H5T_IEEE_F32LE", "shape": [40, 80]}
-            payload["creationProperties"] = {
-                "filters": [
-                    compressor,
-                ]
-            }
-            req = self.endpoint + "/datasets"
-            rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
-            self.assertEqual(rsp.status_code, 400)  # create dataset
+        payload = {"type": "H5T_IEEE_F32LE", "shape": [40, 80]}
+        payload["creationProperties"] = {"filters": [filter_item, ]}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 400)  # create dataset
 
     def testInvalidFillValue(self):
         # test Dataset with simple type and fill value that is incompatible with the type

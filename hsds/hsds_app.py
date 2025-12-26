@@ -3,11 +3,13 @@ import sys
 from pathlib import Path
 import site
 import subprocess
-import time
 import queue
 import threading
+import time
 import logging
 from shutil import which
+
+from h5json.time_util import getNow
 
 
 def _enqueue_output(out, queue, loglevel):
@@ -318,7 +320,7 @@ class HsdsApp:
             self._threads.append(t)
 
         # wait to sockets are initialized
-        start_ts = time.time()
+        start_ts = getNow()
         SLEEP_TIME = 1  # time to sleep between checking on socket connection
         MAX_INIT_TIME = 10.0  # max time to wait for socket to be initialized
 
@@ -329,7 +331,7 @@ class HsdsApp:
                     if os.path.exists(socket_path):
                         ready += 1
             else:
-                if time.time() > start_ts + 5:
+                if getNow() > start_ts + 5:
                     # TBD - put a real ready check here
                     ready = count
             if ready == count:
@@ -339,12 +341,12 @@ class HsdsApp:
                 self.log.debug(f"{ready}/{count} ready")
                 self.log.debug(f"sleeping for {SLEEP_TIME}")
                 time.sleep(SLEEP_TIME)
-                if time.time() > start_ts + MAX_INIT_TIME:
+                if getNow() > start_ts + MAX_INIT_TIME:
                     msg = f"failed to initialize after {MAX_INIT_TIME} seconds"
                     self.log.error(msg)
                     raise IOError(msg)
 
-        self.log.info(f"Ready after: {(time.time() - start_ts):4.2f} s")
+        self.log.info(f"Ready after: {(getNow() - start_ts):4.2f} s")
         self._ready = True
 
     def stop(self):
@@ -352,7 +354,7 @@ class HsdsApp:
         if not self._processes:
             return
 
-        now = time.time()
+        now = getNow()
         logging.info(f"hsds app stop at {now}")
 
         for pname in self._processes:
@@ -363,7 +365,7 @@ class HsdsApp:
         # wait for sub-proccesses to exit
         SLEEP_TIME = 0.1  # time to sleep between checking on process state
         MAX_WAIT_TIME = 10.0  # max time to wait for sub-process to terminate
-        start_ts = time.time()
+        start_ts = getNow()
         while True:
             is_alive_cnt = 0
             for pname in self._processes:
@@ -380,7 +382,7 @@ class HsdsApp:
             else:
                 logging.debug("all subprocesses exited")
                 break
-            if time.time() > start_ts + MAX_WAIT_TIME:
+            if getNow() > start_ts + MAX_WAIT_TIME:
                 msg = f"failed to terminate after {MAX_WAIT_TIME} seconds"
                 self.log.error(msg)
                 break

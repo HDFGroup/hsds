@@ -38,15 +38,14 @@ def getNumChunks(selection, layout):
     If selection is provided (a list of slices), return the number
     of chunks that intersect with the selection.
     """
-    print(f"getNumChunks: {selection}, layout: {layout}")
+
     if len(selection) == 0:
-        print("zero length selection")
+        # zero length selection
         return 0
 
     rank = len(layout)
     if rank == 1 and layout[0] == 1:
         # scalar dataset
-        print("scalar dset")
         return 1
     if len(selection) != rank:
         msg = f"selection list has {len(selection)} items, but rank is {rank}"
@@ -57,12 +56,10 @@ def getNumChunks(selection, layout):
         if isinstance(s, slice):
             if s.stop <= s.start:
                 log.debug("null selection")
-                print("null selection")
                 return 0
         else:
             # coordinate list
             if len(s) == 0:
-                print("null coordinate list")
                 return 0
     # first, get the number of chunks needed for any coordinate selection
     chunk_indices = []
@@ -91,8 +88,6 @@ def getNumChunks(selection, layout):
         num_chunks = len(set(chunk_indices))
     else:
         num_chunks = 1
-
-    print("num_chunks:", num_chunks)
 
     # now deal with any slices in the selection
     for i in range(len(selection)):
