@@ -1451,7 +1451,7 @@ def getCreateArgs(body,
     return kwargs
 
 
-def genLayout(shape_json, item_size, has_filters=False):
+def genLayout(shape_json, type_json, has_filters=False):
     """ create a chunked or contiguous layout based on shape and itemsize """
 
     min_chunk_size = int(config.get("min_chunk_size"))
@@ -1464,7 +1464,7 @@ def genLayout(shape_json, item_size, has_filters=False):
     if has_filters:
         kwargs["chunks"] = True  # force a chunked layout to support compression
 
-    layout_json = generateLayout(shape_json, item_size, **kwargs)
+    layout_json = generateLayout(shape_json, type_json, **kwargs)
     return layout_json
 
 
@@ -1584,7 +1584,7 @@ def getDatasetCreateArgs(body,
                 log.warn(msg)
     else:
         # no layout, create one based on shape and itemsize
-        layout_json = genLayout(shape_json, item_size, has_filters=has_filters)
+        layout_json = genLayout(shape_json, type_json, has_filters=has_filters)
         log.info(f"created chunk layout for new dset: {layout_json}")
         creation_props["layout"] = layout_json
 
