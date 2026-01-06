@@ -14,7 +14,7 @@ import time
 import json
 from os import path as pp
 
-from h5json.objid import createObjId
+from h5json.objid import createObjId, getCollectionForId
 
 import config
 import helper
@@ -116,31 +116,19 @@ class DomainTest(unittest.TestCase):
         attr_count = 0
         for objid in domain_objs:
             obj_json = domain_objs[objid]
-            self.assertTrue("id" in obj_json)
-            self.assertTrue("attributeCount" in obj_json)
-            attr_count += obj_json["attributeCount"]
-            self.assertFalse("attributes" in obj_json)
+            collection_type = getCollectionForId(objid)
+            if collection_type == "datasets":
+                self.assertTrue("attributes" in obj_json)
+                self.assertTrue("type" in obj_json)
+                self.assertTrue("shape" in obj_json)
+                self.assertTrue("creationProperties" in obj_json)
+            elif collection_type == "groups":
+                self.assertTrue("attributes" in obj_json)
+                self.assertTrue("links" in obj_json)
+            else:
+                self.assertTrue(False)  # unexpected type
+            attr_count += len(obj_json["attributes"])
 
-        self.assertEqual(attr_count, 4)
-
-        # get a dict of all objects in the domain including any attributes
-        params["include_attrs"] = 1
-        rsp = self.session.get(req, headers=headers, params=params)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("domain_objs" in rspJson)
-        domain_objs = rspJson["domain_objs"]
-        self.assertEqual(len(domain_objs), 10)
-        attr_count = 0
-        for objid in domain_objs:
-            obj_json = domain_objs[objid]
-            self.assertTrue("attributeCount" in obj_json)
-            self.assertTrue("attributes" in obj_json)
-            attributes = obj_json["attributes"]
-            for attr_name in attributes:
-                # only the names "attr1" and "attr2" are used in this domain
-                self.assertTrue(attr_name in ("attr1", "attr2"))
-                attr_count += 1
         self.assertEqual(attr_count, 4)
 
         # passing domain via the host header is deprecated
