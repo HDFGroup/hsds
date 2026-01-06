@@ -462,6 +462,11 @@ async def GET_Domain(request):
     if "verbose" in params and params["verbose"]:
         verbose = True
 
+    getobjs = False
+    # include domain objects if requested
+    if params.get("getobjs"):
+        getobjs = True
+
     if not domain:
         log.info("no domain passed in, returning all top-level domains")
         # no domain passed in, return top-level domains for this request
@@ -543,22 +548,9 @@ async def GET_Domain(request):
         return resp
 
     # return just the keys as per the REST API
-    kwargs = {"verbose": verbose, "bucket": bucket}
+    kwargs = {"verbose": verbose, "getobjs": getobjs, "bucket": bucket}
     rsp_json = await getDomainResponse(app, domain_json, **kwargs)
 
-    # include domain objects if requested
-    if params.get("getobjs") and "root" in domain_json:
-
-        log.debug("getting all domain objects")
-        root_id = domain_json["root"]
-        kwargs = {"include_attrs": include_attrs, "bucket": bucket}
-        domain_objs = await getDomainObjects(app, root_id, **kwargs)
-        if domain_objs:
-            rsp_json["domain_objs"] = domain_objs
-
-    # include domain class if present
-    # if "class" in domain_json:
-    #    rsp_json["class"] = domain_json["class"]
 
     # include dn_ids if requested
     if "getdnids" in params and params["getdnids"]:

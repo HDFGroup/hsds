@@ -493,7 +493,7 @@ async def getStorBytes(app,
         chunk_bytes = []
 
         for chunk_location in chunk_locations:
-            log.debug(f"getStoreBytes - processing chunk_location: {chunk_location}")
+            log.debug(f"getStorBytes - processing chunk_location: {chunk_location}")
             n = chunk_location.offset - offset
             if n < 0:
                 log.warn(f"getStorBytes - unexpected offset for chunk_location: {chunk_location}")

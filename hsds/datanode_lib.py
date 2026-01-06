@@ -1094,7 +1094,7 @@ async def get_chunk(
         log.debug(msg)
     else:
         s3key = getS3Key(chunk_id)
-        log.debug(f"getChunk chunkid: {chunk_id} bucket: {bucket}")
+        log.debug(f"getChunk chunkid: {chunk_id} bucket: {bucket} using key: {s3key}")
     if chunk_id in chunk_cache:
         log.debug(f"getChunk chunkid: {chunk_id} found in cache")
         chunk_arr = chunk_cache[chunk_id]

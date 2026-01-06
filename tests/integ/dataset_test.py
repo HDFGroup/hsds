@@ -342,6 +342,30 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("attributes") in rspJson
         self.assertEqual(len(rspJson["attributes"]), attr_count)
 
+        # try fetching the objson in domain resp
+        req = helper.getEndpoint() + "/"
+        params = {"getobjs": 1}
+        for i in range(10):
+            # try a few times to allow for async update of summary info
+            time.sleep(5)
+            rsp = self.session.get(req, params=params, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            if "domain_objs" in rspJson:
+                break
+
+        self.assertTrue("domain_objs" in rspJson)
+        domain_objs = rspJson["domain_objs"]
+        self.assertTrue(root_uuid in domain_objs)
+        self.assertTrue(dset_id in domain_objs)
+        dset_json = domain_objs[dset_id]
+        self.assertTrue("attributes" in dset_json)
+        self.assertEqual(len(dset_json["attributes"]), attr_count)
+        self.assertTrue("type" in dset_json)
+        self.assertTrue("shape" in dset_json)
+        self.assertTrue("creationProperties" in dset_json)
+        self.assertFalse("value" in dset_json)  # no data written yet
+
     def testScalarEmptyDimsDataset(self):
         # Test creation/deletion of scalar dataset obj
         domain = self.base_domain + "/testScalarEmptyDimsDataset.h5"

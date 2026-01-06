@@ -116,7 +116,7 @@ async def getDomainJson(app, domain, reload=False):
     return domain_json
 
 
-async def getDomainResponse(app, domain_json, bucket=None, verbose=False):
+async def getDomainResponse(app, domain_json, bucket=None, verbose=False, getobjs=False):
     """ construct JSON response for domain request """
     rsp_json = {}
     if "root" in domain_json:
@@ -188,6 +188,13 @@ async def getDomainResponse(app, domain_json, bucket=None, verbose=False):
         rsp_json["num_chunks"] = num_chunks
         rsp_json["num_linked_chunks"] = num_linked_chunks
         rsp_json["md5_sum"] = md5_sum
+
+    if getobjs and "root" in domain_json:
+        root_id = domain_json["root"]
+        domain_objs = await getDomainObjs(app, root_id, bucket=bucket)
+        if domain_objs:
+            log.debug(f"returning {len(domain_objs)} for root_id: {root_id}")
+            rsp_json["domain_objs"] = domain_objs
 
     # pass back config parameters the client may care about
 
@@ -849,8 +856,32 @@ async def getRootInfo(app, root_id, bucket=None):
     return info_json
 
 
+async def getDomainObjs(app, root_id, bucket=None):
+    """ Return domain objects if available for this root id """
+    log.debug(f"getDomainObjs {root_id}")
+
+    s3_key = getS3Key(root_id)
+
+    parts = s3_key.split("/")
+    # dset_key is in the format  db/<root>/d/<dset>/.dataset.json
+    # get the key for the root info object as: db/<root>/.summary.json
+    if len(parts) != 3:
+        log.error(f"Unexpected s3key format: {s3_key}")
+        return None
+
+    summary_key = f"db/{parts[1]}/.summary.json"
+
+    try:
+        summary_json = await getStorJSONObj(app, summary_key, bucket=bucket)
+    except HTTPNotFound:
+        log.warn(f".summary.json not found for key: {summary_key}")
+        return None
+
+    return summary_json
+
+
 async def doFlush(app, root_id, bucket=None):
-    """return wnen all DN nodes have wrote any pending changes to S3"""
+    """return wnen all DN nodes have wrote any pending changes to S3 """
     log.info(f"doFlush {root_id}")
     params = {"flush": 1}
     if bucket:
