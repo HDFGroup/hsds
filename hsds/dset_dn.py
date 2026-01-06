@@ -290,7 +290,7 @@ async def PUT_DatasetShape(request):
             if i == extend_dim:
                 lb = dims[i]
                 ub = lb + extension
-                if maxdims[extend_dim] != 0 and ub > maxdims[extend_dim]:
+                if maxdims[extend_dim] not in (0, "H5S_UNLIMITED") and ub > maxdims[extend_dim]:
                     msg = "maximum extent exceeded"
                     log.warn(msg)
                     raise HTTPConflict()

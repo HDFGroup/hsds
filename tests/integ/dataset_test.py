@@ -938,7 +938,7 @@ class DatasetTest(unittest.TestCase):
 
         # create the dataset
         req = self.endpoint + "/datasets"
-        payload = {"type": "H5T_IEEE_F32LE", "shape": [10, 20], "maxdims": [30, 0]}
+        payload = {"type": "H5T_IEEE_F32LE", "shape": [10, 20], "maxdims": [30, "H5S_UNLIMITED"]}
         payload["creationProperties"] = {"fillValue": 3.12}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
@@ -970,7 +970,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(shape["dims"][1], 20)
         self.assertTrue("maxdims" in shape)
         self.assertEqual(shape["maxdims"][0], 30)
-        self.assertEqual(shape["maxdims"][1], 0)
+        self.assertEqual(shape["maxdims"][1], "H5S_UNLIMITED")
 
         # verify shape using the GET shape request
         req = req + "/shape"
@@ -987,7 +987,7 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("maxdims" in shape)
         self.assertEqual(len(shape["maxdims"]), 2)
         self.assertEqual(shape["maxdims"][0], 30)
-        self.assertEqual(shape["maxdims"][1], 0)
+        self.assertEqual(shape["maxdims"][1], "H5S_UNLIMITED")
 
         # resize the second dimension  to 500 elements
         payload = {"shape": [10, 500]}
@@ -1009,7 +1009,7 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue("maxdims" in shape)
         self.assertEqual(len(shape["maxdims"]), 2)
         self.assertEqual(shape["maxdims"][0], 30)
-        self.assertEqual(shape["maxdims"][1], 0)
+        self.assertEqual(shape["maxdims"][1], "H5S_UNLIMITED")
 
     def testExtendDataset(self):
         # test extending dataset

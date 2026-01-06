@@ -551,7 +551,6 @@ async def GET_Domain(request):
     kwargs = {"verbose": verbose, "getobjs": getobjs, "bucket": bucket}
     rsp_json = await getDomainResponse(app, domain_json, **kwargs)
 
-
     # include dn_ids if requested
     if "getdnids" in params and params["getdnids"]:
         rsp_json["dn_ids"] = app["dn_ids"]

@@ -50,11 +50,6 @@ def getShapeJson(body):
         log.warn(msg)
         raise ValueError(msg)
 
-    if shape_class not in ("H5S_NULL", "H5S_SCALAR", "H5S_SIMPLE"):
-        msg = f"invalid shape class: {shape_class}"
-        log.warn(msg)
-        raise ValueError(msg)
-
     if shape_class in ("H5S_NULL", "H5S_SCALAR") and dims:
         msg = f"dims not valid for shape class: {body_shape}"
         log.warn(msg)

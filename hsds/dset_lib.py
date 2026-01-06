@@ -1007,7 +1007,7 @@ async def updateShape(app, dset_json, shape_update, bucket=None):
                 raise HTTPBadRequest(reason=msg)
             decreasing_dims.append(i)
         elif shape_update[i] > dims[i]:
-            if maxdims[i] != 0 and shape_update[i] > maxdims[i]:
+            if maxdims[i] not in (0, "H5S_UNLIMITED") and shape_update[i] > maxdims[i]:
                 msg = "Extension dimension can not be extended past max extent"
                 log.warn(msg)
                 raise HTTPConflict()
