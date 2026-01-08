@@ -270,7 +270,7 @@ class LinkTest(unittest.TestCase):
         target_path = "somewhere"
         link_title = "external_link"
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
-        payload = {"h5path": target_path, "h5domain": target_domain}
+        payload = {"h5path": target_path, "file": target_domain}
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # created
 
@@ -294,7 +294,7 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspLink["title"], link_title)
         self.assertEqual(rspLink["class"], "H5L_TYPE_EXTERNAL")
         self.assertEqual(rspLink["h5path"], target_path)
-        self.assertEqual(rspLink["h5domain"], target_domain)
+        self.assertEqual(rspLink["file"], target_domain)
 
     def testGetLinks(self):
         domain = self.base_domain + "/testGetLinks.h5"
@@ -524,10 +524,10 @@ class LinkTest(unittest.TestCase):
                 self.assertTrue(link["created"] < now - 10)
             else:
                 self.assertEqual(link_class, "H5L_TYPE_EXTERNAL")
-                for name in ("created", "class", "h5domain", "h5path", "title", "href"):
+                for name in ("created", "class", "file", "h5path", "title", "href"):
                     self.assertTrue(name in link)
                 self.assertEqual(link["title"], "extlink")
-                extlink_file = link["h5domain"]
+                extlink_file = link["file"]
                 self.assertEqual(extlink_file, "somefile")
                 self.assertEqual(link["h5path"], "somepath")
                 self.assertTrue(link["created"] < now - 10)
@@ -555,7 +555,8 @@ class LinkTest(unittest.TestCase):
             self.assertTrue(name in link)
 
         self.assertEqual(link["class"], "H5L_TYPE_SOFT")
-        self.assertFalse("h5domain" in link)  # only for external links
+        self.assertFalse("h5domain" in link)  # deprecated name
+        self.assertFalse("file" in link)  # only for external links
         self.assertEqual(link["title"], "slink")
         self.assertEqual(link["h5path"], "somevalue")
 
@@ -618,12 +619,14 @@ class LinkTest(unittest.TestCase):
                     softlink_count += 1
                     self.assertTrue("h5path" in link)
                     self.assertFalse("h5domain" in link)
+                    self.assertFalse("file" in link)
                     self.assertFalse("id" in link)
                     self.assertTrue(link_title in expected_soft_links)
                 elif link_class == "H5L_TYPE_EXTERNAL":
                     extlink_count += 1
                     self.assertTrue("h5path" in link)
-                    self.assertTrue("h5domain" in link)
+                    self.assertTrue("file" in link)
+                    self.assertFalse("h5domain" in link)  # deprecated name
                     self.assertFalse("id" in link)
                     self.assertTrue(link_title in expected_external_links)
                 else:
@@ -690,7 +693,7 @@ class LinkTest(unittest.TestCase):
 
             self.assertEqual(len(links), 1)  # only extlink should be returned
             link = links[0]
-            for name in ("created", "class", "h5domain", "h5path", "title"):
+            for name in ("created", "class", "file", "h5path", "title"):
                 self.assertTrue(name in link)
             if use_post:
                 pass  # no href with post
@@ -698,7 +701,7 @@ class LinkTest(unittest.TestCase):
                 self.assertTrue("href" in link)
             self.assertEqual(link["class"], "H5L_TYPE_EXTERNAL")
             self.assertEqual(link["title"], "extlink")
-            self.assertEqual(link["h5domain"], "somefile")
+            self.assertEqual(link["file"], "somefile")
             self.assertEqual(link["h5path"], "somepath")
             self.assertTrue(link["created"] < now - 10)
 
@@ -926,7 +929,7 @@ class LinkTest(unittest.TestCase):
         target_path = "/external_group"
         link_title = "external_link_to_group"
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
-        payload = {"h5path": target_path, "h5domain": second_domain}
+        payload = {"h5path": target_path, "file": second_domain}
         headers = helper.getRequestHeaders(domain=domain)
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -959,7 +962,7 @@ class LinkTest(unittest.TestCase):
         target_path = "/external_group"
         link_title = "external_link_to_group_prefix"
         req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + link_title
-        payload = {"h5path": target_path, "h5domain": f"hdf5:/{second_domain}"}
+        payload = {"h5path": target_path, "file": f"hdf5:/{second_domain}"}
         headers = helper.getRequestHeaders(domain=domain)
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
@@ -1222,10 +1225,10 @@ class LinkTest(unittest.TestCase):
                 self.assertTrue(link["created"] < now - 10)
             else:
                 self.assertEqual(link_class, "H5L_TYPE_EXTERNAL")
-                for name in ("created", "class", "h5domain", "h5path", "title"):
+                for name in ("created", "class", "file", "h5path", "title"):
                     self.assertTrue(name in link)
                 self.assertEqual(link["title"], "extlink")
-                extlink_file = link["h5domain"]
+                extlink_file = link["file"]
                 self.assertEqual(extlink_file, "somefile")
                 self.assertEqual(link["h5path"], "somepath")
                 self.assertTrue(link["created"] < now - 10)
@@ -1296,7 +1299,7 @@ class LinkTest(unittest.TestCase):
                     # soft or external link
                     self.assertEqual(link["h5path"], expected["h5path"])
                     if link_class == "H5L_TYPE_EXTERNAL":
-                        self.assertEqual(link["h5domain"], expected["h5domain"])
+                        self.assertEqual(link["file"], expected["file"])
 
         # get just the requested links for each group
         req = helper.getEndpoint() + "/groups/" + root_id + "/links"
@@ -1498,7 +1501,7 @@ class LinkTest(unittest.TestCase):
 
         # add a soft and external link as well
         links["softlink"] = {"h5path": "a_path"}
-        links["extlink"] = {"h5path": "another_path", "h5domain": "/a_domain"}
+        links["extlink"] = {"h5path": "another_path", "file": "/a_domain"}
         link_count = len(links)
 
         # write links to the grpA
@@ -1531,8 +1534,8 @@ class LinkTest(unittest.TestCase):
                 self.assertTrue("h5path" in link)
                 h5path = link["h5path"]
                 self.assertEqual(h5path, "another_path")
-                self.assertTrue("h5domain" in link)
-                h5domain = link["h5domain"]
+                self.assertTrue("file" in link)
+                h5domain = link["file"]
                 self.assertEqual(h5domain, "/a_domain")
             else:
                 self.assertTrue(False)  # unexpected
@@ -1545,7 +1548,7 @@ class LinkTest(unittest.TestCase):
         links = {}
         links["hardlink_multicast"] = {"id": root_id}
         links["softlink_multicast"] = {"h5path": "multi_path"}
-        links["extlink_multicast"] = {"h5path": "multi_path", "h5domain": "/another_domain"}
+        links["extlink_multicast"] = {"h5path": "multi_path", "file": "/another_domain"}
         link_count = len(links)
         data = {"links": links, "grp_ids": grp_ids}
         req = self.endpoint + "/groups/" + root_id + "/links"
@@ -1573,8 +1576,8 @@ class LinkTest(unittest.TestCase):
                 elif link_class == "H5L_TYPE_EXTERNAL":
                     self.assertTrue("h5path" in ret_link)
                     self.assertEqual(ret_link["h5path"], "multi_path")
-                    self.assertTrue("h5domain" in ret_link)
-                    self.assertEqual(ret_link["h5domain"], "/another_domain")
+                    self.assertTrue("file" in ret_link)
+                    self.assertEqual(ret_link["file"], "/another_domain")
                 else:
                     self.assertTrue(False)  # unexpected
 
@@ -1585,7 +1588,7 @@ class LinkTest(unittest.TestCase):
             links = {}
             links[f"hardlink_{i}"] = {"id": root_id}
             links[f"softlink_{i}"] = {"h5path": f"multi_path_{i}"}
-            ext_link = {"h5path": f"multi_path_{i}", "h5domain": f"/another_domain/{i}"}
+            ext_link = {"h5path": f"multi_path_{i}", "file": f"/another_domain/{i}"}
             links[f"extlink_{i}"] = ext_link
             link_data[grp_id] = {"links": links}
 
@@ -1625,8 +1628,8 @@ class LinkTest(unittest.TestCase):
                     self.assertEqual(link_title, f"extlink_{i}")
                     self.assertTrue("h5path" in ret_link)
                     self.assertEqual(ret_link["h5path"], f"multi_path_{i}")
-                    self.assertTrue("h5domain" in ret_link)
-                    self.assertEqual(ret_link["h5domain"], f"/another_domain/{i}")
+                    self.assertTrue("file" in ret_link)
+                    self.assertEqual(ret_link["file"], f"/another_domain/{i}")
                 else:
                     self.assertTrue(False)  # unexpected
 
@@ -1685,7 +1688,7 @@ class LinkTest(unittest.TestCase):
 
         # add a soft and external link as well
         links["softlink"] = {"h5path": "a_path"}
-        links["extlink"] = {"h5path": "another_path", "h5domain": "/a_domain"}
+        links["extlink"] = {"h5path": "another_path", "file": "/a_domain"}
         link_count = len(links)
         # add timestamp
         timestamps = set()
@@ -1725,8 +1728,8 @@ class LinkTest(unittest.TestCase):
                 self.assertTrue("h5path" in link)
                 h5path = link["h5path"]
                 self.assertEqual(h5path, "another_path")
-                self.assertTrue("h5domain" in link)
-                h5domain = link["h5domain"]
+                self.assertTrue("file" in link)
+                h5domain = link["file"]
                 self.assertEqual(h5domain, "/a_domain")
             else:
                 self.assertTrue(False)  # unexpected
@@ -1741,7 +1744,7 @@ class LinkTest(unittest.TestCase):
         links = {}
         links["hardlink_multicast"] = {"id": root_id}
         links["softlink_multicast"] = {"h5path": "multi_path"}
-        links["extlink_multicast"] = {"h5path": "multi_path", "h5domain": "/another_domain"}
+        links["extlink_multicast"] = {"h5path": "multi_path", "file": "/another_domain"}
         link_count = len(links)
         timestamps = set()
         for title in links:
@@ -1776,8 +1779,8 @@ class LinkTest(unittest.TestCase):
                 elif link_class == "H5L_TYPE_EXTERNAL":
                     self.assertTrue("h5path" in ret_link)
                     self.assertEqual(ret_link["h5path"], "multi_path")
-                    self.assertTrue("h5domain" in ret_link)
-                    self.assertEqual(ret_link["h5domain"], "/another_domain")
+                    self.assertTrue("file" in ret_link)
+                    self.assertEqual(ret_link["file"], "/another_domain")
                 else:
                     self.assertTrue(False)  # unexpected
                 self.assertTrue("created" in ret_link)
@@ -1791,7 +1794,7 @@ class LinkTest(unittest.TestCase):
             links = {}
             links[f"hardlink_{i}"] = {"id": root_id}
             links[f"softlink_{i}"] = {"h5path": f"multi_path_{i}"}
-            ext_link = {"h5path": f"multi_path_{i}", "h5domain": f"/another_domain/{i}"}
+            ext_link = {"h5path": f"multi_path_{i}", "file": f"/another_domain/{i}"}
             links[f"extlink_{i}"] = ext_link
             for title in links:
                 link = links[title]
@@ -1836,8 +1839,8 @@ class LinkTest(unittest.TestCase):
                     self.assertEqual(link_title, f"extlink_{i}")
                     self.assertTrue("h5path" in ret_link)
                     self.assertEqual(ret_link["h5path"], f"multi_path_{i}")
-                    self.assertTrue("h5domain" in ret_link)
-                    self.assertEqual(ret_link["h5domain"], f"/another_domain/{i}")
+                    self.assertTrue("file" in ret_link)
+                    self.assertEqual(ret_link["file"], f"/another_domain/{i}")
                 else:
                     self.assertTrue(False)  # unexpected
                 self.assertTrue("created" in ret_link)
@@ -1886,7 +1889,7 @@ class LinkTest(unittest.TestCase):
         links[title] = {"h5path": "a_path"}
         titles.append(title)
         title = "extlink"
-        links[title] = {"h5path": "another_path", "h5domain": "/a_domain"}
+        links[title] = {"h5path": "another_path", "file": "/a_domain"}
         titles.append(title)
         link_count = len(links)
 

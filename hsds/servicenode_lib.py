@@ -31,11 +31,12 @@ from h5json.hdf5dtype import getBaseTypeJson, validateTypeItem, createDataType, 
 from h5json.shape_util import getShapeDims, getShapeClass
 from h5json.dset_util import getChunkSize, generateLayout
 from h5json.dset_util import getDataSize, validateDatasetCreationProps
+from h5json.link_util import h5Join, validateLinkName, getLinkClass, getLinkFilePath
 from h5json.time_util import getNow
 
 from .util.nodeUtil import getDataNodeUrl
 from .util.authUtil import getAclKeys
-from .util.linkUtil import h5Join, validateLinkName, getLinkClass, getRequestLinks
+from .util.linkUtil import getRequestLinks
 from .util.storUtil import getStorJSONObj, isStorObj, getSupportedFilters
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
@@ -479,7 +480,7 @@ async def putLink(app, group_id, title,
     if h5path:
         link_json["h5path"] = h5path
     if h5domain:
-        link_json["h5domain"] = h5domain
+        link_json["file"] = h5domain
     if created:
         link_json["created"] = created
 
@@ -659,7 +660,7 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
                 raise HTTPBadRequest(reason=msg)
 
             # find domain object is stored under
-            domain = link_json["h5domain"]
+            domain = getLinkFilePath(link_json)
 
             if domain.startswith("hdf5:/"):
                 # strip off prefix

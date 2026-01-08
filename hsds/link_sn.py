@@ -17,19 +17,23 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from json import JSONDecodeError
 
 from h5json.objid import isValidUuid, getCollectionForId
+from h5json.link_util import validateLinkName, getLinkClass, getLinkId
+from h5json.link_util import getLinkPath, getLinkFilePath
 
 from .util.nodeUtil import getDataNodeUrl
 from .util.httpUtil import getHref, getBooleanParam
 from .util.httpUtil import jsonResponse
 from .util.globparser import globmatch
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
-from .util.domainUtil import getDomainFromRequest, isValidDomain, verifyRoot
-from .util.domainUtil import getBucketForDomain
-from .util.linkUtil import validateLinkName, getLinkClass
+from .util.domainUtil import getDomainFromRequest, isValidDomain, verifyRoot, getBucketForDomain
+from .util.linkUtil import getRequestLink
+
+
 from .servicenode_lib import getDomainJson, validateAction
 from .servicenode_lib import getLink, putLink, putLinks, getLinks, deleteLinks
 from .domain_crawl import DomainCrawler
 from . import hsds_logger as log
+from . import config
 
 
 async def GET_Links(request):
@@ -221,13 +225,13 @@ async def GET_Link(request):
     link_class = link_json["class"]
     resp_link["class"] = link_class
     if link_class == "H5L_TYPE_HARD":
-        resp_link["id"] = link_json["id"]
+        resp_link["id"] = getLinkId(link_json)
         resp_link["collection"] = getCollectionForId(link_json["id"])
     elif link_class == "H5L_TYPE_SOFT":
-        resp_link["h5path"] = link_json["h5path"]
+        resp_link["h5path"] = getLinkPath(link_json)
     elif link_class == "H5L_TYPE_EXTERNAL":
-        resp_link["h5path"] = link_json["h5path"]
-        resp_link["h5domain"] = link_json["h5domain"]
+        resp_link["h5path"] = getLinkPath(link_json)
+        resp_link["file"] = getLinkFilePath(link_json)
     else:
         log.warn(f"Unexpected link class: {link_class}")
     resp_json = {}
@@ -291,17 +295,32 @@ async def PUT_Link(request):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    bucket = getBucketForDomain(domain)
 
     await validateAction(app, domain, group_id, username, "create")
-    # putLink will validate these arguments
-    kwargs = {"bucket": bucket}
-    kwargs["tgt_id"] = body.get("id")
-    kwargs["h5path"] = body.get("h5path")
-    kwargs["h5domain"] = body.get("h5domain")
-    created = body.get("created")
-    if created:
-        kwargs["created"] = created
+
+    predate_max_time = config.get("predate_max_time", default=10.0)
+
+    try:
+        link_json = getRequestLink(link_title, body, predate_max_time=predate_max_time)
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPBadRequest(reason=str(e))
+
+    link_class = getLinkClass(link_json)
+
+    kwargs = {}
+    kwargs["bucket"] = getBucketForDomain(domain)
+    if link_class == "H5L_TYPE_HARD":
+        kwargs["tgt_id"] = getLinkId(link_json)
+    elif link_class == "H5L_TYPE_SOFT":
+        kwargs["h5path"] = getLinkPath(link_json)
+    elif link_class == "H5L_TYPE_EXTERNAL":
+        kwargs["h5path"] = getLinkPath(link_json)
+        kwargs["h5domain"] = getLinkFilePath(link_json)
+    else:
+        raise HTTPBadRequest(reason=f"unexpected link class: {link_class}")
+
+    if "created" in link_json:
+        kwargs["created"] = link_json["created"]
 
     status = await putLink(app, group_id, link_title, **kwargs)
 

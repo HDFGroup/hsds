@@ -22,9 +22,9 @@ from aiohttp.web import json_response
 
 from h5json.objid import isValidUuid
 from h5json.time_util import getNow
+from h5json.link_util import validateLinkName, getLinkClass, isEqualLink
 
 from .util.globparser import globmatch
-from .util.linkUtil import validateLinkName, getLinkClass, isEqualLink
 from .util.domainUtil import isValidBucketName
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
 from . import config
@@ -156,6 +156,10 @@ async def GET_Links(request):
         link = copy(link_dict[title])
         log.debug(f"link list[{i}: {link}")
         link["title"] = title
+        if link.get("h5domain"):
+            # deprecated key, replace with file
+            link["file"] = link["h5domain"]
+            del link["h5domain"]
         link_list.append(link)
 
     resp_json = {"links": link_list}
@@ -218,6 +222,7 @@ async def POST_Links(request):
             log.info(f"Link name {title} not found in group: {group_id}")
             continue
         link_json = links[title]
+        log.debug(f"POST Links got link_json: {link_json}")
         item = {}
         if "class" not in link_json:
             log.warn(f"expected to find class key for link: {title}")
@@ -245,15 +250,19 @@ async def POST_Links(request):
                 log.warn(f"expected to find h5path for external link: {title}")
                 continue
             item["h5path"] = link_json["h5path"]
-            if "h5domain" not in link_json:
-                log.warn(f"expted to find h5domain for external link: {title}")
+            if "h5domain" in link_json:
+                item["file"] = link_json["h5domain"]
+            elif "file" in link_json:
+                item["file"] = link_json["file"]
+            else:
+                log.warn(f"expected to find h5domain or file for external link: {title}")
                 continue
-            item["h5domain"] = link_json["h5domain"]
         else:
             log.warn(f"unexpected to link class {link_class} for link: {title}")
             continue
 
         item["title"] = title
+        log.debug(f"adding link item: {item}")
 
         link_list.append(item)
 
