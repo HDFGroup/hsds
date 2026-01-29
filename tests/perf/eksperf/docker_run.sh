@@ -1,0 +1,1 @@
+docker run --rm -e HS_GLOBAL=$HS_GLOBAL -e HS_LOCAL=$HS_LOCAL -e HS_USERNAME=$HS_USERNAME -e HS_PASSWORD=$HS_PASSWORD  -it psfc/hsperftest
