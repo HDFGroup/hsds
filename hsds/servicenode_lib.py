@@ -1001,10 +1001,11 @@ def getShapeFromRequest(body):
                     msg = "can't include dims with null shape"
                     log.warn(msg)
                     raise HTTPBadRequest(reason=msg)
-                if isinstance(shape_body, dict) and "value" in body:
-                    msg = "can't have H5S_NULL shape with value"
-                    log.warn(msg)
-                    raise HTTPBadRequest(reason=msg)
+                if isinstance(shape_body, dict) and "value" in shape_body:
+                    if shape_body["value"] is not None:
+                        msg = "can't have H5S_NULL shape with value"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
             elif shape_class == "H5S_SCALAR":
                 shape_json["class"] = "H5S_SCALAR"
                 if "dims" in shape_body:
@@ -1097,7 +1098,7 @@ async def getAttributesFromRequest(app, req_json, obj_id=None, bucket=None):
 def getValueFromRequest(body, data_type, data_shape):
     """ Get attribute value from request json """
     dims = getShapeDims(data_shape)
-    if "value" in body:
+    if "value" in body and body["value"] is not None:
         if dims is None:
             msg = "Bad Request: data can not be included with H5S_NULL space"
             log.warn(msg)
@@ -1626,7 +1627,7 @@ def getDatasetCreateArgs(body,
     #
     # get input data if present
     #
-    if "value" in body and body["value"]:
+    if "value" in body and body["value"] and body["value"] is not None:
         # data to initialize dataset included in request
         if shape_json["class"] == "H5S_NULL":
             msg = "null shape datasets can not have initial values"
