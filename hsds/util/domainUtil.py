@@ -299,7 +299,7 @@ def getDomainFromRequest(request, validate=True):
     if bucket:
         if validate and not isValidBucketName(bucket):
             raise ValueError(f"bucket name: {bucket} is not valid")
-        if domain[0] == "/":
+        if len(domain) > 0 and domain[0] == "/":
             domain = bucket + domain
     return domain
 

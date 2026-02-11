@@ -194,7 +194,7 @@ async def getDomainResponse(app, domain_json, bucket=None, verbose=False, getobj
         root_id = domain_json["root"]
         domain_objs = await getDomainObjs(app, root_id, bucket=bucket)
         if domain_objs:
-            log.debug(f"returning {len(domain_objs)} for root_id: {root_id}")
+            log.debug(f"returning {len(domain_objs)} domain objects for root_id: {root_id}")
             rsp_json["domain_objs"] = domain_objs
 
     # pass back config parameters the client may care about
