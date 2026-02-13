@@ -6,7 +6,7 @@ aioitertools==0.12.0
 aiosignal==1.4.0
 async-timeout==4.0.3
 attrs==25.3.0
-azure-core==1.35.0
+azure-core==1.38.0
 azure-storage-blob==12.26.0
 bitshuffle==0.5.2
 botocore==1.39.11
