@@ -893,12 +893,37 @@ def getDsetMaxDims(dset_json):
     return maxdims
 
 
-def getChunkLayout(dset_json):
-    """Get chunk layout.  Throw 500 if used with non-H5D_CHUNKED layout"""
-    if "layout" not in dset_json:
+def _getLayout(dset_json):
+    """Get layout for the given dataset json.  If layout is not found, try to
+    get it from creationProperties.
+    """
+    if "layout" in dset_json:
+        return dset_json["layout"]
+    elif "creationProperties" in dset_json and "layout" in dset_json["creationProperties"]:
+        return dset_json["creationProperties"]["layout"]
+    else:
+        return None
+
+
+def getLayoutClass(dset_json):
+    """Get layout class for the given dataset json.  Throw 500 if no layout found"""
+    layout_json = _getLayout(dset_json)
+    if layout_json is None:
         log.error("No layout found in dset_json")
         raise HTTPInternalServerError()
-    layout_json = dset_json["layout"]
+    if "class" not in layout_json:
+        log.error(f"Expected class key for layout: {layout_json}")
+        raise HTTPInternalServerError()
+    return layout_json["class"]
+
+
+def getChunkLayout(dset_json):
+    """Get chunk layout.  Throw 500 if used with non-H5D_CHUNKED layout"""
+
+    layout_json = _getLayout(dset_json)
+    if layout_json is None:
+        log.error("No layout found in dset_json")
+        raise HTTPInternalServerError()
     if "class" not in layout_json:
         log.error(f"Expected class key for layout: {layout_json}")
         raise HTTPInternalServerError()

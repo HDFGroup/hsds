@@ -140,7 +140,7 @@ class DomainTest(unittest.TestCase):
                 attr_count += 1
         self.assertEqual(attr_count, 4)
 
-        # passing domain via the host header is deprecated
+        # passing domain via the host parameters is deprecated
         # Previously his returned 200, now it is a 400
         del headers["X-Hdf-domain"]
         params = {"host": domain}
@@ -856,9 +856,26 @@ class DomainTest(unittest.TestCase):
 
     def testNullDomain(self):
         headers = helper.getRequestHeaders()
-        req = helper.getEndpoint() + "/"
-        rsp = self.session.get(req, headers=headers)
-        self.assertTrue(rsp.status_code in (400, 404))
+        endpoint = helper.getEndpoint()
+
+        # should get the same result with or without a trailing slash
+        for req in (endpoint, endpoint + '/'):
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+
+            for name in (
+                "domains",
+                "hrefs",
+            ):
+                self.assertTrue(name in rspJson)
+            domains = rspJson["domains"]
+            self.assertTrue(len(domains) >= 1)  # should be at least the "home" domain
+
+            for item in domains:
+                self.assertTrue("name" in item)
+                name = item["name"]
+                self.assertTrue(name.startswith("/"))  # should be an absolute path
 
     def testInvalidDomain(self):
         domain = "bad_domain.h5"
@@ -1402,8 +1419,8 @@ class DomainTest(unittest.TestCase):
         now = time.time()
         self.assertTrue(rspJson["created"] < now - 10)
         self.assertTrue(rspJson["lastModified"] < now - 10)
-        self.assertEqual(len(rspJson["hrefs"]), 3)
-        self.assertTrue(rspJson["owner"])
+        self.assertEqual(len(rspJson["hrefs"]), 4)
+        self.assertTrue("owner" in rspJson)
         self.assertEqual(rspJson["class"], "folder")
 
         # get dommains in folder

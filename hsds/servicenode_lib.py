@@ -179,9 +179,10 @@ async def getDomainResponse(app, domain_json, bucket=None, verbose=False):
 
     # pass back config parameters the client may care about
 
-    rsp_json["limits"] = getLimits()
-    rsp_json["compressors"] = getCompressors()
-    rsp_json["version"] = getVersion()
+    if "root" in domain_json:
+        rsp_json["limits"] = getLimits()
+        rsp_json["compressors"] = getCompressors()
+        rsp_json["version"] = getVersion()
     rsp_json["lastModified"] = lastModified
     return rsp_json
 
