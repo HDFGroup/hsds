@@ -603,7 +603,7 @@ async def GET_Domain(request):
         hrefs.append({"rel": "root", "href": href})
     else:
         # add an href to get sub-domains if this is a folder
-        href = getHref(request, "/domains")
+        href = getHref(request, "/domains") + '/'
         hrefs.append({"rel": "domains", "href": href})
 
     hrefs.append({"rel": "acls", "href": getHref(request, "/acls")})
