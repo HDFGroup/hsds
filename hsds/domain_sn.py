@@ -251,6 +251,8 @@ async def get_domains(request, include_hrefs=False):
             if s3key[-1] != "/":
                 log.debug(f"get_domains - ignoring key: {s3key}")
                 continue
+            if prefix == '/' and s3key == "db":
+                log.debug("get_domains - ignoring db key at top level")
             if len(s3key) > 1 and s3key[-2] == "/":
                 # trim off double slash
                 s3key = s3key[:-1]
