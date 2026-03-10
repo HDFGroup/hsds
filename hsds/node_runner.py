@@ -1,4 +1,3 @@
-import pkg_resources
 import site
 import sys
 from . import config
@@ -8,7 +7,7 @@ from . import headnode
 
 
 def removeSitePackages():
-
+    import pkg_resources
     # site_packages = "/var/lang/lib/python3.9/site-packages"
     # but this is removing: "/home/sbx_user1051/.local/lib/python3.9/site-packages" on lambda?
     site_packages = site.getusersitepackages()

@@ -84,9 +84,7 @@ async def write_chunk_hyperslab(
     msg = f"write_chunk_hyperslab, chunk_id: {chunk_id}, slices: {slices}, "
     msg += f"bucket: {bucket}"
     log.info(msg)
-    if "layout" not in dset_json:
-        log.error(f"No layout found in dset_json: {dset_json}")
-        raise HTTPInternalServerError()
+
     partition_chunk_id = getChunkIdForPartition(chunk_id, dset_json)
     if partition_chunk_id != chunk_id:
         log.debug(f"using partition_chunk_id: {partition_chunk_id}")

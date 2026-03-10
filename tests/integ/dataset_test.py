@@ -265,7 +265,6 @@ class DatasetTest(unittest.TestCase):
             "id",
             "shape",
             "hrefs",
-            "layout",
             "creationProperties",
             "attributeCount",
             "created",
@@ -289,7 +288,13 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(shape["dims"], [10, 10])
         self.assertEqual(shape["maxdims"], [10, 10])
 
-        layout = rspJson["layout"]
+        if "layout" in rspJson:
+            layout = rspJson["layout"]
+        else:
+            cpl = rspJson["creationProperties"]
+            self.assertTrue("layout" in cpl)
+            layout = cpl["layout"]
+
         self.assertEqual(layout["class"], "H5D_CHUNKED")
         self.assertEqual(layout["dims"], [10, 10])
         self.assertTrue("partition_count" not in layout)
@@ -359,7 +364,6 @@ class DatasetTest(unittest.TestCase):
             "id",
             "shape",
             "hrefs",
-            "layout",
             "creationProperties",
             "attributeCount",
             "created",
@@ -381,7 +385,6 @@ class DatasetTest(unittest.TestCase):
             "id",
             "shape",
             "hrefs",
-            "layout",
             "creationProperties",
             "attributeCount",
             "created",
@@ -443,7 +446,6 @@ class DatasetTest(unittest.TestCase):
             "id",
             "shape",
             "hrefs",
-            "layout",
             "creationProperties",
             "attributeCount",
             "created",

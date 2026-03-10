@@ -28,7 +28,7 @@ from .util.storUtil import getBucketFromStorURI, getKeyFromStorURI, getURIFromKe
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
-from .util.dsetUtil import getChunkLayout, getFilterOps, getShapeDims
+from .util.dsetUtil import getChunkLayout, getFilterOps, getLayoutClass, getShapeDims
 from .util.dsetUtil import getChunkInitializer, getSliceQueryParam, getFilters
 from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
 from .util.arrayUtil import arrayToBytes, bytesToArray, jsonToArray
@@ -999,8 +999,7 @@ async def get_chunk(
     dims = getChunkLayout(dset_json)
     type_json = dset_json["type"]
     dt = createDataType(type_json)
-    layout_json = dset_json["layout"]
-    layout_class = layout_json.get("class")
+    layout_class = getLayoutClass(dset_json)
     chunk_dims = getChunkLayout(dset_json)
     fill_value = getFillValue(dset_json)
 

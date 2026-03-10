@@ -9,6 +9,18 @@ DEFAULT_TYPE_SIZE = 128  # Type size case when it is variable
 PRIMES = [29, 31, 37, 41, 43, 47, 53, 59, 61, 67]  # for chunk partitioning
 
 
+def _getLayout(dset_json):
+    """Get layout for the given dataset json.  If layout is not found, try to
+    get it from creationProperties.
+    """
+    if "layout" in dset_json:
+        return dset_json["layout"]
+    elif "creationProperties" in dset_json and "layout" in dset_json["creationProperties"]:
+        return dset_json["creationProperties"]["layout"]
+    else:
+        return None
+
+
 def getChunkSize(layout, type_size):
     """Return chunk size given layout.
     i.e. just the product of the values in the list.
@@ -429,11 +441,12 @@ def getPartitionKey(chunk_id, partition_count):
 
 def getChunkIdForPartition(chunk_id, dset_json):
     """Return the partition specific chunk id for given chunk"""
-    if "layout" not in dset_json:
+
+    layout_json = _getLayout(dset_json)
+    if layout_json is None:
         msg = "No layout found in dset_json"
         log.error(msg)
         raise KeyError(msg)
-    layout_json = dset_json["layout"]
     if "partition_count" in layout_json:
         partition_count = layout_json["partition_count"]
         partition = getChunkPartition(chunk_id)
