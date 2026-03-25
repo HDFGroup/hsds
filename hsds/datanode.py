@@ -19,13 +19,13 @@ from aiohttp.web import run_app
 
 from h5json.objid import isValidUuid, isSchema2Id, getCollectionForId
 from h5json.objid import isRootObjId
+from h5json.time_util import getNow
 
 from . import config
 from .util.lruCache import LruCache
 from .util.httpUtil import isUnixDomainUrl, bindToSocket, getPortFromUrl
 from .util.httpUtil import jsonResponse, release_http_client
 from .util.storUtil import setBloscThreads, getBloscThreads
-from .util.timeUtil import getNow
 from .basenode import healthCheck, baseInit
 from . import hsds_logger as log
 from .domain_dn import GET_Domain, PUT_Domain, DELETE_Domain, PUT_ACL
