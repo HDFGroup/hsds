@@ -21,7 +21,7 @@ unit_tests = ('chunk_util_test', 'compression_test', 'domain_util_test',
 
 integ_tests = ('uptest', 'setup_test', 'domain_test', 'group_test',
                'link_test', 'attr_test', 'datatype_test', 'dataset_test',
-               'acl_test', 'value_test',  # 'filter_test',
+               'acl_test', 'value_test', 'broadcast_test', 'filter_test',
                'pointsel_test', 'query_test', 'vlen_test')
 
 skip_unit = False
