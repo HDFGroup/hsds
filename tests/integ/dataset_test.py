@@ -1652,7 +1652,6 @@ class DatasetTest(unittest.TestCase):
         # create the dataset
         req = self.endpoint + "/datasets"
         filter_item = getFilterItem("lz4", options={"level": 4})
-        print("filter_item:", filter_item)
         filters = [filter_item, ]
 
         payload = {"type": "H5T_IEEE_F32LE", "shape": [40, 80]}

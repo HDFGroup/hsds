@@ -122,12 +122,7 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         log.debug(msg)
         return
 
-    chunk_dims = None
-    if "layout" in dset_json:
-        dset_layout = dset_json["layout"]
-        log.debug(f"dset_json layout: {dset_layout}")
-        if "dims" in dset_layout:
-            chunk_dims = dset_layout["dims"]
+    chunk_dims = getChunkDims(dset_json)
     if chunk_dims is None:
         msg = "no chunk dimensions set in dataset layout"
         log.error(msg)
@@ -234,16 +229,16 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         # get  state for dataset from DN.
         chunktable_json = await getDsetJson(app, chunktable_id, bucket=bucket)
         # log.debug(f"chunktable_json: {chunktable_json}")
-        chunktable_dims = getShapeDims(chunktable_json["shape"])
-        chunktable_layout = chunktable_json["layout"]
-        if chunktable_layout.get("class") == "H5D_CHUNKED_REF_INDIRECT":
-            # We don't support recursive chunked_ref_indirect classes
-            msg = "chunktable layout: H5D_CHUNKED_REF_INDIRECT is invalid"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+        chunktable_dims = getShapeDims(chunktable_json)
 
         if len(chunktable_dims) != rank:
             msg = "Rank of chunktable should be same as the dataset"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+        if getDatasetLayoutClass(chunktable_json) == "H5D_CHUNKED_REF_INDIRECT":
+            # We don't support recursive chunked_ref_indirect classes
+            msg = "chunktable layout: H5D_CHUNKED_REF_INDIRECT is invalid"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
@@ -863,10 +858,7 @@ async def reduceShape(app, dset_json, shape_update, bucket=None):
 
     # and the chunk layout
     layout = getChunkDims(dset_json)
-    if not layout:
-        layout = dset_json.get("layout")  # older storage version put layout here
-        if layout:
-            log.warn(f"got layout for {dset_id} from dataset_json")
+
     if not layout:
         msg = f"no layout found for {dset_id}"
         log.error(msg)
