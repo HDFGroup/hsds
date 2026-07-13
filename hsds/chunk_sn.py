@@ -28,7 +28,7 @@ from h5json.hdf5dtype import getItemSize, getDtypeItemSize, getSubType, createDa
 from h5json.array_util import bytesArrayToList, jsonToArray, getNumElements, arrayToBytes
 from h5json.array_util import bytesToArray, squeezeArray, getBroadcastShape
 from h5json.objid import isValidUuid
-from h5json.shape_util import isNullSpace, isScalar, getShapeDims, getMaxDims
+from h5json.shape_util import isNullSpace, isScalar, getShapeDims, getMaxDims, getRank
 from h5json.dset_util import getChunkDims, isExtensible
 
 from .util.httpUtil import getHref, getAcceptType, getContentType
@@ -146,8 +146,7 @@ def _getAppendRows(params, dset_json, body=None):
 
     if append_rows:
         log.info(f"append_rows: {append_rows}")
-        datashape = dset_json["shape"]
-        dims = getShapeDims(datashape)
+        dims = getShapeDims(dset_json)
         rank = len(dims)
         if rank == 0:
             msg = "append can't be used in scalar or null space datasets"
@@ -160,11 +159,10 @@ def _getAppendRows(params, dset_json, body=None):
             raise HTTPBadRequest(reason=msg)
 
         # shape must be extensible
-        datashape = dset_json["shape"]
-        dims = getShapeDims(datashape)
-        rank = len(dims)
-        maxdims = getMaxDims(datashape)
-        if not isExtensible(datashape):
+        dims = getShapeDims(dset_json)
+        rank = getRank(dset_json)
+        maxdims = getMaxDims(dset_json)
+        if not isExtensible(dset_json):
             msg = "Dataset shape must be extensible for packet updates"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -228,8 +226,7 @@ def _getSelect(params, dset_json, body=None):
     if not slices:
         # just return the entire dataspace
         log.debug("_getSelect - no selection, using entire dataspace")
-        datashape = dset_json["shape"]
-        dims = getShapeDims(datashape)
+        dims = getShapeDims(dset_json)
         slices = []
         if dims:
             for dim in dims:
@@ -523,14 +520,13 @@ async def PUT_Value(request):
     dset_json = await getDsetJson(app, dset_id, bucket=bucket)
     log.debug(f"got dset_json: {dset_json}")
 
-    datashape = dset_json["shape"]
     if isNullSpace(dset_json):
         msg = "Null space datasets can not be used as target for PUT value"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    dims = getShapeDims(datashape)
-    rank = len(dims)
+    dims = getShapeDims(dset_json)
+    rank = getRank(dset_json)
 
     type_json = dset_json["type"]
     dset_dtype = createDataType(type_json)
@@ -820,10 +816,9 @@ async def GET_Value(request):
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    datashape = dset_json["shape"]
-    dims = getShapeDims(datashape)
+    dims = getShapeDims(dset_json)
     log.debug(f"dset shape: {dims}")
-    rank = len(dims)
+    rank = getRank(dset_json)
 
     layout = getChunkDims(dset_json)
     log.debug(f"chunk layout: {layout}")
@@ -1027,9 +1022,8 @@ async def GET_Value(request):
             except ValueError as err:
                 msg = f"Cannot decode bytes to list: {err}"
                 raise HTTPBadRequest(reason=msg)
-            datashape = dset_json["shape"]
 
-            if datashape["class"] == "H5S_SCALAR":
+            if isScalar(dset_json):
                 # convert array response to value
                 resp_json["value"] = json_data[0]
             else:
@@ -1113,8 +1107,7 @@ async def POST_Value(request):
         msg = "POST value not supported for datasets with SCALAR shape"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    datashape = dset_json["shape"]
-    dims = getShapeDims(datashape)
+    dims = getShapeDims(dset_json)
     rank = len(dims)
 
     type_json = dset_json["type"]

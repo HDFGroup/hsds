@@ -23,7 +23,8 @@ from aiohttp.web_exceptions import HTTPInternalServerError, HTTPRequestEntityToo
 from h5json.hdf5dtype import createDataType, getItemSize, getDtypeItemSize
 from h5json.array_util import getNumpyValue, bytesToArray
 from h5json.objid import isSchema2Id, getS3Key, getObjId
-from h5json.shape_util import isNullSpace, getShapeDims
+from h5json.shape_util import isNullSpace, getShapeDims, getRank, getMaxDims
+from h5json.shape_util import isExtensible, getShapeClass
 from h5json.dset_util import getChunkDims, getDatasetLayout, getDatasetLayoutClass
 
 from .util.nodeUtil import getDataNodeUrl
@@ -128,15 +129,13 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         log.error(msg)
         raise HTTPInternalServerError()
 
-    datashape = dset_json["shape"]
     datatype = dset_json["type"]
     if isNullSpace(dset_json):
         log.error("H5S_NULL shape class used with reference chunk layout")
         raise HTTPInternalServerError()
-    dims = getShapeDims(datashape)
-    rank = len(dims)
-    # chunk_ids = list(chunkinfo_map.keys())
-    # chunk_ids.sort()
+    dims = getShapeDims(dset_json)
+    rank = getRank(dset_json)
+
     num_chunks = len(chunk_ids)
     msg = f"getChunkLocations for dset: {dset_id} bucket: {bucket} "
     msg += f"rank: {rank} num chunk_ids: {num_chunks}"
@@ -764,9 +763,8 @@ async def getAllocatedChunkIds(app, dset_id, bucket=None):
 async def extendShape(app, dset_json, nelements, axis=0, bucket=None):
     """ extend the shape of the dataset by nelements along given axis """
     dset_id = dset_json["id"]
-    datashape = dset_json["shape"]
-    dims = getShapeDims(datashape)
-    rank = len(dims)
+    dims = getShapeDims(dset_json)
+    rank = getRank(dset_json)
     log.info(f"extendShape of {dset_id} dims: {dims} by {nelements} on axis: {axis}")
     # do some sanity checks here
     if rank == 0:
@@ -841,11 +839,10 @@ async def reduceShape(app, dset_json, shape_update, bucket=None):
     log.info(f"reduceShape for {dset_id} to {shape_update}")
 
     # get the current shape dims
-    shape_orig = dset_json["shape"]
-    if shape_orig["class"] != "H5S_SIMPLE":
+    if getShapeClass(dset_json) != "H5S_SIMPLE":
         raise ValueError("reduceShape can only be called on simple datasets")
-    dims = shape_orig["dims"]
-    rank = len(dims)
+    dims = getShapeDims(dset_json)
+    rank = getRank(dset_json)
 
     # get the fill value
     arr = getFillValue(dset_json)
@@ -961,23 +958,17 @@ async def updateShape(app, dset_json, shape_update, bucket=None):
     """ Update the current dataset shape """
 
     dset_id = dset_json["id"]
-    shape_orig = dset_json["shape"]
-    log.info(f"updateShape dset: {dset_id}: {shape_update}")
+    log.info(f"updateShape dset: {dset_id}")
 
     # verify that the extend request is valid
-    if shape_orig["class"] != "H5S_SIMPLE":
-        msg = "Unable to extend shape of datasets who are not H5S_SIMPLE"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-
-    if "maxdims" not in shape_orig:
+    if not isExtensible(dset_json):
         msg = "Dataset is not extensible"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    dims = shape_orig["dims"]
-    rank = len(dims)
-    maxdims = shape_orig["maxdims"]
+    dims = getShapeDims(dset_json)
+    rank = getRank(dset_json)
+    maxdims = getMaxDims(dset_json)
     log.debug(f"dims: {dims}, maxdims: {maxdims}")
     if shape_update and len(shape_update) != rank:
         msg = "Extent of update shape request does not match dataset sahpe"
@@ -1075,9 +1066,8 @@ async def doPointWrite(app,
     log.debug(f"doPointWrite - num_points: {num_points}")
     dset_id = dset_json["id"]
     layout = getChunkDims(dset_json)
-    datashape = dset_json["shape"]
-    dims = getShapeDims(datashape)
-    rank = len(dims)
+    dims = getShapeDims(dset_json)
+    rank = getRank(dset_json)
 
     chunk_dict = {}  # chunk ids to list of points in chunk
 

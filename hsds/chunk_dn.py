@@ -434,7 +434,7 @@ async def GET_Chunk(request):
     dset_id = getDatasetId(chunk_id)
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
-    shape_dims = getShapeDims(dset_json["shape"])
+    shape_dims = getShapeDims(dset_json)
     log.debug(f"shape_dims: {shape_dims}")
     dims = getChunkDims(dset_json)
     log.debug(f"GET_Chunk - got dims: {dims}")

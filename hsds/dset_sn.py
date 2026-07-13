@@ -20,7 +20,7 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPInternalSer
 from h5json.hdf5dtype import createDataType
 from h5json.array_util import getNumElements, jsonToArray
 from h5json.objid import isValidUuid, isSchema2Id
-from h5json.shape_util import getShapeDims
+from h5json.shape_util import getShapeDims, isNullSpace, isScalar
 from h5json.dset_util import getChunkDims, getDatasetLayoutClass
 
 from .util.httpUtil import getHref, respJsonAssemble
@@ -184,11 +184,13 @@ async def GET_Dataset(request):
     # provide a value link if the dataset is relatively small,
     # otherwise create a preview link that shows a limited number of
     # data values
-    dset_shape = dset_json["shape"]
-    if dset_shape["class"] != "H5S_NULL":
-        count = 1
-        if dset_shape["class"] == "H5S_SIMPLE":
-            dims = dset_shape["dims"]
+    if isNullSpace(dset_json):
+        pass  # no value link for null space datasets
+    else:
+        if isScalar(dset_json):
+            count = 1
+        else:
+            dims = getShapeDims(dset_json)
             count = getNumElements(dims)
         if count <= 100:
             # small number of values, provide link to entire dataset
@@ -196,7 +198,7 @@ async def GET_Dataset(request):
             hrefs.append({"rel": "data", "href": href})
         else:
             # large number of values, create preview link
-            previewQuery = getPreviewQuery(dset_shape["dims"])
+            previewQuery = getPreviewQuery(getShapeDims(dset_json))
             kwargs = {"query": previewQuery}
             href = getHref(request, dset_uri + "/value", **kwargs)
             hrefs.append({"rel": "preview", "href": href})
@@ -627,7 +629,7 @@ async def POST_Dataset(request):
         layout_dims = getChunkDims(dset_json)
         log.debug(f"init data layout is: {layout_dims}")
         # make selection for entire dataspace
-        dims = getShapeDims(dset_json["shape"])
+        dims = getShapeDims(dset_json)
         slices = getHyperslabSelection(dims)
 
         chunk_ids = getChunkIds(dset_id, slices, layout_dims)
