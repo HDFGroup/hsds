@@ -28,7 +28,7 @@ from h5json.array_util import jsonToArray
 from h5json.objid import getCollectionForId, createObjId, getRootObjId
 from h5json.objid import isSchema2Id, getS3Key, isValidUuid
 from h5json.hdf5dtype import getBaseTypeJson, validateTypeItem, createDataType, getItemSize
-from h5json.shape_util import getShapeDims, getShapeClass
+from h5json.shape_util import getShapeDims, getShapeClass, getShapeJson
 from h5json.dset_util import getChunkSize, generateLayout
 from h5json.dset_util import getDataSize, validateDatasetCreationProps
 from h5json.link_util import h5Join, validateLinkName, getLinkClass, getLinkFilePath
@@ -41,7 +41,6 @@ from .util.storUtil import getStorJSONObj, isStorObj, getSupportedFilters
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
 from .util.domainUtil import getBucketForDomain, verifyRoot, getLimits
-from .util.dsetUtil import getShapeJson
 from .util.storUtil import getCompressors
 
 from .basenode import getVersion
@@ -1529,15 +1528,46 @@ def getDatasetCreateArgs(body,
     #
 
     # will return scalar shape if no shape key in body
-    shape_json = getShapeJson(body)
+    dims = ()  # default to scalar shape
+    maxdims = None
+    if "shape" in body:
+        body_shape = body["shape"]
+        if isinstance(body_shape, int):
+            dims = [body_shape, ]
+        elif isinstance(body_shape, str):
+            # only valid string value is H5S_NULL or H5S_SCALAR
+            if body_shape == "H5S_NULL":
+                dims = None  # use None for null space
+            elif body_shape == "H5S_SCALAR":
+                pass  # keep empty tuple for scalar dims
+            else:
+                msg = f"invalid value for 'shape' key: {body_shape}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+        elif isinstance(body_shape, (list, tuple)):
+            dims = body_shape
+        else:
+            msg = f"Unexpected type for 'shape' key: {body_shape}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    if "maxdims" in body:
+        maxdims = body["maxdims"]
+        if isinstance(maxdims, int):
+            maxdims = [maxdims,]
+
     try:
-        shape_class = getShapeClass(shape_json)
-        shape_dims = getShapeDims(shape_json)
-    except (KeyError, TypeError, ValueError):
-        msg = f"Invalid shape: {shape_json}"
-        log.warn(msg)
+        shape_json = getShapeJson(dims, maxdims=maxdims)
+    except (TypeError, ValueError) as e:
+        if maxdims is None:
+            msg = f"Invalid dimensions for dataset: {dims}"
+        else:
+            msg = f"Invalid dims: {dims}/maxdims: {maxdims} for dataset"
+        log.warn(f"Error in getShapeJson: {e}, msg: {msg}")
         raise HTTPBadRequest(reason=msg)
 
+    shape_class = getShapeClass(shape_json)
+    shape_dims = getShapeDims(shape_json)
     log.debug(f"shape_class: {shape_class}, shape_dims: {shape_dims}")
 
     log.debug(f"got createArgs: {list(kwargs.keys())}")

@@ -172,7 +172,7 @@ def _getAppendRows(params, dset_json, body=None):
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-        if maxdims[append_dim] != 0:
+        if maxdims[append_dim] not in (0, "H5S_UNLIMITED"):
             if dims[append_dim] + append_rows > maxdims[append_dim]:
                 log.warn("unable to append to dataspace")
                 raise HTTPConflict()

@@ -1159,7 +1159,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(shape["dims"][0], 10)
         self.assertEqual(shape["dims"][1], 20)
         self.assertTrue("maxdims" in shape)
-        self.assertEqual(shape["maxdims"][0], 0)
+        self.assertEqual(shape["maxdims"], ["H5S_UNLIMITED", "H5S_UNLIMITED"])
 
         # verify shape using the GET shape request
         req = req + "/shape"
@@ -1173,7 +1173,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(len(shape["dims"]), 2)
         self.assertEqual(shape["dims"][0], 10)
         self.assertTrue("maxdims" in shape)
-        self.assertEqual(shape["maxdims"][0], 0)
+        self.assertEqual(shape["maxdims"], ["H5S_UNLIMITED", "H5S_UNLIMITED"])
 
         # extend the dataset by 5 elements in first dimension
         payload = {"extend": 5, "extend_dim": 0}
@@ -1258,7 +1258,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(len(shape["dims"]), 3)
         self.assertEqual(shape["dims"], [0, 3, 0])
         self.assertTrue("maxdims" in shape)
-        self.assertEqual(shape["maxdims"], [0, 3, 0])
+        self.assertEqual(shape["maxdims"], ["H5S_UNLIMITED", 3, "H5S_UNLIMITED"])
 
         # verify shape using the GET shape request
         req = req + "/shape"
@@ -1272,7 +1272,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(len(shape["dims"]), 3)
         self.assertEqual(shape["dims"], [0, 3, 0])
         self.assertTrue("maxdims" in shape)
-        self.assertEqual(shape["maxdims"], [0, 3, 0])
+        self.assertEqual(shape["maxdims"], ["H5S_UNLIMITED", 3, "H5S_UNLIMITED"])
 
         # extend the dataset by 5 elements in first dimension
         payload = {"extend": 5, "extend_dim": 0}

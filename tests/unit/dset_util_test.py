@@ -15,7 +15,7 @@ import sys
 
 sys.path.append("../..")
 from hsds.util.dsetUtil import getHyperslabSelection, getSelectionShape, get_slices
-from hsds.util.dsetUtil import getSelectionList, ItemIterator, getSelectionPagination
+from hsds.util.dsetUtil import getSelectionList, getSelectionPagination
 
 
 class DsetUtilTest(unittest.TestCase):
@@ -316,46 +316,6 @@ class DsetUtilTest(unittest.TestCase):
             page_size = (page[0].stop - page[0].start) * 1300 * 1300 * 2
             self.assertTrue(page_size < max_request_size)
             start = page[0].stop
-
-    def testItemIterator(self):
-        # 1-D case
-        datashape = [10,]
-        slices = getHyperslabSelection(datashape)
-        it = ItemIterator(slices)
-
-        indices = []
-        count = 0
-
-        while True:
-            try:
-                index = it.next()
-                count += 1
-                indices.append(index)
-            except StopIteration:
-                break
-        self.assertEqual(count, 10)
-        self.assertEqual(indices, list(range(10)))
-
-        # 2-D case
-        datashape = [4, 5]
-        slices = getHyperslabSelection(datashape)
-        it = ItemIterator(slices)
-
-        indices = []
-        count = 0
-        while True:
-            try:
-                index = it.next()
-                self.assertTrue(len(index), 2)
-                self.assertTrue(index[0] >= 0)
-                self.assertTrue(index[0] < 4)
-                self.assertTrue(index[1] >= 0)
-                self.assertTrue(index[1] < 5)
-                count += 1
-                indices.append(index)
-            except StopIteration:
-                break
-        self.assertEqual(count, 20)
 
     def testSelectionList1D(self):
         dims = [100,]
