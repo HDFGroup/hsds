@@ -152,6 +152,8 @@ class AzureBlobClient:
                 log.error(msg)
                 raise HTTPInternalServerError()
 
+        if data and len(data) > 0:
+            self._azure_stats_increment("bytes_in", inc=len(data))
         return data
 
     async def put_object(self, key, data, bucket=None):

@@ -27,6 +27,7 @@ multidict==6.6.4
 numcodecs==0.13.1
 numpy==2.2.6
 packaging==25.0
+prometheus_client==0.25.0
 propcache==0.3.2
 psutil==7.0.0
 pycparser==2.22

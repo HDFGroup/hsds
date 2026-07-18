@@ -32,6 +32,7 @@ from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.authUtil import isAdminUser
 from .util.k8sClient import getDnLabelSelector, getPodIps
 from . import hsds_logger as log
+from . import metrics
 
 HSDS_VERSION = "0.9.4"
 
@@ -561,7 +562,7 @@ def baseInit(node_type):
 
     # create the app object
     log.info("Application baseInit")
-    app = Application()
+    app = Application(middlewares=[metrics.metrics_middleware])
 
     app["node_state"] = "INITIALIZING"
     app["node_number"] = -1
@@ -701,6 +702,7 @@ def baseInit(node_type):
 
     app.router.add_get("/info", info)
     app.router.add_get("/about", about)
+    app.router.add_get("/metrics", metrics.metrics_handler)
 
     if is_standalone:
         # can go straight to ready state
