@@ -385,7 +385,7 @@ async def _getRequestData(request, http_streaming=True):
         log.debug(f"getRequestData - got json: {body}")
         if "value" in body:
             input_data = body["value"]
-            log.debug("input_data: {input_data}")
+            log.debug(f"input_data: {input_data}")
         elif "value_base64" in body:
             base64_data = body["value_base64"]
             base64_data = base64_data.encode("ascii")

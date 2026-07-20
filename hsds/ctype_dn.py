@@ -91,7 +91,7 @@ async def POST_Datatype(request):
 
     ctype_id = get_obj_id(request, body=body)
     if not isValidUuid(ctype_id, obj_class="datatype"):
-        log.error("Unexpected type_id: {ctype_id}")
+        log.error(f"Unexpected type_id: {ctype_id}")
         raise HTTPInternalServerError()
 
     # verify the id doesn't already exist
