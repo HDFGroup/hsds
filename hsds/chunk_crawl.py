@@ -33,9 +33,9 @@ from h5json.time_util import getNow
 from .util.nodeUtil import getDataNodeUrl, getNodeCount
 from .util.httpUtil import http_get, http_put, http_post, get_http_client
 from .util.httpUtil import isUnixDomainUrl
-from .util.dsetUtil import getSliceQueryParam, getSelectionShape
-from .util.chunkUtil import getChunkCoverage, getDataCoverage
-from .util.chunkUtil import getChunkIdForPartition, getQueryDtype
+from .util.dsetUtil import getSliceQueryParam
+from .util.chunkUtil import getChunkCoverage, getDataCoverage, toNumpyIndex
+from .util.chunkUtil import getChunkIdForPartition
 
 from . import config
 from . import hsds_logger as log
@@ -123,8 +123,8 @@ async def write_chunk_hyperslab(
     if np.prod(arr.shape) != 1:
         do_broadcast = False
     else:
-        for s in slices:
-            if s.step is None:
+        for s in slices.slices:
+            if not isinstance(s, slice) or s.step is None:
                 continue
             if s.step > 1:
                 do_broadcast = False
@@ -135,7 +135,7 @@ async def write_chunk_hyperslab(
         params["element_count"] = 1
         arr_chunk = arr
     else:
-        arr_chunk = arr[data_sel]
+        arr_chunk = arr[toNumpyIndex(data_sel)]
 
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id
@@ -237,7 +237,7 @@ async def read_chunk_hyperslab(
     if "data_sel" in chunk_info:
         data_sel = chunk_info["data_sel"]
         log.debug(f"read_chunk_hyperslab - data_sel: {data_sel}")
-        chunk_shape = getSelectionShape(chunk_sel)
+        chunk_shape = chunk_sel.mshape
         log.debug(f"hyperslab selection - chunk_shape: {chunk_shape}")
 
     if "points" in chunk_info:
@@ -256,7 +256,9 @@ async def read_chunk_hyperslab(
     if query is None and query_update is None:
         query_dtype = None
     else:
-        query_dtype = getQueryDtype(select_dtype)
+        # GET_Chunk's query handling (h5json.query_util.arrayQuery) returns
+        # the matching values themselves, typed as select_dtype
+        query_dtype = select_dtype
 
     chunk_arr = None
     array_data = None
@@ -418,7 +420,7 @@ async def read_chunk_hyperslab(
                 np_arr[point_index] = chunk_arr
             else:
                 # hyperslab selection
-                np_arr[data_sel] = chunk_arr
+                np_arr[toNumpyIndex(data_sel)] = chunk_arr
     log.debug(f"read_chunk_hyperslab {chunk_id} - done")
 
 

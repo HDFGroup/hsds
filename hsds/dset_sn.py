@@ -22,11 +22,12 @@ from h5json.array_util import getNumElements, jsonToArray
 from h5json.objid import isValidUuid, isSchema2Id
 from h5json.shape_util import getShapeDims, isNullSpace, isScalar
 from h5json.dset_util import getChunkDims, getDatasetLayoutClass
+from h5json import selections
 
 from .util.httpUtil import getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse, getBooleanParam
 from .util.chunkUtil import getChunkIds
-from .util.dsetUtil import getPreviewQuery, getHyperslabSelection
+from .util.dsetUtil import getPreviewQuery
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
@@ -630,7 +631,7 @@ async def POST_Dataset(request):
         log.debug(f"init data layout is: {layout_dims}")
         # make selection for entire dataspace
         dims = getShapeDims(dset_json)
-        slices = getHyperslabSelection(dims)
+        slices = selections.select(tuple(dims), ...)
 
         chunk_ids = getChunkIds(dset_id, slices, layout_dims)
         log.debug(f"init data, got chunk_ids: {chunk_ids}")

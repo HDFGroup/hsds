@@ -26,14 +26,15 @@ from h5json.objid import isSchema2Id, getS3Key, getObjId
 from h5json.shape_util import isNullSpace, getShapeDims, getRank, getMaxDims
 from h5json.shape_util import isExtensible, getShapeClass
 from h5json.dset_util import getChunkDims, getDatasetLayout, getDatasetLayoutClass
+from h5json.query_util import arrayQuery
+from h5json import selections
 
 from .util.nodeUtil import getDataNodeUrl
-from .util.boolparser import BooleanParser
-from .util.dsetUtil import get_slices, getSelectionShape
+from .util.dsetUtil import get_slices
 from .util.chunkUtil import getChunkCoordinate, getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
-from .util.chunkUtil import getQueryDtype, get_chunktable_dims
+from .util.chunkUtil import get_chunktable_dims
 from .util.httpUtil import http_delete, http_put, request_read
 from .util.rangegetUtil import getHyperChunkFactors
 from .util.storUtil import getStorKeys
@@ -382,47 +383,19 @@ def get_chunk_selections(chunk_map, chunk_ids, slices, dset_json):
         item["data_sel"] = data_sel
 
 
-def getParser(query, dtype):
-    """ get query BooleanParser.  If query contains variables that
-       arent' part of the data type, throw a HTTPBadRequest exception. """
-
-    # separate out the where clause if any
-    if query.startswith("where"):
-        where_in = query
-        expr = None
-    else:
-        n = query.find(" where ")
-        if n > 0:
-            where_in = query[(n + 1):]
-            expr = query[:n]
-        else:
-            where_in = None
-            expr = query
-
-    if where_in:
-        log.debug(f"got where in clause: {where_in}")
-        # TBD: do full syntax check on this
-
-    if not expr:
-        # just a where clause
-        return None
-
+def validateQuery(query, dtype):
+    """ Validate that the given query string is syntactically valid and
+    only references fields present in dtype, by running it against a
+    trivial array with h5json.query_util.arrayQuery (the same engine
+    used to actually execute the query at the DN). Raises HTTPBadRequest
+    if the query is malformed or references an invalid field. """
+    dummy_arr = np.zeros((1,), dtype=dtype)
     try:
-        parser = BooleanParser(expr)
-    except Exception:
-        msg = f"query: {expr} is not valid"
+        arrayQuery(query, dummy_arr)
+    except (TypeError, ValueError) as e:
+        msg = f"query: {query} is not valid: {e}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-
-    field_names = set(dtype.names)
-    variables = parser.getVariables()
-    for variable in variables:
-        if variable not in field_names:
-            msg = f"query variable {variable} not valid"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
-    return parser
 
 
 async def getSelectionData(
@@ -548,13 +521,10 @@ async def doReadSelection(
     if query is None:
         query_dtype = None
     else:
+        # GET_Chunk's query handling (h5json.query_util.arrayQuery) returns
+        # the matching values themselves, typed as select_dtype
         log.debug(f"query: {query} limit: {limit}")
-        query_dtype = getQueryDtype(select_dtype)
-        if query_dtype:
-            if len(query_dtype) < 10:
-                log.debug(f"query_dtype: {query_dtype}")
-            else:
-                log.debug(f"query_dtype {len(query_dtype)}")
+        query_dtype = select_dtype
 
     # create array to hold response data
     arr = None
@@ -567,7 +537,7 @@ async def doReadSelection(
         np_shape = None
     elif slices is not None:
         log.debug(f"get np_shape for slices: {slices}")
-        np_shape = getSelectionShape(slices)
+        np_shape = slices.mshape
     else:
         log.error("doReadSelection - expected points or slices to be set")
         raise HTTPInternalServerError()
@@ -782,16 +752,22 @@ async def extendShape(app, dset_json, nelements, axis=0, bucket=None):
     if bucket:
         params["bucket"] = bucket
     selection = None
+    new_dims = None
     try:
         shape_rsp = await http_put(app, req, data=body, params=params)
         log.info(f"got shape put rsp: {shape_rsp}")
         if "selection" in shape_rsp:
             selection = shape_rsp["selection"]
+        if "dims" in shape_rsp:
+            new_dims = tuple(shape_rsp["dims"])
     except HTTPConflict:
         log.warn("got 409 extending dataspace for PUT value")
         raise
-    if not selection:
+    if selection is None:
         log.error("expected to get selection in PUT shape response")
+        raise HTTPInternalServerError()
+    if new_dims is None:
+        log.error("expected dims in PUT shape response")
         raise HTTPInternalServerError()
 
     # selection should be in the format [:,n:m,:].
@@ -827,7 +803,9 @@ async def extendShape(app, dset_json, nelements, axis=0, bucket=None):
         slices.append(s)
 
     log.debug(f"extendShape returning slices: {slices}")
-    return slices
+    sel = selections.select(new_dims, tuple(slices))
+    log.debug(f"returning selection: {sel}")
+    return sel
 
 
 async def reduceShape(app, dset_json, shape_update, bucket=None):
@@ -921,12 +899,14 @@ async def reduceShape(app, dset_json, shape_update, bucket=None):
 
             log.debug(f"update {update_element_count} elements for dim {n}")
 
+            selection = selections.select(tuple(dims), tuple(slices))
+
             crawler = ChunkCrawler(
                 app,
                 update_ids,
                 dset_json=dset_json,
                 bucket=bucket,
-                slices=slices,
+                slices=selection,
                 arr=arr,
                 action="write_chunk_hyperslab",
             )
@@ -1164,14 +1144,14 @@ async def doHyperslabWrite(app,
         raise HTTPInternalServerError()
 
     layout = getChunkDims(dset_json)
-
+    log.debug(f"getNumChunks(page={page}, layout={layout})")
     num_chunks = getNumChunks(page, layout)
     log.debug(f"num_chunks: {num_chunks}")
     max_chunks = int(config.get("max_chunks_per_request", default=1000))
     if num_chunks > max_chunks:
         msg = f"PUT value chunk count: {num_chunks} exceeds max_chunks: {max_chunks}"
         log.warn(msg)
-    select_shape = getSelectionShape(page)
+    select_shape = page.mshape
     log.debug(f"got select_shape: {select_shape} for page: {page_number}")
 
     if data is None:

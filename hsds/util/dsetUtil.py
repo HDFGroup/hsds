@@ -14,147 +14,58 @@ from aiohttp.web_exceptions import HTTPBadRequest
 import math
 
 from h5json.shape_util import getShapeDims
+from h5json import selections
 
 from .. import hsds_logger as log
+from .chunkUtil import _toArraySlice, slice_stop
 
 
-def getHyperslabSelection(dims, start=None, stop=None, step=None):
-    """
-    Get slices given lists of start, stop, step values
-
-    TBD: for step>1, adjust the slice to not extend beyond last
-        data point returned
-    """
-
-    if len(dims) == 0:
-        # scalar dataset
-        dims = (1,)
-
-    rank = len(dims)
-    if start:
-        if not isinstance(start, (list, tuple)):
-            start = [start]
-        if len(start) != rank:
-            msg = "Bad Request: start array length not equal to dataset rank"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        for dim in range(rank):
-            if start[dim] < 0 or start[dim] >= dims[dim]:
-                msg = "Bad Request: start index invalid for dim: " + str(dim)
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-    else:
-        start = []
-        for dim in range(rank):
-            start.append(0)
-
-    if stop:
-        if not isinstance(stop, (list, tuple)):
-            stop = [stop]
-        if len(stop) != rank:
-            msg = "Bad Request: stop array length not equal to dataset rank"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        for dim in range(rank):
-            if stop[dim] <= start[dim] or stop[dim] > dims[dim]:
-                msg = "Bad Request: stop index invalid for dim: " + str(dim)
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-    else:
-        stop = []
-        for dim in range(rank):
-            stop.append(dims[dim])
-
-    if step:
-        if not isinstance(step, (list, tuple)):
-            step = [step]
-        if len(step) != rank:
-            msg = "Bad Request: step array length not equal to dataset rank"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        for dim in range(rank):
-            if step[dim] <= 0 or step[dim] > dims[dim]:
-                msg = "Bad Request: step index invalid for dim: " + str(dim)
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-    else:
-        step = []
-        for dim in range(rank):
-            step.append(1)
-
-    slices = []
-
-    for dim in range(rank):
-
-        try:
-            s = slice(int(start[dim]), int(stop[dim]), int(step[dim]))
-        except ValueError:
-            msg = "Bad Request: invalid start/stop/step value"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        slices.append(s)
-    return tuple(slices)
-
-
-def getSelectionShape(selection):
-    """Return the shape of the given selection.
-    Examples (selection -> returned shape):
-    [(3,7,1)] -> [4]
-    [(3, 7, 3)] -> [1]
-    [(44, 52, 1), (48,52,1)] -> [8, 4]
-    [[1,2,7]] ->
-    """
-    shape = []
-    rank = len(selection)
-    coordinate_extent = None
-    for i in range(rank):
-        s = selection[i]
-        if isinstance(s, slice):
-            extent = 0
-            if s.step and s.step > 1:
-                step = s.step
-            else:
-                step = 1
-            if s.stop > s.start:
-                extent = s.stop - s.start
-            if step > 1 and extent > 0:
-                extent = extent // step
-            if (s.stop - s.start) % step != 0:
-                extent += 1
-            shape.append(extent)
-        else:
-            # coordinate list
-            extent = len(s)
-            if coordinate_extent is None:
-                coordinate_extent = extent
-                shape.append(extent)
-            elif coordinate_extent != extent:
-                msg = "shape mismatch: indexing arrays could not be broadcast together "
-                msg += f"with shapes ({coordinate_extent},) ({extent},)"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            else:
-                pass
-
-    return shape
-
-
-def isSelectAll(slices, dims):
+def isSelectAll(selection, dims):
     """ return True if the selection covers the entire dataspace """
-    if len(slices) != len(dims):
+    if len(selection.shape) != len(dims):
         raise ValueError("isSelectAll - dimensions don't match")
-    is_all = True
-    for (s, dim) in zip(slices, dims):
-        if s.step is not None and s.step != 1:
-            is_all = False
-            break
-        if s.start != 0:
-            is_all = False
-            break
-        if s.stop != dim:
-            is_all = False
-            break
-    return is_all
+    if selection.select_type not in (selections.H5S_SEL_ALL, selections.H5S_SEL_HYPERSLABS):
+        return False
+    for dim in range(len(dims)):
+        if selection.step[dim] not in (None, 1):
+            return False
+        if selection.start[dim] != 0:
+            return False
+        if selection.count[dim] != dims[dim]:
+            return False
+    return True
+
+
+def isSelect(params, body=None):
+    """ return True if a select param is set in query params or in the
+    request body """
+    if "select" in params and params["select"]:
+        return True
+
+    if isinstance(body, dict):
+        if "select" in body and body["select"]:
+            return True
+        for key in ("start", "stop", "step"):
+            if key in body and body[key]:
+                return True
+    return False
+
+
+def getSelectParam(params, body=None):
+    """ return the select value (a query string or dict), if any, from
+    request query params or JSON body. Raises ValueError if select is
+    given in both. Returns None if no selection is specified. """
+    select = None
+    if body and isinstance(body, dict):
+        if "select" in body and body["select"]:
+            select = body.get("select")
+        elif "start" in body and "stop" in body:
+            select = body
+    if "select" in params and params["select"]:
+        if select is not None:
+            raise ValueError("select defined in both request body and query parameters")
+        select = params.get("select")
+    return select
 
 
 def getQueryParameter(request, query_name, body=None, default=None):
@@ -298,11 +209,7 @@ def getSelectionList(select, dims):
 
     if select is None or len(select) == 0:
         """Return set of slices covering data space"""
-        slices = []
-        for extent in dims:
-            s = slice(0, extent, 1)
-            slices.append(s)
-        return tuple(slices)
+        return selections.select(tuple(dims), ...)
 
     # convert selection to list by dimension
     elements = _getSelectElements(select)
@@ -389,7 +296,16 @@ def getSelectionList(select, dims):
             select_list.append(s)
     # end dimension loop
     log.debug(f"select_list: {select_list}")
-    return tuple(select_list)
+    return selections.select(tuple(dims), tuple(select_list))
+
+
+def getSelect(params, dims, body=None):
+    """ return the requested selection region, if any, as a
+    selections.Selection, given the extents to select against.
+    If no selection is specified in query params or JSON body,
+    returns a selection covering the entire dims. """
+    select = getSelectParam(params, body=body)
+    return getSelectionList(select, dims)
 
 
 def get_slices(select, dset_json):
@@ -408,8 +324,8 @@ def get_slices(select, dset_json):
         raise HTTPBadRequest(reason=msg)
 
     if shape_class == "H5S_SCALAR":
-        # return single slice
-        slices = [slice(0, 1, 1), ]
+        # treat as a synthetic rank-1, extent-1 space
+        slices = selections.select((1,), (slice(0, 1, 1),))
     else:
         dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
 
@@ -425,12 +341,12 @@ def get_slices(select, dset_json):
 
 def getSelectionPagination(select, dims, itemsize, max_request_size):
     """
-    Paginate a select tupe into multiple selects where each
-        select requires less than max_request_size bytes"""
+    Paginate a selections.Selection into multiple Selections where each
+        requires less than max_request_size bytes"""
     msg = f"getSelectionPagination - select: {select}, dims: {dims}, "
     msg += f"itemsize: {itemsize}, max_request_size: {max_request_size}"
     log.debug(msg)
-    select_shape = getSelectionShape(select)
+    select_shape = select.mshape
     log.debug(f"getSelectionPagination - select_shape: {select_shape}")
     select_size = math.prod(select_shape) * itemsize
     log.debug(f"getSelectionPagination - select_size: {select_size}")
@@ -439,18 +355,18 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
         log.debug("getSelectionPagination - not needed")
         return (select,)
 
+    slices = select.slices
+
     # get pagination dimension - first dimension with > 1 extent
     rank = len(dims)
     paginate_dim = None
     paginate_extent = None
     for i in range(rank):
-        s = select[i]
+        s = slices[i]
         if isinstance(s, slice):
+            s = _toArraySlice(s)
+            s = slice(s.start, slice_stop(s), s.step)
             paginate_extent = 0
-            if s.step and s.stop > 1:
-                step = s.step
-            else:
-                step = 1
             if s.stop > s.start:
                 paginate_extent = s.stop - s.start
         else:
@@ -472,7 +388,10 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
     page_size = select_size // page_count
     log.debug(f"getSelectionPagination - page_size: {page_size}")
 
-    s = select[paginate_dim]
+    s = slices[paginate_dim]
+    if isinstance(s, slice):
+        s = _toArraySlice(s)
+        s = slice(s.start, slice_stop(s), s.step)
     # log.debug(f"pagination dim: {paginate_dim} select: {s} paginate_extent: {paginate_extent}")
     # page_extent = -(-max_request_size // page_size)
     # log.debug(f"getSelectionPagination - page_extent: {page_extent}")
@@ -489,10 +408,7 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
     paginate_slices = []
     if isinstance(s, slice):
         start = s.start
-        if s.step and s.stop > 1:
-            step = s.step
-        else:
-            step = 1
+        step = s.step if s.step else 1
 
         while start < s.stop:
             stop = start + page_extent
@@ -515,7 +431,7 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
             log.debug(f"page_coord s[{start}:{stop}]")
             page_coord = s[start:stop]
             log.debug(f"page coords: {page_coord}")
-            paginate_slices.append(tuple(page_coord))
+            paginate_slices.append(list(page_coord))
             start = stop
     # adjust page count to number to actual pagination
     page_count = len(paginate_slices)
@@ -525,13 +441,13 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
     # dimension, original selection for each other dimension
     pagination = []
     for page in range(page_count):
-        s = []
+        page_args = []
         for i in range(rank):
             if i == paginate_dim:
-                s.append(paginate_slices[page])
+                page_args.append(paginate_slices[page])
             else:
-                s.append(select[i])
-        pagination.append(tuple(s))
+                page_args.append(slices[i])
+        pagination.append(selections.select(select.shape, tuple(page_args)))
     pagination = tuple(pagination)
     # log.debug(f"returning pagination: {pagination}")
     return pagination
@@ -539,7 +455,7 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
 
 def getSliceQueryParam(sel):
     """
-    Helper method - set query parameter for given shape + selection
+    Helper method - set query parameter for given selections.Selection
 
     Query arg should be in the form: [<dim1>, <dim2>, ... , <dimn>]
         brackets are optional for one dimensional arrays.
@@ -549,12 +465,18 @@ def getSliceQueryParam(sel):
             start, end, and stride: n:m:s
     """
     # pass dimensions, and selection as query params
-    rank = len(sel)
+    slices = sel.slices
+    rank = len(slices)
     if rank > 0:
         sel_param = "["
         for i in range(rank):
-            s = sel[i]
+            s = slices[i]
             if isinstance(s, slice):
+                # sel.slices encodes stop as start + count, not a real
+                # coordinate for step > 1 dims; convert to a real coordinate
+                # stop before writing it out as a query param
+                s = _toArraySlice(s)
+                s = slice(s.start, slice_stop(s), s.step)
                 sel_param += str(s.start)
                 sel_param += ":"
                 sel_param += str(s.stop)

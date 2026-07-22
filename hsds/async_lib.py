@@ -24,9 +24,9 @@ from h5json.filters import getFilters
 from h5json.shape_util import getShapeDims, getDataSize
 from h5json.dset_util import getDatasetLayoutClass, getDatasetLayout, getChunkDims
 from h5json.time_util import getNow
+from h5json import selections
 
 from .util.chunkUtil import getDatasetId, getNumChunks, ChunkIterator, getChunkIndex, getChunkIds
-from .util.dsetUtil import getHyperslabSelection
 from .util.storUtil import getStorKeys, putStorJSONObj, getStorJSONObj
 from .util.storUtil import deleteStorObj, getStorBytes, isStorObj
 from .datanode_lib import getFilterOps
@@ -106,7 +106,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
     layout_class = getDatasetLayoutClass(dset_json)
     msg = f"updateDatasetInfo - {dset_id} has layout_class: {layout_class}"
     log.debug(msg)
-    selection = getHyperslabSelection(dims)  # select entire datashape
+    selection = selections.select(tuple(dims), ...)  # select entire datashape
     linked_bytes = 0
     num_linked_chunks = 0
 
@@ -177,7 +177,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         # read chunktable one chunk at a time - this can be slow if there
         # are a lot of chunks, but this is only used by the async bucket
         # scan task
-        sel = getHyperslabSelection(chunktable_dims)
+        sel = selections.select(tuple(chunktable_dims), ...)
         it = ChunkIterator(chunktable_id, sel, dims)
         msg = f"updateDatasetInfo - iterating over chunks in {chunktable_id}"
         log.debug(msg)
@@ -388,7 +388,7 @@ async def _getDatsetValueJson(app, dset_id, dset_json, obj_ids, size_limit=None,
         msg += f"for dataset: {dset_id}, ignoring"
         log.warning(msg)
         return None
-    select_all = getHyperslabSelection(dims)  # select entire datashape
+    select_all = selections.select(tuple(dims), ...)  # select entire datashape
     chunk_ids = getChunkIds(dset_id, select_all, dims)
     if len(chunk_ids) == 0:
         log.debug(f"_getDatasetValueJson - no chunk ids found for dataset: {dset_id}")

@@ -316,6 +316,7 @@ async def PUT_DatasetShape(request):
 
     # write back to S3, save to metadata cache
     log.info(f"Updated dimensions: {dims}")
+    resp_json["dims"] = dims
     await save_metadata_obj(app, dset_id, dset_json, bucket=bucket)
 
     resp = json_response(resp_json, status=201)

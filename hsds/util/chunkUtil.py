@@ -2,6 +2,7 @@ import numpy as np
 
 from h5json.array_util import ndarray_compare
 from h5json.dset_util import getDatasetLayout
+from h5json import selections
 
 from .. import hsds_logger as log
 
@@ -32,6 +33,26 @@ def slice_stop(s):
     return s.start + w
 
 
+def _toArraySlice(s):
+    """h5json normalizes slices to (start, start + num_points, step), so
+    for step > 1 the stop value is a point count rather than a coordinate.
+    Convert to an equivalent slice with a true coordinate stop, suitable
+    for numpy indexing or coordinate-range arithmetic.
+    """
+    step = s.step if s.step is not None else 1
+    if step == 1:
+        return slice(s.start, s.stop, step)
+    num_points = s.stop - s.start
+    return slice(s.start, s.start + num_points * step, step)
+
+
+def toNumpyIndex(selection):
+    """Convert a selections.Selection into a tuple of slices/coordinate-lists
+    usable for direct numpy array indexing (arr[toNumpyIndex(selection)]).
+    """
+    return tuple(_toArraySlice(s) if isinstance(s, slice) else s for s in selection.slices)
+
+
 def getNumChunks(selection, layout):
     """
     Get the number of chunks potentially required.
@@ -39,32 +60,31 @@ def getNumChunks(selection, layout):
     of chunks that intersect with the selection.
     """
 
-    if len(selection) == 0:
+    if not isinstance(selection, selections.Selection):
+        msg = "Expected selection.Selection type"
+        log.warning(msg)
+        raise ValueError(msg)
+
+    if selection.nselect == 0:
         # zero length selection
         return 0
+
+    if selection.nselect == 1:
+        # single point selection
+        return 1
 
     rank = len(layout)
     if rank == 1 and layout[0] == 1:
         # scalar dataset
         return 1
-    if len(selection) != rank:
-        msg = f"selection list has {len(selection)} items, but rank is {rank}"
+    if len(selection.shape) != rank:
+        msg = f"selection list has {len(selection.shape)} items, but rank is {rank}"
         raise ValueError(msg)
-    # do a quick check that we don't have a null selection space'
-    # TBD: this needs to be revise to do the right think with stride > 1
-    for s in selection:
-        if isinstance(s, slice):
-            if s.stop <= s.start:
-                log.debug("null selection")
-                return 0
-        else:
-            # coordinate list
-            if len(s) == 0:
-                return 0
+
     # first, get the number of chunks needed for any coordinate selection
     chunk_indices = []
-    for i in range(len(selection)):
-        s = selection[i]
+    for i in range(rank):
+        s = selection.slices[i]
         c = layout[i]
         if isinstance(s, slice):
             continue
@@ -90,20 +110,22 @@ def getNumChunks(selection, layout):
         num_chunks = 1
 
     # now deal with any slices in the selection
-    for i in range(len(selection)):
-        s = selection[i]
+    for i in range(rank):
+        s = selection.slices[i]
         c = layout[i]  # chunk size
         if not isinstance(s, slice):
             # ignore coordinate lists since we dealt with them above
             continue
 
-        if s.step is None:
-            s = slice(s.start, s.stop, 1)
-        if s.step > 1:
-            num_points = frac((s.stop - s.start), s.step)
-            w = num_points * s.step - (s.step - 1)
+        step = s.step if s.step is not None else 1
+        # h5json normalizes slices to (start, start + num_points, step), so
+        # (s.stop - s.start) is the number of points selected along this
+        # dimension rather than a coordinate span
+        num_points = s.stop - s.start
+        if step > 1:
+            w = num_points * step - (step - 1)
         else:
-            w = s.stop - s.start  # selection width (>0)
+            w = num_points  # selection width (>0)
 
         lc = frac(s.start, c) * c
 
@@ -113,10 +135,10 @@ def getNumChunks(selection, layout):
 
         rc = ((s.start + w) // c) * c
         m = rc - lc
-        if c > s.step:
+        if c > step:
             count = m // c
         else:
-            count = m // s.step
+            count = m // step
         if s.start < lc:
             count += 1  # hit one chunk on the left
         if s.start + w > rc:
@@ -259,6 +281,10 @@ def getChunkIds(dset_id, selection, layout, prefix=None):
     log.debug(f"getChunkIds - dset_id: {dset_id}, selection: {selection}, layout: {layout}")
     if prefix:
         log.debug(f"prefix: {prefix}")
+    if not isinstance(selection, selections.Selection):
+        msg = "Expected selection.Selection type"
+        log.warning(msg)
+        raise ValueError(msg)
 
     num_chunks = getNumChunks(selection, layout)
     log.debug(f"getChunkIds - num_chunks: {num_chunks}")
@@ -271,12 +297,16 @@ def getChunkIds(dset_id, selection, layout, prefix=None):
             log.warning(msg)
             raise ValueError(msg)
         prefix = "c-" + dset_id[2:] + "_"
-    rank = len(selection)
+
+    if selection.shape == ():
+        # scalar dataset - single chunk, index 0 for each layout dimension
+        return [prefix + chunk_index_to_id([0] * len(layout))]
+    rank = len(selection.shape)
 
     # initialize chunk_ids based on coordinate index, if any
     num_coordinates = None
     chunk_items = set()
-    for s in selection:
+    for s in selection.slices:
         if isinstance(s, slice):
             continue
         elif num_coordinates is None:
@@ -292,7 +322,7 @@ def getChunkIds(dset_id, selection, layout, prefix=None):
     for i in range(num_coordinates):
         chunk_idx = []
         for dim in range(rank):
-            s = selection[dim]
+            s = selection.slices[dim]
             c = layout[dim]
             if isinstance(s, slice):
                 chunk_index = None
@@ -310,7 +340,7 @@ def getChunkIds(dset_id, selection, layout, prefix=None):
 
     # log.debug(f"getChunkIds - selection: {selection}")
     for dim in range(rank):
-        s = selection[dim]
+        s = selection.slices[dim]
         c = layout[dim]
 
         if not isinstance(s, slice):
@@ -320,20 +350,24 @@ def getChunkIds(dset_id, selection, layout, prefix=None):
         if s.step is None:
             s = slice(s.start, s.stop, 1)
 
+        # h5json normalizes slices to (start, start + num_points, step), so
+        # (s.stop - s.start) is the number of points selected along this
+        # dimension rather than a coordinate span
+        num_points = s.stop - s.start
         chunk_indices = []
         if s.step > c:
             # chunks may not be contiguous, skip along the selection and add
             # whatever chunks we land in
-            for i in range(s.start, s.stop, s.step):
+            for k in range(num_points):
+                i = s.start + k * s.step
                 chunk_index = i // c
                 chunk_indices.append(chunk_index)
         else:
             # get a contiguous set of chunks along the selection
             if s.step > 1:
-                num_points = frac((s.stop - s.start), s.step)
                 w = num_points * s.step - (s.step - 1)
             else:
-                w = s.stop - s.start  # selection width (>0)
+                w = num_points  # selection width (>0)
 
             chunk_index_start = s.start // c
             chunk_index_end = frac((s.start + w), c)
@@ -381,7 +415,7 @@ def getChunkCoordinate(chunk_id, layout):
     return coord
 
 
-def getChunkSelection(chunk_id, slices, layout):
+def getChunkSelection(chunk_id, selection, layout):
     """
     Return the intersection of the chunk with the given slices
     selection of the array.
@@ -392,6 +426,7 @@ def getChunkSelection(chunk_id, slices, layout):
 
     coord_mask = None
     # compute a boolean mask for the coordinates that apply to the given chunk_id
+    slices = selection.slices
     for dim in range(rank):
         s = slices[dim]
         c = layout[dim]
@@ -414,8 +449,7 @@ def getChunkSelection(chunk_id, slices, layout):
         c = layout[dim]
         n = chunk_index[dim] * c
         if isinstance(s, slice):
-            if s.step is None:
-                s = slice(s.start, s.stop, 1)
+            s = _toArraySlice(s)
             if s.start >= n + c:
                 return None  # null intersection
             if s.stop < n:
@@ -441,35 +475,36 @@ def getChunkSelection(chunk_id, slices, layout):
                     coords.append(s[i])
             sel.append(coords)
 
-    return sel
+    return selections.select(selection.shape, tuple(sel))
 
 
-def getChunkCoverage(chunk_id, slices, layout):
+def getChunkCoverage(chunk_id, selection, layout):
     """
     Get chunk-relative selection of the given chunk and selection.
     """
     chunk_index = getChunkIndex(chunk_id)
-    chunk_sel = getChunkSelection(chunk_id, slices, layout)
+    chunk_sel = getChunkSelection(chunk_id, selection, layout)
     if not chunk_sel:
-        log.warn(f"slices: {slices} does intersect chunk: {chunk_id}")
+        log.warn(f"selection: {selection} does intersect chunk: {chunk_id}")
         return None
 
     rank = len(layout)
-    if len(slices) != rank:
+    if len(selection.shape) != rank:
         raise ValueError(f"invalid slices value for dataset of rank: {rank}")
     sel = []
     for dim in range(rank):
-        s = chunk_sel[dim]
+        s = chunk_sel.slices[dim]
         w = layout[dim]
         offset = chunk_index[dim] * w
 
         if isinstance(s, slice):
+            s = _toArraySlice(s)
             start = s.start - offset
             if start < 0:
                 msg = "Unexpected chunk selection"
                 log.error(msg)
                 raise ValueError(msg)
-            stop = s.stop - offset
+            stop = slice_stop(s) - offset
             if stop > w:
                 msg = "Unexpected chunk selection"
                 log.error(msg)
@@ -480,24 +515,26 @@ def getChunkCoverage(chunk_id, slices, layout):
             coord = []
             for i in range(len(s)):
                 coord.append(s[i] - offset)
-            sel.append(tuple(coord))
+            sel.append(coord)
 
-    return sel
+    return selections.select(tuple(layout), tuple(sel))
 
 
-def getDataCoverage(chunk_id, slices, layout):
+def getDataCoverage(chunk_id, selection, layout):
     """
     Get data-relative selection of the given chunk and selection.
     """
 
-    chunk_sel = getChunkSelection(chunk_id, slices, layout)
+    chunk_sel = getChunkSelection(chunk_id, selection, layout)
+    chunk_slices = chunk_sel.slices
     rank = len(layout)
     sel = []
 
     points = None
     coordinate_extent = None
+    slices = selection.slices
     for dim in range(rank):
-        c = chunk_sel[dim]
+        c = chunk_slices[dim]
         s = slices[dim]
         if isinstance(s, slice):
             continue
@@ -523,11 +560,12 @@ def getDataCoverage(chunk_id, slices, layout):
 
     data_pts = None
     for dim in range(rank):
-        c = chunk_sel[dim]
+        c = chunk_slices[dim]
         s = slices[dim]
         if isinstance(s, slice):
-            if s.step is None:
-                s = slice(s.start, s.stop, 1)
+            s = _toArraySlice(s)
+            c = _toArraySlice(c)
+            c = slice(c.start, slice_stop(c), c.step)
             if c.step != s.step:
                 msg = "expecting step for chunk selection to be the same as data selection"
                 raise ValueError(msg)
@@ -563,7 +601,7 @@ def getDataCoverage(chunk_id, slices, layout):
             if include_pt:
                 data_pts.append(i)
 
-    return tuple(sel)
+    return selections.select(selection.mshape, tuple(sel))
 
 
 def getChunkRelativePoint(chunkCoord, point):
@@ -612,13 +650,19 @@ class ChunkIterator:
     def __init__(self, dset_id, selection, layout):
         self._prefix = "c-" + dset_id[2:]
         self._layout = layout
+        if not isinstance(selection, selections.Selection):
+            msg = "Expected selection.Selection type"
+            log.warning(msg)
+            raise ValueError(msg)
+        if selection.select_type != selections.H5S_SEL_HYPERSLABS:
+            msg = "Expected hyperslab selection"
+            log.warning(msg)
+            raise ValueError(msg)
         self._selection = selection
-        self._rank = len(selection)
-        self._chunk_index = [
-            0,
-        ] * self._rank
+        self._rank = len(selection.shape)
+        self._chunk_index = [0,] * self._rank
         for i in range(self._rank):
-            s = selection[i]
+            s = selection.slices[i]
             c = layout[i]
             self._chunk_index[i] = s.start // c
 
@@ -626,7 +670,8 @@ class ChunkIterator:
         return self
 
     def next(self):
-        if self._chunk_index[0] * self._layout[0] >= self._selection[0].stop:
+        slices = self._selection.slices
+        if self._chunk_index[0] * self._layout[0] >= slices[0].stop:
             # ran past the last chunk, end iteration
             raise StopIteration()
         chunk_id = self._prefix
@@ -639,7 +684,7 @@ class ChunkIterator:
         dim = self._rank - 1
         while dim >= 0:
             c = self._layout[dim]
-            s = self._selection[dim]
+            s = slices[dim]
             self._chunk_index[dim] += 1
 
             chunk_end = self._chunk_index[dim] * c
@@ -655,11 +700,18 @@ class ChunkIterator:
         return chunk_id
 
 
-def chunkReadSelection(chunk_arr, slices=None, select_dt=None):
+def chunkReadSelection(chunk_arr, selection=None, select_dt=None):
     """
     Return data from requested chunk and selection
     """
     log.debug("chunkReadSelection")
+
+    if selection is None:
+        selection = selections.select(chunk_arr.shape, ...)
+    if not isinstance(selection, selections.Selection):
+        msg = "Expected selection.Selection type"
+        log.warning(msg)
+        raise ValueError(msg)
 
     dims = chunk_arr.shape
     log.debug(f"got chunk dims: {dims}")
@@ -668,8 +720,8 @@ def chunkReadSelection(chunk_arr, slices=None, select_dt=None):
         msg = "No dimension passed to chunkReadSelection"
         raise ValueError(msg)
 
-    log.debug(f"got selection: {slices}")
-    slices = tuple(slices)
+    log.debug(f"got selection: {selection}")
+    slices = toNumpyIndex(selection)
 
     if select_dt is None:
         # no field selection
@@ -705,12 +757,22 @@ def chunkReadSelection(chunk_arr, slices=None, select_dt=None):
     return output_arr
 
 
-def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
+def chunkWriteSelection(chunk_arr=None, selection=None, data=None):
     """
     Write data for requested chunk and selection
     """
 
-    log.debug(f"chunkWriteSelection for slices: {slices}")
+    if selection is None:
+        selection = selections.select(chunk_arr.shape, ...)
+    if not isinstance(selection, selections.Selection):
+        msg = "Expected selection.Selection type"
+        log.warning(msg)
+        raise ValueError(msg)
+    if len(selection.shape) != len(chunk_arr.shape):
+        msg = "Selection rank does not match dataset rank"
+        log.error(msg)
+        raise ValueError(msg)
+    log.debug(f"chunkWriteSelection for selection: {selection}")
     dims = chunk_arr.shape
 
     rank = len(dims)
@@ -719,10 +781,7 @@ def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
         msg = "No dimension passed to chunkWriteSelection"
         log.error(msg)
         raise ValueError(msg)
-    if len(slices) != rank:
-        msg = "Selection rank does not match dataset rank"
-        log.error(msg)
-        raise ValueError(msg)
+
     if len(data.shape) != rank:
         msg = "Input arr does not match dataset rank"
         log.error(msg)
@@ -737,6 +796,7 @@ def chunkWriteSelection(chunk_arr=None, slices=None, data=None):
             log.debug("ChunkWriteSelection for all fields")
 
     updated = False
+    slices = toNumpyIndex(selection)
     try:
         if field_update:
             arr = chunk_arr[slices]
@@ -922,424 +982,3 @@ def chunkWritePoints(chunk_id=None,
             val = tuple(chunk_val)  # this will get written back
 
         chunk_arr[coord] = val  # update the point
-
-
-def _getWhereFieldName(query):
-    """
-    Get the field name for a where clause.
-    Returns None if no where statement
-    """
-    if query.startswith("where "):
-        i = len("where ")
-    else:
-        i = query.find(" where ")
-        if i > 0:
-            i += len(" where ")
-    if i < 0:
-        # no where statement
-        return None
-
-    field_name = ""
-    end_quote_char = None
-    while i < len(query):
-        ch = query[i]
-        i += 1
-        if end_quote_char and ch == end_quote_char:
-            # end of variable
-            end_quote_char = None
-            break
-        elif ch in ("'", '"'):
-            end_quote_char = ch
-            continue
-        if field_name and not ch.isalnum() and not ch == "_" and not end_quote_char:
-            # end of variable
-            break
-        if end_quote_char or ch.isalnum() or ch == "_":
-            field_name += ch
-    if not field_name:
-        # got a where keyword, but no field name
-        raise ValueError("query where with no fieldname")
-    if end_quote_char:
-        raise ValueError("unclosed quote")
-
-    return field_name
-
-
-def _getWhereElements(query):
-    """
-    Get the values from a where clause
-    """
-
-    n = query.find(" in ")
-    if n < 0:
-        raise ValueError("where query with no 'in' keyword")
-    n += 4  # advance past " in "
-    elements = []
-    i = query[n:].find("(")
-    if i < 0:
-        raise ValueError("where in query with no '(' character)")
-    i += n + 1  # advance past '('
-
-    end_quote_char = None
-    s = None
-
-    while i < len(query):
-        ch = query[i]
-        i += 1
-        if end_quote_char and ch == end_quote_char:
-            # end of variable
-            end_quote_char = None
-            if s is None:
-                s = ""
-            elements.append(s)
-            s = None
-            continue
-        if ch in ("'", '"'):
-            end_quote_char = ch
-            if s == "b":
-                # use bytes not str
-                s = b''
-            else:
-                s = ""
-            continue
-        if ch == ",":
-            if s is not None:
-                elements.append(s)
-                s = None
-            continue
-        if ch == ")":
-            if end_quote_char:
-                raise ValueError("unclosed quote in 'where in' list")
-            if s is not None:
-                elements.append(s)
-            break
-        if ch.isspace():
-            if end_quote_char:
-                if isinstance(s, bytes):
-                    ch = ch.encode('utf8')
-                s += ch
-            continue
-        # anything else, just add to our variable
-        if isinstance(s, bytes):
-            ch = ch.encode('utf8')
-        if s is None:
-            s = ch
-        else:
-            s += ch
-
-    if end_quote_char:
-        raise ValueError("unclosed quote")
-
-    return elements
-
-
-def _getEvalStr(query, arr_name, field_names):
-    """
-    _getEvalStr: Get eval string for given query
-    Gets Eval string to use with numpy where method.
-    """
-    i = 0
-    eval_str = ""
-    var_name = None
-    end_quote_char = None
-    var_count = 0
-    paren_count = 0
-    black_list = ("import",)  # field names that are not allowed
-    for item in black_list:
-        if item in field_names:
-            msg = "invalid field name"
-            log.warn(f"Bad query: {msg}")
-            raise ValueError(msg)
-
-    if query.startswith("where "):
-        # no eval, return None
-        return None
-    # strip off any where clause after the query
-    n = query.find(" where ")
-
-    where_field = None
-    if n > 0:
-        where_field = _getWhereFieldName(query)
-        log.debug(f"where field: [{where_field}]")
-        log.debug(f"query orig: {query}")
-        query = query[:n]
-        log.debug(f"query adjusted: {query}")
-
-    while i < len(query):
-        ch = query[i]
-        if (i + 1) < len(query):
-            ch_next = query[i + 1]
-        else:
-            ch_next = None
-        if var_name and not ch.isalnum() and not ch == "_":
-            # end of variable
-            if var_name not in field_names:
-                # invalid
-                msg = f"query variable: {var_name}"
-                log.warn("Bad query: " + msg)
-                raise ValueError(msg)
-            eval_str += arr_name + "['" + var_name + "']"
-            var_name = None
-            var_count += 1
-
-        if end_quote_char:
-            if ch == end_quote_char:
-                # end of literal
-                end_quote_char = None
-            eval_str += ch
-        elif ch in ("'", '"'):
-            end_quote_char = ch
-            eval_str += ch
-        elif ch.isalnum() or ch == "_":
-            if ch == "b" and ch_next in ("'", '"'):
-                eval_str += "b"  # start of a byte string literal
-            elif var_name is None:
-                if ch.isalpha():
-                    var_name = ch  # start of a variable
-                else:
-                    eval_str += ch  # assume a numeric value
-            else:
-                var_name += ch
-        elif ch == "(" and end_quote_char is None:
-            paren_count += 1
-            eval_str += ch
-        elif ch == ")" and end_quote_char is None:
-            paren_count -= 1
-            if paren_count < 0:
-                msg = "Mismatched paren"
-                log.warn("Bad query: " + msg)
-                raise ValueError(msg)
-            eval_str += ch
-        else:
-            # just add to eval_str
-            eval_str += ch
-        i = i + 1
-    if end_quote_char:
-        msg = "no matching quote character"
-        log.warn("Bad Query: " + msg)
-        raise ValueError(msg)
-    if var_count == 0:
-        msg = "No field value"
-        log.warn("Bad query: " + msg)
-        raise ValueError(msg)
-    if paren_count != 0:
-        msg = "Mismatched paren"
-        log.warn("Bad query: " + msg)
-        raise ValueError(msg)
-    return eval_str
-
-
-def getQueryDtype(dt):
-    """make a dtype for query response"""
-    field_names = dt.names
-    #  make up a index field name that doesn't conflict with existing names
-    index_name = "index"
-    for i in range(len(field_names)):
-        if index_name in field_names:
-            index_name = "_" + index_name
-        else:
-            break
-
-    dt_fields = [(index_name, "uint64"), ]
-    for i in range(len(dt)):
-        dt_fields.append((dt.names[i], dt[i]))
-    query_dt = np.dtype(dt_fields)
-
-    return query_dt
-
-
-def chunkQuery(
-    chunk_id=None,
-    chunk_layout=None,
-    chunk_arr=None,
-    slices=None,
-    query=None,
-    query_update=None,
-    select_dt=None,
-    limit=0,
-):
-    """
-    Run query on chunk and selection
-    """
-    msg = f"chunkQuery - chunk_id: {chunk_id} query: [{query}] slices: {slices}, limit: {limit}"
-    log.debug(msg)
-
-    if not isinstance(chunk_arr, np.ndarray):
-        raise TypeError("unexpected array type")
-
-    dims = chunk_arr.shape
-
-    rank = len(dims)
-
-    dset_dt = chunk_arr.dtype
-    if select_dt is None:
-        select_dt = dset_dt
-
-    if rank != 1:
-        msg = "Query operations only supported on one-dimensional datasets"
-        log.error(msg)
-        raise ValueError(msg)
-
-    if not slices:
-        slices = [slice(0, dims[0], 1), ]
-    log.debug(f"chunkQuery slices: {slices}")
-    if len(slices) != rank:
-        msg = "Selection rank does not match shape rank"
-        log.error(msg)
-        raise ValueError(msg)
-    slices = tuple(slices)
-    chunk_sel = chunk_arr[slices]
-
-    chunk_coord = getChunkCoordinate(chunk_id, chunk_layout)
-
-    # do query selection
-    field_names = dset_dt.names
-
-    # get the eval str
-    eval_str = _getEvalStr(query, "chunk_sel", field_names)
-    if eval_str:
-        log.debug(f"eval_str: {eval_str}")
-    else:
-        log.debug("no eval_str")
-
-    # check for a where in statement
-    where_field = _getWhereFieldName(query)
-    if where_field:
-        log.debug(f"where_field: {where_field}")
-        if where_field not in field_names:
-            msg = f"where field {where_field} is not a member of dataset type"
-            raise ValueError(msg)
-        where_elements = _getWhereElements(query)
-        if not where_elements:
-            msg = "query: where key word with no elements"
-            raise ValueError(msg)
-        # convert to ndarray, checking that we can convert to our dtype along the way
-        try:
-            where_elements_arr = np.array(where_elements, dtype=dset_dt[where_field])
-        except ValueError:
-            msg = "where elements are not compatible with field datatype"
-            raise ValueError(msg)
-        isin_mask = np.isin(chunk_sel[where_field], where_elements_arr)
-
-        if not np.any(isin_mask):
-            # all false
-            log.debug("query - no rows found for where elements")
-            return None
-
-        isin_indices = np.where(isin_mask)
-        if not isinstance(isin_indices, tuple):
-            log.warn(f"expected where_indices of tuple but got: {type(isin_indices)}")
-            return None
-        if len(isin_indices) == 0:
-            log.warn("chunkQuery - got empty tuple where in result")
-            return None
-
-        isin_indices = isin_indices[0]
-        if not isinstance(isin_indices, np.ndarray):
-            log.warn(f"expected isin_indices of ndarray but got: {type(isin_indices)}")
-            return None
-        nrows = isin_indices.shape[0]
-    elif eval_str:
-        log.debug("no where keyword")
-        isin_indices = None
-    else:
-        log.warn("query  - no eval and no where in, returning None")
-        return None
-
-    if query_update:
-        if where_field:
-            msg = "query update is not supported with where in"
-            raise ValueError(msg)
-        replace_mask = [None,] * len(field_names)
-        for i in range(len(field_names)):
-            field_name = field_names[i]
-            if field_name in query_update:
-                replace_mask[i] = query_update[field_name]
-        log.debug(f"chunkQuery - replace_mask: {replace_mask}")
-        replace_fields = [None, ] * len(field_names)
-        if replace_mask == replace_fields:
-            msg = "chunkQuery - no fields found in query_update"
-            raise ValueError(msg)
-    else:
-        replace_mask = None
-
-    if eval_str:
-        where_indices = np.where(eval(eval_str))
-        if not isinstance(where_indices, tuple):
-            log.warn(f"expected where_indices of tuple but got: {type(where_indices)}")
-            return None
-        if len(where_indices) == 0:
-            log.warn("chunkQuery - got empty tuple where result")
-            return None
-
-        where_indices = where_indices[0]
-        if not isinstance(where_indices, np.ndarray):
-            log.warn(f"expected where_indices of ndarray but got: {type(where_indices)}")
-            return None
-        nrows = where_indices.shape[0]
-        log.debug(f"chunkQuery - {nrows} where rows found")
-    else:
-        where_indices = None
-
-    if isin_indices is None:
-        pass  # skip intersection
-    else:
-        if where_indices is None:
-            # just use the isin_indices
-            where_indices = isin_indices
-        else:
-            # interest the two sets of indices
-            intersect = np.intersect1d(where_indices, isin_indices)
-
-            nrows = intersect.shape[0]
-            if nrows == 0:
-                log.debug("chunkQuery - no rows found after intersect with is in")
-                return None
-            else:
-                log.debug(f"chunkQuery - intersection, {nrows} found")
-            # use the intsection as our new where index
-            where_indices = intersect
-
-    if limit > 0 and nrows > limit:
-        # truncate to limit rows
-        log.debug(f"limiting  response to {limit} rows")
-        where_indices = where_indices[:limit]
-        nrows = limit
-
-    where_result = chunk_sel[where_indices].copy()
-
-    if replace_mask and nrows > 0:
-        log.debug(f"apply replace_mask: {replace_mask}")
-        for i in range(len(field_names)):
-            field = field_names[i]
-            if replace_mask[i] is not None:
-                where_result[field] = replace_mask[i]
-        # update source array
-        for i in range(nrows):
-            index = where_indices[i]
-            row = where_result[i]
-            chunk_arr[index] = row
-
-    # adjust the index to correspond with the dataset
-    s = slices[0]
-    if s.step is None:
-        s = slice(s.start, s.stop, 1)
-    start = s.start + chunk_coord[0]
-    if start > 0:
-        # can just increment every value by same amount
-        where_indices += start
-    if s.step and s.step > 1:
-        for i in range(nrows):
-            where_indices[i] = where_indices[i] + (s.step - 1) * i
-
-    dt_rsp = getQueryDtype(select_dt)
-    # construct response array
-    rsp_arr = np.zeros((nrows,), dtype=dt_rsp)
-    field_names = select_dt.names
-    for field in field_names:
-        rsp_arr[field] = where_result[field]
-    index_name = dt_rsp.names[0]
-    rsp_arr[index_name] = where_indices
-    log.debug(f"chunkQuery returning {len(rsp_arr)} rows")
-
-    return rsp_arr

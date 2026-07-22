@@ -29,6 +29,7 @@ from h5json.objid import getRootObjId, isRootObjId
 from h5json.shape_util import getShapeDims
 from h5json.dset_util import getChunkDims, getDatasetLayoutClass
 from h5json.time_util import getNow
+from h5json import selections
 
 from .util.nodeUtil import getDataNodeUrl
 from .util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
@@ -771,8 +772,8 @@ async def run_chunk_initializer(
     slices = []
     for dim in range(rank):
         slices.append(slice(0, dims[dim], 1))
-    slices = tuple(slices)
-    chunk_selection = getChunkSelection(chunk_id, slices, layout)
+    selection = selections.select(tuple(dims), tuple(slices))
+    chunk_selection = getChunkSelection(chunk_id, selection, layout)
     log.debug(f"got chunk_selection: {chunk_selection}")
     select = getSliceQueryParam(chunk_selection)
     select_arg = f"--select={select}"

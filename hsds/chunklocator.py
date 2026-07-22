@@ -8,7 +8,7 @@ from . import hsds_logger as log
 from h5json.time_util import getNow
 from h5json.array_util import bytesArrayToList, getNumElements
 
-from .util.dsetUtil import getSelectionList, getSelectionShape
+from .util.dsetUtil import getSelectionList
 
 
 def get_cmd_options():
@@ -135,13 +135,14 @@ def get_storage_info(dset, select=None):
 
     if select:
         slices = getSelectionList(select, chunktable_dims)
+        arr_shape = slices.mshape
     else:
         slices = []
         for i in range(rank):
             slices.append(slice(0, chunktable_dims[i]))
+        arr_shape = tuple(chunktable_dims[i] for i in range(rank))
 
     log.debug(f"got slices: {slices}")
-    arr_shape = getSelectionShape(slices)
     log.debug(f"arr_shape: {arr_shape}")
 
     dtype = get_chunktable_dtype()
