@@ -280,6 +280,15 @@ async def request_read(request, count=None) -> bytes:
     return bytes(body)
 
 
+def _addTraceHeader(kwargs):
+    """Add a traceparent header to outgoing request kwargs when the current
+    request has a trace context (see hsds_logger.newTraceContext), so log
+    lines can be correlated across SN and DN nodes."""
+    traceparent = log.getTraceParent()
+    if traceparent:
+        kwargs["headers"] = {"traceparent": traceparent}
+
+
 async def http_get(app, url, params=None, client=None):
     """
     Helper function  - async HTTP GET
@@ -289,10 +298,11 @@ async def http_get(app, url, params=None, client=None):
         client = get_http_client(app, url=url)
     url = get_http_std_url(url)
     status_code = None
-    timeout = config.get("timeout")
+    kwargs = {"params": params, "timeout": config.get("timeout")}
+    _addTraceHeader(kwargs)
     # TBD: use read_bufsize parameter to optimize read for large responses
     try:
-        async with client.get(url, params=params, timeout=timeout) as rsp:
+        async with client.get(url, **kwargs) as rsp:
             log.info(f"http_get status: {rsp.status} for req: {url}")
             status_code = rsp.status
             if rsp.status == 200:
@@ -366,6 +376,7 @@ async def http_post(app, url, data=None, params=None, client=None):
         kwargs["timeout"] = timeout
     if params:
         kwargs["params"] = params
+    _addTraceHeader(kwargs)
 
     try:
         async with client.post(url, **kwargs) as rsp:
@@ -439,6 +450,7 @@ async def http_put(app, url, data=None, params=None, client=None):
     timeout = config.get("timeout")
     if timeout:
         kwargs["timeout"] = timeout
+    _addTraceHeader(kwargs)
 
     try:
         async with client.put(url, **kwargs) as rsp:
@@ -501,6 +513,7 @@ async def http_delete(app, url, data=None, params=None, client=None):
         kwargs["timeout"] = timeout
     if params:
         kwargs["params"] = params
+    _addTraceHeader(kwargs)
 
     try:
         async with client.delete(url, **kwargs) as rsp:
