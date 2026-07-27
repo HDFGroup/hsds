@@ -5,7 +5,7 @@ aiofiles
 azure-storage-blob
 cryptography
 h5py>=3.6.0
-hdf5-json>1.0.0
+git+https://github.com/HDFGroup/hdf5-json.git@abstract#egg=h5json
 numcodecs
 numpy>=2.0.0rc1
 psutil
