@@ -84,6 +84,26 @@ spec:
       path: /metrics
 ```
 
+## Restricting external access to `/metrics` and `/info`
+
+`/metrics` and `/info` (and `/about`) expose operational detail — node topology,
+versions, cache and storage internals — that should be reachable by in-cluster scrapers
+but not from the public internet.
+
+These endpoints stay fully usable **inside the cluster**: a Prometheus Operator
+`PodMonitor` scrapes pod IPs directly, and any in-cluster client can reach the SN
+service at `hsds.<namespace>.svc.cluster.local:5101`. Neither path traverses the
+Ingress/Gateway, so locking down the public edge doesn't affect them. The DN container
+(`:6101`) is never placed in a Service, so it is only ever reachable in-cluster.
+
+Only the **north-south edge** (Ingress or Gateway) needs to block these paths and return
+`403` for external callers. Two example manifests route the public API (`/`,
+`/datasets/...`, etc.) to the `hsds` service while returning `403` for
+`^/(metrics|info|about)$`:
+
+- ingress-nginx + Ingress: [`admin/kubernetes/k8s_ingress_nginx.yml`](../admin/kubernetes/k8s_ingress_nginx.yml)
+- Gateway API + Envoy Gateway: [`admin/kubernetes/k8s_gateway_envoy.yml`](../admin/kubernetes/k8s_gateway_envoy.yml)
+
 ## Suggested alerts
 
 ```yaml
