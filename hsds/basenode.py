@@ -408,7 +408,8 @@ async def healthCheck(app):
 
     while True:
         try:
-            await doHealthCheck(app, chaos_die=chaos_die)
+            with metrics.housekeeping("health_check"):
+                await doHealthCheck(app, chaos_die=chaos_die)
         except Exception as e:
             msg = f"Unexpected {e.__class__.__name__} exception in "
             msg += f"doHealthCheck: {e}"

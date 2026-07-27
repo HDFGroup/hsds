@@ -13,6 +13,8 @@
 # Prometheus metrics exporter - serves /metrics in text exposition format
 #
 import asyncio
+import contextlib
+import time
 
 from aiohttp import web
 from prometheus_client import (
@@ -20,6 +22,7 @@ from prometheus_client import (
     REGISTRY,
     CollectorRegistry,
     Counter,
+    Gauge,
     Histogram,
     generate_latest,
 )
@@ -34,35 +37,130 @@ _CACHES = ("meta_cache", "chunk_cache", "domain_cache")
 _STORAGE_STATS = ("s3_stats", "azure_stats", "file_stats")
 
 
-def _make_http_metrics():
-    requests = Counter(
-        "hsds_http_requests",
-        "HTTP requests by method and status",
-        ["method", "status"],
-    )
-    duration = Histogram(
-        "hsds_http_request_duration_seconds",
-        "HTTP request latency",
-        buckets=BUCKETS,
-    )
-    return requests, duration
+def _make_metrics():
+    """create the counters/gauges/histograms held in the default registry"""
+    return {
+        "http_requests": Counter(
+            "hsds_http_requests",
+            "HTTP requests by method and status",
+            ["method", "status"],
+        ),
+        "http_duration": Histogram(
+            "hsds_http_request_duration_seconds",
+            "HTTP request latency",
+            buckets=BUCKETS,
+        ),
+        "internal_requests": Counter(
+            "hsds_internal_requests",
+            "Internal (SN->DN) requests by method and status",
+            ["method", "status"],
+        ),
+        "internal_duration": Histogram(
+            "hsds_internal_request_duration_seconds",
+            "Internal (SN->DN) request latency",
+            buckets=BUCKETS,
+        ),
+        "crawler_queue": Gauge(
+            "hsds_crawler_queue_depth",
+            "Items waiting in crawler queues",
+            ["crawler"],
+        ),
+        "crawler_workers": Gauge(
+            "hsds_crawler_active_workers",
+            "Crawler worker tasks currently processing an item",
+            ["crawler"],
+        ),
+        "housekeeping_last_success": Gauge(
+            "hsds_housekeeping_last_success_timestamp_seconds",
+            "Unix time a housekeeping task last completed successfully",
+            ["task"],
+        ),
+        "housekeeping_duration": Histogram(
+            "hsds_housekeeping_duration_seconds",
+            "Housekeeping task run time",
+            ["task"],
+            buckets=BUCKETS,
+        ),
+    }
 
 
-HTTP_REQUESTS, HTTP_DURATION = _make_http_metrics()
+_METRICS = _make_metrics()
 
 
 def reset():
-    """re-create the http metrics with zeroed counts"""
-    global HTTP_REQUESTS, HTTP_DURATION
-    REGISTRY.unregister(HTTP_REQUESTS)
-    REGISTRY.unregister(HTTP_DURATION)
-    HTTP_REQUESTS, HTTP_DURATION = _make_http_metrics()
+    """re-create metrics with zeroed counts (used by tests)"""
+    global _METRICS
+    for collector in _METRICS.values():
+        REGISTRY.unregister(collector)
+    _METRICS = _make_metrics()
 
 
 def observe_request(method, status, duration):
     """record one completed http request"""
-    HTTP_REQUESTS.labels(method=method, status=str(int(status))).inc()
-    HTTP_DURATION.observe(duration)
+    _METRICS["http_requests"].labels(method=method, status=str(int(status))).inc()
+    _METRICS["http_duration"].observe(duration)
+
+
+def observe_internal_request(method, status, duration):
+    """record one completed internal SN->DN request"""
+    _METRICS["internal_requests"].labels(method=method, status=str(status)).inc()
+    _METRICS["internal_duration"].observe(duration)
+
+
+def make_trace_config():
+    """aiohttp TraceConfig that records outgoing (SN->DN) request metrics.
+
+    Attach to every ClientSession so internal fan-out is measured without touching
+    each call site.
+    """
+    from aiohttp import TraceConfig
+
+    async def on_start(session, ctx, params):
+        ctx.start = asyncio.get_event_loop().time()
+
+    async def on_end(session, ctx, params):
+        elapsed = asyncio.get_event_loop().time() - ctx.start
+        observe_internal_request(params.method, params.response.status, elapsed)
+
+    async def on_exception(session, ctx, params):
+        elapsed = asyncio.get_event_loop().time() - ctx.start
+        observe_internal_request(params.method, "error", elapsed)
+
+    trace_config = TraceConfig()
+    trace_config.on_request_start.append(on_start)
+    trace_config.on_request_end.append(on_end)
+    trace_config.on_request_exception.append(on_exception)
+    return trace_config
+
+
+def crawler_enqueued(crawler, n=1):
+    """record n items added to a crawler's queue"""
+    _METRICS["crawler_queue"].labels(crawler=crawler).inc(n)
+
+
+@contextlib.contextmanager
+def crawler_task(crawler):
+    """wrap processing of one dequeued item: queue depth down, worker busy for the
+    duration"""
+    _METRICS["crawler_queue"].labels(crawler=crawler).dec()
+    workers = _METRICS["crawler_workers"].labels(crawler=crawler)
+    workers.inc()
+    try:
+        yield
+    finally:
+        workers.dec()
+
+
+@contextlib.contextmanager
+def housekeeping(task):
+    """time an out-of-band task; advance its last-success timestamp only on clean
+    completion (a stuck/failing loop then shows up as a stale timestamp)"""
+    start = time.time()
+    try:
+        yield
+        _METRICS["housekeeping_last_success"].labels(task=task).set(time.time())
+    finally:
+        _METRICS["housekeeping_duration"].labels(task=task).observe(time.time() - start)
 
 
 @web.middleware

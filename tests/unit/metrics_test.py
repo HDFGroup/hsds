@@ -12,6 +12,7 @@
 import asyncio
 import sys
 import unittest
+from types import SimpleNamespace
 
 from aiohttp import web
 from aiohttp.test_utils import make_mocked_request
@@ -126,6 +127,66 @@ class MetricsTest(unittest.TestCase):
         samples = parse(metrics.render({}))
         self.assertEqual(samples['hsds_http_requests_total{method="GET",status="204"}'], 1)
         self.assertEqual(samples['hsds_http_requests_total{method="PUT",status="503"}'], 1)
+
+    def testInternalRequestMetrics(self):
+        metrics.observe_internal_request("GET", 200, 0.05)
+        metrics.observe_internal_request("GET", 200, 0.2)
+        metrics.observe_internal_request("PUT", "error", 2.0)
+        samples = parse(metrics.render({}))
+        self.assertEqual(samples['hsds_internal_requests_total{method="GET",status="200"}'], 2)
+        self.assertEqual(samples['hsds_internal_requests_total{method="PUT",status="error"}'], 1)
+        self.assertEqual(samples["hsds_internal_request_duration_seconds_count"], 3)
+        self.assertAlmostEqual(samples["hsds_internal_request_duration_seconds_sum"], 2.25)
+
+    def testTraceConfigRecordsInternalRequest(self):
+        async def run():
+            tc = metrics.make_trace_config()
+            ctx = SimpleNamespace()
+            await tc.on_request_start[0](None, ctx, SimpleNamespace())
+            params = SimpleNamespace(
+                method="GET", response=SimpleNamespace(status=200)
+            )
+            await tc.on_request_end[0](None, ctx, params)
+
+        asyncio.run(run())
+        samples = parse(metrics.render({}))
+        self.assertEqual(samples['hsds_internal_requests_total{method="GET",status="200"}'], 1)
+        self.assertEqual(samples["hsds_internal_request_duration_seconds_count"], 1)
+
+    def testCrawlerMetrics(self):
+        metrics.crawler_enqueued("chunk", 3)
+        with metrics.crawler_task("chunk"):
+            # one item in flight, two still waiting
+            samples = parse(metrics.render({}))
+            self.assertEqual(samples['hsds_crawler_active_workers{crawler="chunk"}'], 1)
+            self.assertEqual(samples['hsds_crawler_queue_depth{crawler="chunk"}'], 2)
+        samples = parse(metrics.render({}))
+        self.assertEqual(samples['hsds_crawler_active_workers{crawler="chunk"}'], 0)
+        self.assertEqual(samples['hsds_crawler_queue_depth{crawler="chunk"}'], 2)
+
+    def testHousekeepingSuccess(self):
+        with metrics.housekeeping("health_check"):
+            pass
+        samples = parse(metrics.render({}))
+        self.assertEqual(
+            samples['hsds_housekeeping_duration_seconds_count{task="health_check"}'], 1
+        )
+        self.assertGreater(
+            samples['hsds_housekeeping_last_success_timestamp_seconds{task="health_check"}'], 0
+        )
+
+    def testHousekeepingFailureLeavesLastSuccessUnset(self):
+        with self.assertRaises(ValueError):
+            with metrics.housekeeping("failing"):
+                raise ValueError("boom")
+        samples = parse(metrics.render({}))
+        # duration is still recorded, but last-success must NOT advance on failure
+        self.assertEqual(
+            samples['hsds_housekeeping_duration_seconds_count{task="failing"}'], 1
+        )
+        self.assertNotIn(
+            'hsds_housekeeping_last_success_timestamp_seconds{task="failing"}', samples
+        )
 
     def testMetricsHandler(self):
         async def run():

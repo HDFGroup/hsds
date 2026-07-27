@@ -35,6 +35,15 @@ onto what actually degrades an HSDS deployment:
 - **Log-level counters** — `hsds_log_events_total{level="WARN"|"ERROR"}` is a
   cheap catch-all: alerting on ERROR rate catches problems that have no
   dedicated metric yet.
+- **Async internals** — the HTTP middleware only sees top-level requests, so
+  three things it can't see are instrumented directly:
+  `hsds_internal_requests_total` / `hsds_internal_request_duration_seconds`
+  measure SN→DN fan-out (one client request can spawn hundreds of internal
+  calls), telling a slow DN apart from a slow SN; `hsds_crawler_queue_depth` /
+  `hsds_crawler_active_workers` expose crawler saturation (a growing queue with
+  workers pegged is overload *before* any 503); and
+  `hsds_housekeeping_last_success_timestamp_seconds` catches a stuck or dead
+  `healthCheck` loop.
 
 The default registry also provides `process_*` and `python_gc_*` metrics
 (CPU, RSS, FDs, GC) at no extra cost.
@@ -59,6 +68,12 @@ The default registry also provides `process_*` and `python_gc_*` metrics
 | `hsds_storage_errors_total` | counter | `backend` | storage client errors |
 | `hsds_storage_bytes_read_total` | counter | `backend` | bytes read from storage |
 | `hsds_storage_bytes_written_total` | counter | `backend` | bytes written to storage |
+| `hsds_internal_requests_total` | counter | `method`, `status` | internal SN→DN requests, via ClientSession TraceConfig |
+| `hsds_internal_request_duration_seconds` | histogram | | internal SN→DN request latency |
+| `hsds_crawler_queue_depth` | gauge | `crawler` (`chunk`/`domain`/`folder`) | items waiting in crawler queues |
+| `hsds_crawler_active_workers` | gauge | `crawler` | crawler workers currently processing an item |
+| `hsds_housekeeping_last_success_timestamp_seconds` | gauge | `task` | unix time a housekeeping task last succeeded |
+| `hsds_housekeeping_duration_seconds` | histogram | `task` | housekeeping task run time |
 
 ## Scraping on Kubernetes
 

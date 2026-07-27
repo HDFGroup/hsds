@@ -28,6 +28,7 @@ from aiohttp.client_exceptions import ClientError
 from hsds.util.idUtil import isValidUuid
 
 from .. import hsds_logger as log
+from .. import metrics
 from .. import config
 
 
@@ -211,7 +212,10 @@ def get_http_client(app, url=None, cache_client=True):
 
     if socket_path:
         log.info(f"Initiating UnixConnector with path: {socket_path}")
-        client = ClientSession(connector=UnixConnector(path=socket_path))
+        client = ClientSession(
+            connector=UnixConnector(path=socket_path),
+            trace_configs=[metrics.make_trace_config()],
+        )
         if cache_client:
             socket_clients[socket_path] = client
         log.info(f"Socket Ready: {socket_path}")
@@ -225,7 +229,10 @@ def get_http_client(app, url=None, cache_client=True):
         # read_buf_size = config.get("read_buf_size", default=10*1024*1024)
         # log.debug(f"setting read_buf_size to: {read_buf_size}")
         # kwargs['read_bufsize'] = read_buf_size
-        client = ClientSession(connector=TCPConnector(**kwargs))
+        client = ClientSession(
+            connector=TCPConnector(**kwargs),
+            trace_configs=[metrics.make_trace_config()],
+        )
         if cache_client:
             app["client"] = client
 
