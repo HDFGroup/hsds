@@ -2716,7 +2716,7 @@ class ValueTest(unittest.TestCase):
         # read a selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
         params = {"select": "[1234567:1234568]"}  # read 1 element, starting at index 1234567
-        params["nonstrict"] = 1  # allow use of aws lambda if configured
+        params["nonstrict"] = 1  # enable nonstrict mode
         rsp = self.session.get(req, params=params, headers=headers)
         if rsp.status_code == 404:
             print(f"s3object: {s3path} not found, skipping {test_name}")
@@ -2881,7 +2881,7 @@ class ValueTest(unittest.TestCase):
         params = {
             "select": "[1234567:1234568]"
         }  # read 1 element, starting at index 1234567
-        params["nonstrict"] = 1  # enable SN to invoke lambda func
+        params["nonstrict"] = 1  # enable nonstrict mode
         rsp = self.session.get(req, params=params, headers=headers)
 
         self.assertEqual(rsp.status_code, 200)
@@ -3063,7 +3063,7 @@ class ValueTest(unittest.TestCase):
         params = {
             "select": "[1234567:1234568]"
         }  # read 1 element, starting at index 1234567
-        params["nonstrict"] = 1  # enable SN to invoke lambda func
+        params["nonstrict"] = 1  # enable nonstrict mode
         rsp = self.session.get(req, params=params, headers=headers)
 
         if rsp.status_code == 404:
@@ -3199,7 +3199,7 @@ class ValueTest(unittest.TestCase):
         params = {
             "select": "[1234567:1234568]"
         }  # read 1 element, starting at index 1234567
-        params["nonstrict"] = 1  # enable SN to invoke lambda func
+        params["nonstrict"] = 1  # enable nonstrict mode
 
         # read the selection
         rsp = self.session.get(req, params=params, headers=headers)
@@ -3266,7 +3266,7 @@ class ValueTest(unittest.TestCase):
         sel_start = 19_531_260  # 20_000_000 # 123_456_789
         sel_stop = sel_start + count
         params = {"select": f"[{sel_start}:{sel_stop}]"}  # read 10 elements
-        params["nonstrict"] = 1  # enable SN to invoke lambda func
+        params["nonstrict"] = 1  # enable nonstrict mode
 
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -3382,7 +3382,7 @@ class ValueTest(unittest.TestCase):
         start = 1234567
         stop = start + 10
         params = {"select": f"[{start}:{stop}]"}  # read 10 element, starting at index 1234567
-        params["nonstrict"] = 1  # enable SN to invoke lambda func
+        params["nonstrict"] = 1  # enable nonstrict mode
 
         # read the selection
         rsp = self.session.get(req, params=params, headers=headers)
@@ -3497,7 +3497,7 @@ class ValueTest(unittest.TestCase):
         col_index = 123
         # read 10 element, starting at index 1234
         params = {"select": f"[{start}:{stop}, {col_index}]"}
-        params["nonstrict"] = 1  # enable SN to invoke lambda func
+        params["nonstrict"] = 1  # enable nonstrict mode
 
         # read the selection
         rsp = self.session.get(req, params=params, headers=headers)
@@ -3616,7 +3616,7 @@ class ValueTest(unittest.TestCase):
         count = 10
         # read 10 element, starting at index (x,y,z)
         params = {"select": f"[{x}, {y}, {z}:{z + count}]"}
-        params["nonstrict"] = 1  # enable SN to invoke lambda func
+        params["nonstrict"] = 1  # enable nonstrict mode
 
         # read the selection
         rsp = self.session.get(req, params=params, headers=headers)
@@ -3725,7 +3725,7 @@ class ValueTest(unittest.TestCase):
         start = 1234567
         stop = start + 10
         params = {"select": f"[{start}:{stop}]"}  # read 10 element, starting at index 1234567
-        params["nonstrict"] = 1  # enable SN to invoke lambda func
+        params["nonstrict"] = 1  # enable nonstrict mode
 
         # read the selection
         rsp = self.session.get(req, params=params, headers=headers)

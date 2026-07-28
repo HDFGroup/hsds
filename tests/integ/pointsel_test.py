@@ -567,7 +567,7 @@ class PointSelTest(unittest.TestCase):
         points = [2, 3, 5, 7, 11, 13, 17, 19]
         body = {"points": points}
         # add nonstrict
-        params = {"nonstrict": 1}  # enable SN to invoke lambda func
+        params = {"nonstrict": 1}  # enable nonstrict mode
 
         rsp = self.session.post(
             req, params=params, data=json.dumps(body), headers=headers

@@ -13,12 +13,11 @@ Export environment variables as shown in "Sample .bashrc" below.
 8. Copy the file "passwd.default" to "passwd.txt".  Add any usernames/passwords you wish.  Modify existing passwords (for admin, test_user1, test_user2) for security.
 9. If group-level permissions are desired (See [Authorization](authorization.md)), copy the file "groups.default" to "groups.txt".  Modify existing groups as needed
 10. Create environment variables as in "Sample .bashrc" below
-11. Setup Lambda if desired.  See [AWS Lambda Setup](aws_lambda_setup.md)
-12. Create the file **admin/config/override.yml** for deployment specific settings (see "Sample override.yml")
-13. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 4)
-14. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
-15. Run `$ curl http://127.0.0.1:${SN_PORT}/about` and verify that "cluster_state" is "READY" (might need to give it a minute or two)
-16. Perform post install configuration.   See: [Post Install Configuration](post_install.md)
+11. Create the file **admin/config/override.yml** for deployment specific settings (see "Sample override.yml")
+12. Start the service `$./runall.sh <n>` where n is the number of containers desired (defaults to 4)
+13. Run `$ docker ps` and verify that the containers are running: hsds_head, hsds_sn_[1-n], hsds_dn_[1-n]
+14. Run `$ curl http://127.0.0.1:${SN_PORT}/about` and verify that "cluster_state" is "READY" (might need to give it a minute or two)
+15. Perform post install configuration.   See: [Post Install Configuration](post_install.md)
 
 
 Sample .bashrc

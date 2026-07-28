@@ -51,9 +51,6 @@ For complete instructions to install on AWS Kubernetes Service (EKS):
 
 - See: [docs/kubernetes_install_aws.md](docs/kubernetes_install_aws.md)
 
-For complete instructions to install on AWS Lambda:
-
-- See: [docs/aws_lambda_setup.md](docs/aws_lambda_setup.md).
 
 ### On Azure
 

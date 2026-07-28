@@ -33,7 +33,7 @@ from h5json.dset_util import getChunkDims, isExtensible
 from h5json import selections
 
 from .util.httpUtil import getHref, getAcceptType, getContentType
-from .util.httpUtil import request_read, jsonResponse, isAWSLambda
+from .util.httpUtil import request_read, jsonResponse
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.dsetUtil import getSelectionPagination, get_slices
@@ -67,8 +67,6 @@ def get_hrefs(request, dset_json):
 def use_http_streaming(request, rank):
     """ return boolean indicating whether http streaming should be used """
     if rank == 0:
-        return False
-    if isAWSLambda(request):
         return False
     if not config.get("http_streaming", default=True):
         return False
@@ -838,10 +836,6 @@ async def GET_Value(request):
         request_size *= item_size
     log.debug(f"request_size: {request_size}")
     max_request_size = int(config.get("max_request_size"))
-    if isAWSLambda(request):
-        # reduce max size to account for hex_encoding and other JSON content
-        max_request_size -= 1000
-        max_request_size /= 2
     if request_size >= max_request_size and not stream_pagination:
         msg = "GET value request too large"
         log.warn(msg)

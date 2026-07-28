@@ -101,7 +101,6 @@ class HsdsApp:
         sn_port=None,
         config_dir=None,
         readonly=False,
-        islambda=False,
     ):
         """
         Initializer for class
@@ -119,7 +118,6 @@ class HsdsApp:
         self._logfile = logfile
         self._loglevel = log_level
         self._readonly = readonly
-        self._islambda = islambda
         self._ready = False
         self._config_dir = config_dir
         self._cmd_dir = get_cmd_dir()
@@ -246,12 +244,6 @@ class HsdsApp:
         ]
         common_args.append(f"--dn_urls={dn_urls_arg}")
         common_args.append(f"--hsds_endpoint={self._endpoint}")
-        if self._islambda:
-            # base boto packages installed in AWS image conflicting with aiobotocore
-            # see: https://github.com/aio-libs/aiobotocore/issues/862
-            # This command line argument will tell the sub-processes to remove
-            # sitepackage libs from their path before importing aiobotocore
-            common_args.append("--removesitepackages")
         # common_args.append("--server_name=Direct Connect (HSDS)")
         if len(self._socket_paths) > 0:
             common_args.append("--use_socket")
