@@ -16,9 +16,9 @@ onto what actually degrades an HSDS deployment:
   on every request, including 4xx/5xx responses raised as exceptions. SN
   nodes return 503 when overloaded or when DNs are unreachable, so a rising
   `status="503"` rate is the primary "service is unhealthy" signal.
-- **Cluster membership** — `hsds_node_ready` and `hsds_active_dn_count`
+- **Cluster membership** — `hsds_node_ready` and `hsds_active_dns`
   detect nodes stuck outside `READY` and SNs that lost sight of DNs
-  (`hsds_active_dn_count` dropping below the expected DN count means reduced
+  (`hsds_active_dns` dropping below the expected DN count means reduced
   capacity even while requests still succeed).
 - **Saturation** — `hsds_tasks_active` vs `hsds_tasks_max`: when active
   asyncio tasks exceed `max_task_count`, SNs shed load with 503s. Watching
@@ -55,7 +55,7 @@ The default registry also provides `process_*` and `python_gc_*` metrics
 | `hsds_info` | gauge | `node_type`, `node_id`, `version` | node identity, useful for version rollout tracking |
 | `hsds_node_ready` | gauge | | 1 when node state is `READY` |
 | `hsds_start_time_seconds` | gauge | | node start time (restart detection) |
-| `hsds_active_dn_count` | gauge | | DN urls this node currently knows about |
+| `hsds_active_dns` | gauge | | DN urls this node currently knows about |
 | `hsds_tasks_active` | gauge | | current asyncio task count |
 | `hsds_tasks_max` | gauge | | task count above which SNs return 503 |
 | `hsds_http_requests_total` | counter | `method`, `status` | all HTTP requests, via middleware |
@@ -99,6 +99,37 @@ spec:
       path: /metrics
 ```
 
+Both discovery methods attach an `endpoint="sn"|"dn"` target label — the PodMonitor derives
+it from the port name. The Grafana dashboard and several example queries split by that label,
+so a scrape that does not set it (e.g. the bare `prometheus.io/scrape` annotation, which also
+only reaches the SN) will leave those panels empty.
+
+## Local testing with Docker Compose
+
+`admin/docker/docker-compose.metrics.yml` adds Prometheus and Grafana to any HSDS compose
+stack for local experimentation:
+
+```sh
+./build.sh --no-lint   # build the image from source (the published image may predate /metrics)
+export ROOT_DIR=/tmp/hsds-data BUCKET_NAME=hsds.test HSDS_ENDPOINT=http://localhost:5101
+mkdir -p $ROOT_DIR/$BUCKET_NAME
+docker compose -f admin/docker/docker-compose.posix.yml \
+               -f admin/docker/docker-compose.metrics.yml up -d --scale sn=1 --scale dn=2
+```
+
+Prometheus (<http://localhost:9090>) scrapes both node types via
+`admin/prometheus/prometheus.yml`, which relabels each job to the same `endpoint` label the
+PodMonitor produces. Grafana (<http://localhost:3000>, anonymous admin) ships with the
+Prometheus datasource pre-wired.
+
+## Grafana dashboard
+
+`admin/grafana/hsds-dashboard.json` is an "HSDS Internals" dashboard covering readiness,
+request rate/latency/errors, task-pool saturation, cache pressure, and storage throughput.
+It is exported in Grafana **schema v2** and requires **Grafana 12+**; import it through the UI
+(Dashboards → New → Import), as v2 dashboards cannot be loaded via file provisioning. It relies
+on the `endpoint` label described above.
+
 ## Restricting external access to `/metrics` and `/info`
 
 `/metrics` and `/info` (and `/about`) expose operational detail — node topology,
@@ -120,6 +151,9 @@ Only the **north-south edge** (Ingress or Gateway) needs to block these paths an
 - Gateway API + Envoy Gateway: [`admin/kubernetes/k8s_gateway_envoy.yml`](../admin/kubernetes/k8s_gateway_envoy.yml)
 
 ## Suggested alerts
+
+These rules are also shipped as `admin/prometheus/alert.rules.yml` (validated with
+`promtool check rules`):
 
 ```yaml
 groups:
@@ -147,4 +181,33 @@ groups:
       - alert: HsdsStorageErrors
         expr: rate(hsds_storage_errors_total[5m]) > 0
         for: 5m
+      # SN->DN fan-out failing: a different plane than HsdsHighErrorRate (client
+      # facing) or HsdsStorageErrors (object store). Catches the SN losing contact
+      # with DNs, or DNs shedding load internally, before it fully becomes client 503s.
+      - alert: HsdsInternalErrors
+        expr: >
+          sum(rate(hsds_internal_requests_total{status=~"error|5.."}[5m]))
+          / sum(rate(hsds_internal_requests_total[5m])) > 0.05
+        for: 10m
+      # healthCheck loop wedged/dead: the node still answers HTTP but has stopped
+      # reconciling DN membership. last_success only advances on a clean run, so a
+      # stuck loop shows up as a growing gap. The loop runs every node_sleep_time
+      # (default 10s), so >180s is ~18 missed cycles. The metric is absent until the
+      # first successful run (and in standalone mode, which has no health loop), so
+      # this complements HsdsNodeNotReady rather than replacing it.
+      - alert: HsdsHousekeepingStale
+        expr: time() - hsds_housekeeping_last_success_timestamp_seconds > 180
+        for: 1m
 ```
+
+The remaining new metrics are diagnostic (dashboard) rather than alerting signals:
+
+- `hsds_crawler_queue_depth` / `hsds_crawler_active_workers` — a deep queue is
+  normal for a large request (e.g. a selection spanning thousands of chunks), so a
+  threshold alert would be noisy. Sustained crawler saturation already surfaces via
+  `HsdsTaskSaturation` (crawler workers are asyncio tasks). Use these on a dashboard
+  to see *which* crawler is the bottleneck and whether workers are pegged at their
+  `max_tasks` ceiling.
+- `hsds_internal_request_duration_seconds` — slow DNs already trip
+  `HsdsSlowRequests`; this histogram tells you *why* by separating internal fan-out
+  latency from SN-side processing time.

@@ -215,7 +215,7 @@ class AppStateCollector:
 
         if "dn_urls" in app:
             yield GaugeMetricFamily(
-                "hsds_active_dn_count",
+                "hsds_active_dns",
                 "Data nodes this node currently knows about",
                 value=len(app["dn_urls"]),
             )

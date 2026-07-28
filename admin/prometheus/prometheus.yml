@@ -1,0 +1,33 @@
+# Example Prometheus scrape config for a local docker-compose HSDS deployment.
+#
+# On Kubernetes, prefer a Prometheus Operator PodMonitor (see docs/prometheus_metrics.md)
+# rather than this file. The important detail either way: each series is tagged with an
+# `endpoint="sn"|"dn"` label so dashboards can split by node type. The PodMonitor derives
+# that label from the port name (`- port: sn`); here we set it explicitly via relabeling.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alert.rules.yml
+
+scrape_configs:
+  # SN containers. docker compose DNS returns one A record per replica, so a single
+  # dns_sd entry discovers all `--scale sn=N` replicas.
+  - job_name: hsds-sn
+    dns_sd_configs:
+      - names: [sn]
+        type: A
+        port: 5101
+    relabel_configs:
+      - target_label: endpoint
+        replacement: sn
+
+  - job_name: hsds-dn
+    dns_sd_configs:
+      - names: [dn]
+        type: A
+        port: 6101
+    relabel_configs:
+      - target_label: endpoint
+        replacement: dn

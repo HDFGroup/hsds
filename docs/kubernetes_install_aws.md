@@ -130,9 +130,6 @@ If you need to build and deploy a custom HSDS image (e.g. you have made changes 
 
     - image: '1234567.dkr.ecr.us-east-1.amazonaws.com/hsds:v1' to reflect the ecr repository for deployment
 
-    Note: if just one pod will be used, this deployment: **\*k8s_deployment_aws_singleton.yml\*\***
-    can be used to provide multiple DN containers in one pod.
-
 5.  Apply the deployment: `kubectl apply -f admin/kubernetes/k8s_deployment_aws.yml`
 6.  Verify that the HSDS pod is running: `kubectl get pods` a pod with a name starting with hsds should be displayed with status as "Running".
 7.  Additional verification: Run (`kubectl describe pod hsds-xxxx`) and make sure everything looks OK

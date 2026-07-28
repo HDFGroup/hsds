@@ -80,7 +80,7 @@ class MetricsTest(unittest.TestCase):
         samples = parse(text)
         self.assertEqual(samples["hsds_node_ready"], 1)
         self.assertEqual(samples["hsds_start_time_seconds"], 1234567890)
-        self.assertEqual(samples["hsds_active_dn_count"], 2)
+        self.assertEqual(samples["hsds_active_dns"], 2)
         self.assertEqual(samples["hsds_tasks_max"], 100)
         self.assertIn('node_type="sn"', text)
         self.assertIn("hsds_tasks_active", text)

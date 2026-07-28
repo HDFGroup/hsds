@@ -1,0 +1,37 @@
+# Local monitoring overlay: adds Prometheus + Grafana to any HSDS compose stack.
+#
+#   ./build.sh --no-lint                 # build the HSDS image from this branch (has /metrics)
+#   docker compose \
+#     -f admin/docker/docker-compose.posix.yml \
+#     -f admin/docker/docker-compose.metrics.yml \
+#     up -d --scale sn=1 --scale dn=2
+#
+# Prometheus: http://localhost:9090   Grafana: http://localhost:3000 (anonymous admin)
+#
+# Grafana comes with the Prometheus datasource pre-wired. Import the dashboard by hand
+# (Dashboards -> New -> Import, paste admin/grafana/hsds-dashboard.json): it is Grafana
+# schema v2 and needs Grafana 12+, which does not support loading v2 via file provisioning.
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    restart: ${RESTART_POLICY}
+    ports:
+      - "9090:9090"
+    volumes:
+      - ${PWD}/admin/prometheus/:/etc/prometheus/
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: ${RESTART_POLICY}
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - ${PWD}/admin/docker/grafana/provisioning/:/etc/grafana/provisioning/
+    depends_on:
+      - prometheus
