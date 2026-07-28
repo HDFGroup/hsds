@@ -553,13 +553,15 @@ def baseInit(node_type):
     # setup log config
     log_level = config.get("log_level")
     prefix = config.get("log_prefix")
-    log_timestamps = config.get("log_timestamps", default=False)
+    log_timestamps = config.get("log_timestamps", default=True)
+    log_format = config.get("log_format", default="text")
 
     # Make stdout/stderr encoding consistent across all operating systems
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
-    log.setLogConfig(log_level, prefix=prefix, timestamps=log_timestamps)
+    kwargs = {"prefix": prefix, "timestamps": log_timestamps, "log_format": log_format}
+    log.setLogConfig(log_level, **kwargs)
 
     # create the app object
     log.info("Application baseInit")

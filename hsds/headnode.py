@@ -475,6 +475,12 @@ async def init():
 
     # set a bunch of global state
     app["id"] = createNodeId("head")
+    app["node_type"] = "head"
+    # the head node has no INITIALIZING->READY lifecycle (SN/DN register
+    # with it); it is ready as soon as it is listening.  Without this,
+    # log.request's admission check 503s the head's own status routes
+    # (e.g. /, /nodestate/{nodetype}, /nodeinfo/{statkey}).
+    app["node_state"] = "READY"
 
     bucket_name = config.get("bucket_name")
     if bucket_name:
