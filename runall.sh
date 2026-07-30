@@ -209,20 +209,21 @@ else
     docker compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
   fi
 
-  # wait for the server to be ready
+  # wait for the server to be up and reporting state READY
+  READY=
   for i in {1..120}
   do
-    STATUS_CODE=`curl -s -o /dev/null -w "%{http_code}" http://localhost:${SN_PORT}/about`
-    if [[ $STATUS_CODE == "200" ]]; then
+    if HSDS_ENDPOINT="http://localhost:${SN_PORT}" python3 tools/status_check.py --no-stream --quiet; then
       echo "service ready!"
+      READY=1
       break
     else
-      echo "${i}: waiting for server startup (status: ${STATUS_CODE}) "
+      echo "${i}: waiting for server startup"
       sleep 1
     fi
   done
 
-  if [[ $STATUS_CODE != "200" ]]; then
+  if [[ -z ${READY} ]]; then
     echo "service failed to start"
     echo "SN_1 logs:"
     docker logs --tail 100 hsds_sn_1
