@@ -55,6 +55,8 @@ security:
   - {}   # anonymous access is allowed for many read operations when the server has allow_noauth set
 
 tags:
+  - name: Status
+    description: Service/node status and health-check endpoints. Not domain-specific - no `domain` param is needed or used.
   - name: Domains
     description: Domain (HDF5-file-equivalent) and folder operations
   - name: ACLs
@@ -73,6 +75,174 @@ tags:
     description: Dataset data read/write (hyperslab, point, and query selection)
 
 paths:
+  /about:
+    get:
+      operationId: GetAbout
+      tags: [Status]
+      summary: Get service status and version info
+      description: |
+        Returns general information about the service as a whole (not a
+        specific node): overall cluster state, version, and node count.
+        This is the endpoint `tools/status_check.py` polls to determine
+        when the service has finished starting up (`state == "READY"`).
+
+        Authentication is optional. If `Authorization` is supplied it is
+        validated and the response reflects the authenticated user;
+        otherwise the response reports `username: "anonymous"`.
+      security: []
+      responses:
+        '200':
+          description: Service status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  start_time:
+                    type: integer
+                    description: Unix timestamp the service node started.
+                  state:
+                    type: string
+                    enum: [INITIALIZING, WAITING, READY, TERMINATING]
+                    description: Overall cluster readiness state.
+                  hsds_version: { type: string }
+                  name:
+                    type: string
+                    description: Configured server name (`server_name` config value).
+                  greeting: { type: string }
+                  about: { type: string }
+                  node_count:
+                    type: integer
+                    description: Number of DN nodes currently registered.
+                  dn_urls:
+                    type: array
+                    items: { type: string }
+                  dn_ids:
+                    type: array
+                    items: { type: string }
+                  username:
+                    type: string
+                    description: The authenticated username, or "anonymous" if no credentials were supplied.
+                  isadmin: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /info:
+    get:
+      operationId: GetInfo
+      tags: [Status]
+      summary: Get this node's state and resource usage
+      description: |
+        Returns state and OS-level resource usage (CPU, disk I/O, network
+        I/O) for the specific node that handles the request - unlike
+        `/about`, this reflects one node's local state, not the cluster
+        as a whole. No authentication is required or checked.
+      security: []
+      responses:
+        '200':
+          description: Node status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  node:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      type:
+                        type: string
+                        description: Node type - "sn" for the service node handling this request.
+                        enum: [sn, dn, head_node]
+                      start_time: { type: integer }
+                      state:
+                        type: string
+                        enum: [INITIALIZING, WAITING, READY, TERMINATING]
+                      node_number:
+                        type: integer
+                        description: Only present for `dn` nodes.
+                      node_count: { type: integer }
+                  cpu:
+                    type: object
+                    properties:
+                      percent: { type: number }
+                      cores: { type: integer }
+                  diskio:
+                    type: object
+                    properties:
+                      read_count: { type: integer }
+                      read_time: { type: integer }
+                      read_bytes: { type: integer }
+                      write_count: { type: integer }
+                      write_time: { type: integer }
+                      write_bytes: { type: integer }
+                  netio:
+                    type: object
+                    properties:
+                      bytes_sent:
+                        type: integer
+                        description: "Note: a source-level bug (hsds/basenode.py) assigns bytes_recv over this key immediately after setting it, so this actually reports received bytes, and sent-byte count is not exposed."
+                      packets_sent: { type: integer }
+                      packets_recv: { type: integer }
+                      errin: { type: integer }
+                      errout: { type: integer }
+                      dropin: { type: integer }
+                      dropout: { type: integer }
+                  memory:
+                    type: object
+                    properties:
+                      phys_total: { type: integer }
+                      phys_available: { type: integer }
+                      swap_total: { type: integer }
+                      swap_used: { type: integer }
+                      swap_free: { type: integer }
+                      percent: { type: number }
+                  disk:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      used: { type: integer }
+                      free: { type: integer }
+                      percent: { type: number }
+                  log_stats:
+                    type: object
+                    description: Count of log messages emitted, by level.
+                  req_count:
+                    type: integer
+                    description: Number of HTTP requests handled by this node so far.
+                  s3_stats:
+                    type: object
+                    description: Present only when using S3 storage.
+                  azure_stats:
+                    type: object
+                    description: Present only when using Azure Blob storage.
+                  meta_cache_stats:
+                    type: object
+                    description: Metadata object cache stats. Populated only on DN nodes - empty on SN/head.
+                    properties:
+                      count: { type: integer }
+                      dirty_count: { type: integer }
+                      utililization_per: { type: number }
+                      mem_used: { type: integer }
+                      mem_target: { type: integer }
+                  chunk_cache_stats:
+                    type: object
+                    description: Chunk data cache stats. Populated only on DN nodes - empty on SN/head.
+                    properties:
+                      count: { type: integer }
+                      dirty_count: { type: integer }
+                      utililization_per: { type: number }
+                      mem_used: { type: integer }
+                      mem_target: { type: integer }
+                  domain_cache_stats:
+                    type: object
+                    description: Domain object cache stats. Populated only on DN nodes - empty on SN/head.
+                    properties:
+                      count: { type: integer }
+                      dirty_count: { type: integer }
+                      utililization_per: { type: number }
+                      mem_used: { type: integer }
+                      mem_target: { type: integer }
+
   /:
     get:
       operationId: GetDomain

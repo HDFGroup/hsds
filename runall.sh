@@ -29,11 +29,12 @@ config_value() {
 
 # script to startup hsds service
 if [[ $# -eq 1 ]] && ([[ $1 == "-h" ]] || [[ $1 == "--help" ]]); then
-   echo "Usage: runall.sh [--no-docker] [--no-docker-tcp] [--stop] [--config] [dn_count] [sn_count]"
+   echo "Usage: runall.sh [--no-docker] [--no-docker-tcp] [--stop] [--config] [--swagger] [dn_count] [sn_count]"
    echo "  --no-docker: run server as set of processes rather than Docker containers (using unix sockets)"
    echo "  --no-docker-tcp: run server as set of processes rather than Docker containers (using tcp)"
    echo "  --stop: shutdown the server (Docker only)"
    echo "  --config: view config options"
+   echo "  --swagger: also launch a swagger-ui container configured to talk to the HSDS service (Docker only)"
    echo "  count: set number of DN processes/containers (default is 4)"
    exit 1
 fi
@@ -52,6 +53,8 @@ while [[ $# -gt 0 ]]; do
     export DOCKER_CMD="down"
   elif [[ $1 == "--config" ]]; then
     PRINT_CONFIG=1
+  elif [[ $1 == "--swagger" ]]; then
+    export SWAGGER=1
   elif  [[ -z ${DN_CORES} ]]; then
     export DN_CORES=$1
   else
@@ -59,6 +62,11 @@ while [[ $# -gt 0 ]]; do
   fi
   shift
 done
+
+if [[ ${NO_DOCKER} ]] && [[ ${SWAGGER} ]]; then
+  echo "--swagger is only supported with docker (not compatible with --no-docker or --no-docker-tcp)"
+  exit 1
+fi
 
 
 if [[ -z $CONFIG_DIR ]]; then
@@ -105,6 +113,10 @@ if [[ -z $SN_CORES ]]; then
   export SN_PORT_RANGE=$SN_PORT
 else
   export SN_PORT_RANGE=$SN_PORT-$((SN_PORT + SN_CORES - 1))
+fi
+
+if [[ ${SWAGGER} ]] && [[ -z ${SWAGGER_PORT} ]]; then
+  export SWAGGER_PORT=8080
 fi
 
 
@@ -199,14 +211,19 @@ if [[ $NO_DOCKER ]] ; then
   fi
   # this will run until server is killed by ^C
 else
+  COMPOSE_FILES="-f ${COMPOSE_FILE}"
+  if [[ ${SWAGGER} ]]; then
+    COMPOSE_FILES="${COMPOSE_FILES} -f admin/docker/docker-compose.swagger.yml"
+  fi
+
   if [[ $DOCKER_CMD == "down" ]]; then
-    # use the compose file to shutdown the sevice
-    echo "Running docker compose -f ${COMPOSE_FILE} down"
-    docker compose -f ${COMPOSE_FILE} down
+    # use the compose file(s) to shutdown the sevice
+    echo "Running docker compose ${COMPOSE_FILES} down"
+    docker compose ${COMPOSE_FILES} down
     exit 0  # can quit now
   else
-    echo "Running docker compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}"
-    docker compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
+    echo "Running docker compose ${COMPOSE_FILES} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}"
+    docker compose ${COMPOSE_FILES} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
   fi
 
   # wait for the server to be up and reporting state READY
@@ -228,5 +245,9 @@ else
     echo "SN_1 logs:"
     docker logs --tail 100 hsds_sn_1
     exit 1
+  fi
+
+  if [[ ${SWAGGER} ]]; then
+    echo "Swagger UI available at http://localhost:${SWAGGER_PORT}"
   fi
 fi
