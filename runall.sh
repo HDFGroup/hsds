@@ -115,7 +115,10 @@ else
   export SN_PORT_RANGE=$SN_PORT-$((SN_PORT + SN_CORES - 1))
 fi
 
-if [[ ${SWAGGER} ]] && [[ -z ${SWAGGER_PORT} ]]; then
+if [[ -z ${SWAGGER_PORT} ]]; then
+  # set even when --swagger isn't passed: the "down" path always
+  # references the swagger compose file too (see below), so this avoids
+  # a "variable not set" warning from docker compose in that case
   export SWAGGER_PORT=8080
 fi
 
@@ -217,11 +220,34 @@ else
   fi
 
   if [[ $DOCKER_CMD == "down" ]]; then
-    # use the compose file(s) to shutdown the sevice
-    echo "Running docker compose ${COMPOSE_FILES} down"
-    docker compose ${COMPOSE_FILES} down
+    # Always include the swagger compose file here, regardless of whether
+    # --swagger was passed to this invocation: there's no persisted record
+    # of whether the running cluster was started with --swagger, and
+    # `docker compose down` for a service that isn't running is a no-op,
+    # so this is the only reliable way to make sure a leftover
+    # swagger-ui container (which would otherwise keep the shared network
+    # in use and block its removal) actually gets torn down.
+    DOWN_COMPOSE_FILES="${COMPOSE_FILES}"
+    if [[ -z ${SWAGGER} ]]; then
+      DOWN_COMPOSE_FILES="${DOWN_COMPOSE_FILES} -f admin/docker/docker-compose.swagger.yml"
+    fi
+    echo "Running docker compose ${DOWN_COMPOSE_FILES} down"
+    docker compose ${DOWN_COMPOSE_FILES} down
     exit 0  # can quit now
   else
+    if [[ -z ${SWAGGER} ]]; then
+      # if a swagger-ui container from a previous --swagger run is still
+      # around, remove it explicitly rather than passing --remove-orphans
+      # to `docker compose up`: that flag's orphan cleanup can race with
+      # network setup for the scaled sn/dn services, leaving them stuck
+      # with "failed to set up container networking: network ... not
+      # found" errors.
+      swagger_container="${COMPOSE_PROJECT_NAME}-swagger-ui-1"
+      if docker ps -a --format '{{.Names}}' | grep -qx "${swagger_container}"; then
+        echo "removing orphaned ${swagger_container} container"
+        docker rm -f "${swagger_container}" >/dev/null
+      fi
+    fi
     echo "Running docker compose ${COMPOSE_FILES} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}"
     docker compose ${COMPOSE_FILES} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
   fi
@@ -231,7 +257,7 @@ else
   for i in {1..120}
   do
     if HSDS_ENDPOINT="http://localhost:${SN_PORT}" python3 tools/status_check.py --no-stream --quiet; then
-      echo "service ready!"
+      echo "HSDS ready at: http://localhost:${SN_PORT}"
       READY=1
       break
     else
