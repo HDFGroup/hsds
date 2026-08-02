@@ -419,7 +419,27 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(item[1], "1980.12.12")
         self.assertEqual(item[2], "AAPL")
 
+    @unittest.expectedFailure
     def testPutQuery(self):
+        """
+        Regression test for a known bug: PUT .../value with a `query`
+        parameter (query-based conditional update) is wired up end-to-end
+        at the SN, which forwards the query to the DN as part of a
+        PUT_Chunk request - but the DN's PUT_Chunk handler explicitly
+        raises HTTPNotImplemented for any query+update request (support
+        for this was dropped when the old chunkUtil.chunkQuery-based query
+        engine was replaced by h5json.query_util.arrayQuery, and was never
+        reimplemented for the write path). That 501 gets converted into a
+        generic 500 by the time it reaches this client, rather than
+        performing the update and returning the affected rows.
+
+        This test asserts the CORRECT/expected behavior once that gap is
+        fixed, and is marked as an expected failure until PUT_Chunk's query
+        path is implemented in hsds/chunk_dn.py. Once fixed, this test will
+        start passing and unittest will report it as an "unexpected
+        success" - that's the signal to remove the
+        @unittest.expectedFailure decorator.
+        """
         # Test PUT query for 1d dataset
         print("testPutQuery", self.base_domain)
 
@@ -501,8 +521,6 @@ class QueryTest(unittest.TestCase):
         rsp = self.session.put(
             req, params=params, data=json.dumps(update_value), headers=headers
         )
-        self.assertEqual(rsp.status_code, 500)  # put with query temporarily unsupported
-        """
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -585,7 +603,6 @@ class QueryTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         readData = rspJson["value"]
         self.assertEqual(len(readData), 0)
-        """
 
 
 if __name__ == "__main__":

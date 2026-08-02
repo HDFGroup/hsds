@@ -762,6 +762,13 @@ class DomainTest(unittest.TestCase):
         rsp = self.session.put(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 409)
 
+        # rescan doesn't make sense for a folder domain (no root group to
+        # scan) - should get a 400 rather than falling through to domain
+        # creation logic (which would 409 as above)
+        params = {"rescan": 1}
+        rsp = self.session.put(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
         # do a get on the new folder
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)

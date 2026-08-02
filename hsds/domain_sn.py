@@ -447,6 +447,13 @@ async def GET_Domain(request):
         log.warn(f"Invalid domain: {domain}")
         raise HTTPBadRequest(reason="Invalid domain name")
 
+    if not domain:
+        # no domain param/header given - use GET /domains to list
+        # top-level domains instead
+        msg = "No domain provided"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
     bucket = getBucketForDomain(domain)
     log.debug(f"GET_Domain domain: {domain} bucket: {bucket}")
 
@@ -466,16 +473,6 @@ async def GET_Domain(request):
     # include domain objects if requested
     if params.get("getobjs"):
         getobjs = True
-
-    if not domain:
-        log.info("no domain passed in, returning all top-level domains")
-        # no domain passed in, return top-level domains for this request
-        domains = await get_domains(request)
-        rsp_json = {"domains": domains}
-        rsp_json["hrefs"] = []
-        resp = await jsonResponse(request, rsp_json)
-        log.response(request, resp=resp)
-        return resp
 
     log.info(f"get domain: {domain}")
 
@@ -847,8 +844,13 @@ async def PUT_Domain(request):
         log.info(f"rescan for domain: {domain}")
         domain_json = await getDomainJson(app, domain, reload=True)
         log.debug(f"got domain_json: {domain_json}")
-        if "root" in domain_json:
-            # nothing to update for folders
+        if "root" not in domain_json:
+            # rescan only makes sense for domains with a root group -
+            # folder domains have nothing to scan
+            msg = f"rescan not supported for folder domain: {domain}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        else:
             root_id = domain_json["root"]
             if not isValidUuid(root_id, obj_class="groups"):
                 msg = f"domain: {domain} with invalid  root id: {root_id}"
@@ -857,7 +859,7 @@ async def PUT_Domain(request):
             if not isSchema2Id(root_id):
                 msg = "rescan not supported for v1 ids"
                 log.info(msg)
-                raise HTTPBadRequest(reashon=msg)
+                raise HTTPBadRequest(reason=msg)
             aclCheck(app, domain_json, "update", username)
             log.debug(f"notify_root: {root_id}")
             notify_req = getDataNodeUrl(app, root_id) + "/roots/" + root_id
@@ -1399,6 +1401,13 @@ async def PUT_ACL(request):
     bucket = getBucketForDomain(domain)
     if bucket:
         checkBucketAccess(app, bucket, action="write")
+
+    # use reload to get authoritative domain json
+    domain_json = await getDomainJson(app, domain, reload=True)
+
+    # validate that the requesting user has permission to update ACLs
+    # in this domain - throws exception if not authorized
+    aclCheck(app, domain_json, "updateACL", username)
 
     # don't use app["domain_cache"]  if a direct domain request is made
     # as opposed to an implicit request as with other operations, query
