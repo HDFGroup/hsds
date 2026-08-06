@@ -108,6 +108,8 @@ class FileClient:
             log.error(f"unexpected inc for file_stats: {inc}")
             return
 
+        file_stats[counter] += inc
+
     def getURIFromKey(self, key, bucket=None):
         """ return filesystem specific URI for given key and bucket """
         if not bucket:
@@ -173,6 +175,8 @@ class FileClient:
             msg = f"Unexpected Exception {type(e)} get get_object {key}: {e}"
             log.error(msg)
             raise HTTPInternalServerError()
+        if data and len(data) > 0:
+            self._file_stats_increment("bytes_in", inc=len(data))
         return data
 
     async def put_object(self, key, data, bucket=None):

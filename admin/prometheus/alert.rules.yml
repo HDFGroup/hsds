@@ -1,0 +1,42 @@
+groups:
+  - name: hsds
+    rules:
+      - alert: HsdsNodeNotReady
+        expr: hsds_node_ready == 0
+        for: 5m
+      - alert: HsdsHighErrorRate
+        expr: >
+          sum(rate(hsds_http_requests_total{status=~"5.."}[5m]))
+          / sum(rate(hsds_http_requests_total[5m])) > 0.05
+        for: 10m
+      - alert: HsdsSlowRequests
+        expr: >
+          histogram_quantile(0.99,
+            rate(hsds_http_request_duration_seconds_bucket[5m])) > 5
+        for: 10m
+      - alert: HsdsTaskSaturation
+        expr: hsds_tasks_active / hsds_tasks_max > 0.8
+        for: 5m
+      - alert: HsdsDirtyCacheGrowing
+        expr: sum by (pod) (hsds_cache_dirty_items) > 100
+        for: 15m
+      - alert: HsdsStorageErrors
+        expr: rate(hsds_storage_errors_total[5m]) > 0
+        for: 5m
+      # SN->DN fan-out failing: a different plane than HsdsHighErrorRate (client
+      # facing) or HsdsStorageErrors (object store). Catches the SN losing contact
+      # with DNs, or DNs shedding load internally, before it fully becomes client 503s.
+      - alert: HsdsInternalErrors
+        expr: >
+          sum(rate(hsds_internal_requests_total{status=~"error|5.."}[5m]))
+          / sum(rate(hsds_internal_requests_total[5m])) > 0.05
+        for: 10m
+      # healthCheck loop wedged/dead: the node still answers HTTP but has stopped
+      # reconciling DN membership. last_success only advances on a clean run, so a
+      # stuck loop shows up as a growing gap. The loop runs every node_sleep_time
+      # (default 10s), so >180s is ~18 missed cycles. The metric is absent until the
+      # first successful run (and in standalone mode, which has no health loop), so
+      # this complements HsdsNodeNotReady rather than replacing it.
+      - alert: HsdsHousekeepingStale
+        expr: time() - hsds_housekeeping_last_success_timestamp_seconds > 180
+        for: 1m

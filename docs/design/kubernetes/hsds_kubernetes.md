@@ -60,15 +60,7 @@ The following diagram illustrates the state transitions for ndoes:
 If external access to the HSDS is not needed (example it will only be using by other K8s applications),
 load balancing between the different SN nodes will be via the K8S ClusterIP internal load balancer.
 
-If external access is desired, an external load balancer will be used.  For AWS, the following annotations to the hsds service yaml can be used:
-
-    annotations:
-    # Note that the backend talks over HTTP.
-    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
-    # Incudes ARN of the certificate.
-    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: arn:aws:acm:region:acctid:certificate/load_balancer_id
-    # Only run SSL on the port named "https" below.
-    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
+If external access is desired, expose the `hsds` service through an Ingress or the Gateway API. This is also where you terminate TLS and restrict the internal endpoints (`/metrics`, `/info`, `/about`) so they return `403` for outside callers while staying reachable in-cluster. See [Restricting external access](../../prometheus_metrics.md#restricting-external-access-to-metrics-and-info) and the example manifests `admin/kubernetes/k8s_ingress_nginx.yml` (ingress-nginx) and `admin/kubernetes/k8s_gateway_envoy.yml` (Gateway API + Envoy Gateway).
 
 ## 6. Secrets
 
@@ -96,6 +88,94 @@ When enabled Cluster Autoscaling (CA) has the effect that more VMs will be launc
 
 Cluster Autoscaling by itself will not scale up the number of HSDS pods when either the number of clients is excessively high, or a few number of clients are triggering a significant amount of work (e.g. selection requests that span large number of chunks).  To resolve this issue we need to setup Horizontal Autoscaling (HA) that scales up or down the number of HSDS pods based on a specific criteria.
 
-Common metrics used with HA or CPU utilization or memory usaage, however for HSDS are better criteria would be when 503 (Server too busy) http responses are returned to the client.  Each HSDS node is configured to handle a specific number of inflight requests (defaulting to 100).  When this number is exceeded, a 503 response is returned.  Client libraries such as h5pyd know to use this as a signal to scale back the amount of requests being sent to HSDS. 
+Common metrics used with HA are CPU utilization or memory usage, however for HSDS a better criteria is when 503 (Server too busy) http responses are returned to the client.  Each HSDS node is configured to handle a specific number of inflight requests (`max_task_count`, defaulting to 100).  When this number is exceeded, a 503 response is returned.  Client libraries such as h5pyd know to use this as a signal to scale back the amount of requests being sent to HSDS.  Task saturation (`hsds_tasks_active / hsds_tasks_max`) is the same signal one step earlier, before any 503 is returned.
 
-This will require the development of a custom autoscaler for 503 responses along with the configuration of approriatte heuresitcs for scalee up and scale down.  Scale up events that exceed the cluster capacity (leaving pods in pending state), will trigger CA to scale up the number of machines.
+Both signals are now exported as Prometheus metrics (see [prometheus_metrics.md](../../prometheus_metrics.md)): `hsds_http_requests_total{status="503"}` and `hsds_tasks_active` / `hsds_tasks_max`.  This means the custom 503 autoscaler this section originally called for is **no longer needed** — a standard HPA or KEDA can consume these metrics directly.  Two approaches, simplest first:
+
+### 9.1 HPA with metrics-server (+ prometheus-adapter)
+
+**metrics-server** feeds CPU/memory to a plain `HorizontalPodAutoscaler`.  This is a coarse starting point (CPU rises under load) that needs no Prometheus:
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hsds
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hsds
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+```
+
+**prometheus-adapter** exposes the HSDS metrics through the `custom.metrics.k8s.io` API so the same HPA can scale on the real signal — the per-pod 503 rate:
+
+```yaml
+# prometheus-adapter rule (values.yaml): surface the 503 rate per pod
+rules:
+  - seriesQuery: 'hsds_http_requests_total{status="503"}'
+    resources: {overrides: {pod: {resource: pod}}}
+    name: {as: "hsds_http_503_rate"}
+    metricsQuery: 'sum(rate(hsds_http_requests_total{status="503"}[2m])) by (pod)'
+```
+
+```yaml
+# HPA metric block scaling on the custom metric
+metrics:
+  - type: Pods
+    pods:
+      metric: {name: hsds_http_503_rate}
+      target:
+        type: AverageValue
+        averageValue: "1"   # scale up when 503s exceed ~1/s/pod
+```
+
+Good for clusters that already run metrics-server and want HPA without extra operators.  Limits: combining more than one metric in a single HPA is awkward, scale-down tuning is coarse, and prometheus-adapter rules are cluster-global config.
+
+### 9.2 KEDA ScaledObject (more robust)
+
+[KEDA](https://keda.sh) adds a Prometheus scaler and richer scaling behaviour (multiple triggers, independent up/down cooldowns, replica floors) and manages the underlying HPA for you:
+
+```yaml
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: hsds
+spec:
+  scaleTargetRef:
+    name: hsds            # the hsds Deployment
+  minReplicaCount: 2
+  maxReplicaCount: 20
+  cooldownPeriod: 300     # wait 5m of calm before scaling down
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+  triggers:
+    # 1) shed-load signal: cluster-wide 503 rate
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.monitoring.svc.cluster.local:9090
+        query: sum(rate(hsds_http_requests_total{status="503"}[2m]))
+        threshold: "1"
+    # 2) leading signal: task saturation before 503s appear
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.monitoring.svc.cluster.local:9090
+        query: max(hsds_tasks_active / hsds_tasks_max)
+        threshold: "0.8"
+```
+
+Good for production: KEDA scales on *either* trigger, its explicit scale-down stabilization avoids flapping on HSDS's bursty selection workloads, and it needs no cluster-global adapter config.
+
+In both approaches, scale-up events that outrun cluster capacity leave pods in the pending state, which triggers Cluster Autoscaling (section 8) to add machines.

@@ -111,26 +111,24 @@ If you need to build and deploy a custom HSDS image (e.g. you have made changes 
     Note: if you plan to run HSDS in its own Kubernetes namespace, modify the namespace key of
     ClusterRoleBinding in k8s_rbac.yml from "default" to your namespace.
 
-2.  Create HSDS service: `kubectl apply -f admin/kubernetes/k8s_service_lb.yml`
-3.  This will create an external load balancer with an http endpoint with a public-ip.
-    Use kubectl to get the public-ip of the hsds service: `kubectl get service`
-    You should see an entry similar to:
+2.  Create the HSDS service: `kubectl apply -f admin/kubernetes/k8s_service.yml`
+    This is a ClusterIP service exposing the SN port (5101) inside the cluster as
+    `hsds.<namespace>.svc.cluster.local`. If HSDS will only be accessed by other pods in
+    the cluster, this is all you need.
 
-        NAME    TYPE           CLUSTER-IP     EXTERNAL-IP      PORT(S)        AGE
-        hsds    LoadBalancer   10.0.242.109   20.36.17.252     80:30326/TCP   23
-
-    Note: the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment.
-
-    Note: if the service will only be accessed by other pods in the cluster, you can replace
-    "k8s_service_lb.yml" with "k8s_service.yml" in the kubectl command above.
+3.  For external access, place an Ingress or Gateway in front of the service. This is also
+    where you terminate TLS and block the internal `/metrics`, `/info`, and `/about`
+    endpoints from external callers. See the example manifests
+    `admin/kubernetes/k8s_ingress_nginx.yml` (ingress-nginx) and
+    `admin/kubernetes/k8s_gateway_envoy.yml` (Gateway API + Envoy Gateway), and
+    [Restricting external access](prometheus_metrics.md#restricting-external-access-to-metrics-and-info).
+    The public `EXTERNAL-IP` will belong to your ingress controller / gateway
+    (`kubectl get service -n <ingress-namespace>`), not the hsds service.
 
 4.  Now we will deploy the HSDS pod. In **_k8s_deployment_aws.yml_**, modify the image
     value if a custom build is being used. E.g:
 
     - image: '1234567.dkr.ecr.us-east-1.amazonaws.com/hsds:v1' to reflect the ecr repository for deployment
-
-    Note: if just one pod will be used, this deployment: **\*k8s_deployment_aws_singleton.yml\*\***
-    can be used to provide multiple DN containers in one pod.
 
 5.  Apply the deployment: `kubectl apply -f admin/kubernetes/k8s_deployment_aws.yml`
 6.  Verify that the HSDS pod is running: `kubectl get pods` a pod with a name starting with hsds should be displayed with status as "Running".

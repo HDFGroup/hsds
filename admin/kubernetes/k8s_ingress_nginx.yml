@@ -1,0 +1,36 @@
+# Expose the public HSDS API through ingress-nginx while blocking the internal
+# endpoints (/metrics, /info, /about) from external callers.
+#
+# In-cluster access is unaffected: a Prometheus PodMonitor scrapes pod IPs directly,
+# and in-cluster clients reach the SN service at
+#   hsds.<namespace>.svc.cluster.local:5101
+# Neither path goes through this Ingress, so the deny rule below only affects
+# north-south (external) traffic. The DN container (:6101) is never in a Service, so
+# it is only ever reachable in-cluster.
+#
+# NOTE: server-snippet requires `allow-snippet-annotations: "true"` in the
+# ingress-nginx controller ConfigMap (disabled by default since v1.9.0, CVE-2023-5044).
+# If you can't enable snippets, keep Prometheus in-cluster and simply don't add an
+# Ingress for these endpoints — they stay reachable only via the ClusterIP service.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hsds
+  annotations:
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location ~* "^/(metrics|info|about)$" {
+        deny all;   # returns 403 Forbidden
+      }
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: hsds.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hsds
+                port:
+                  number: 5101

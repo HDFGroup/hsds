@@ -45,6 +45,7 @@ dependencies = [
     "importlib_resources",
     "numcodecs <= 0.15.1",
     "numpy >=2.0.0",
+    "prometheus-client",
     "psutil",
     "pyjwt",
     "pytz",

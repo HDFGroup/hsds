@@ -82,16 +82,19 @@ delegate operations to other HSDS pods running in the same namespace and same ap
 ## Create Kubernetes service for HSDS
 
 
-1.  Create HSDS service on the AKS cluster: `$ kubectl apply -f k8s_service_lb_azure.yml`
-2.  This will create an external load balancer with an http endpoint with a public-ip.
-    Use kubectl to get the public-ip of the hsds service: `$ kubectl get service`
-    You should see an entry similar to:
+1.  Create the HSDS service on the AKS cluster: `$ kubectl apply -f k8s_service.yml`
+    This is a ClusterIP service exposing the SN port (5101) inside the cluster as
+    `hsds.<namespace>.svc.cluster.local`. If HSDS will only be accessed by other pods in
+    the cluster, this is all you need.
 
-        NAME    TYPE           CLUSTER-IP     EXTERNAL-IP      PORT(S)        AGE
-        hsds    LoadBalancer   10.0.242.109   20.36.17.252     80:30326/TCP   23
-
-    Note the public-ip (EXTERNAL-IP). This is where you can access the HSDS service externally. It may take some time for the EXTERNAL-IP to show up after the service deployment. For additional configuration options to handle SSL related scenarios please see: _[Front Door Install](frontdoor_install_azure.md)_
-    Additional reference for Azure Front Door <https://docs.microsoft.com/en-us/azure/frontdoor/>
+2.  For external access, place an Ingress or Gateway in front of the service. This is also
+    where you terminate TLS and block the internal `/metrics`, `/info`, and `/about`
+    endpoints from external callers. See the example manifests
+    `admin/kubernetes/k8s_ingress_nginx.yml` (ingress-nginx) and
+    `admin/kubernetes/k8s_gateway_envoy.yml` (Gateway API + Envoy Gateway), and
+    [Restricting external access](prometheus_metrics.md#restricting-external-access-to-metrics-and-info).
+    For Azure-specific SSL / Front Door options see _[Front Door Install](frontdoor_install_azure.md)_
+    (<https://docs.microsoft.com/en-us/azure/frontdoor/>).
 
 
 
