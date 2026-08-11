@@ -164,6 +164,7 @@ async def read_chunk_hyperslab(
     select_dtype=None,
     query=None,
     query_update=None,
+    query_indices=False,
     limit=0,
     chunk_map=None,
     bucket=None,
@@ -256,9 +257,10 @@ async def read_chunk_hyperslab(
 
     if query is None and query_update is None:
         query_dtype = None
-    elif query_update is not None:
-        # PUT_Chunk's query-update handling returns the global dataset
-        # indices of matching elements, as (n, rank) coordinate tuples
+    elif query_update is not None or query_indices:
+        # PUT_Chunk's query-update handling, and GET_Chunk's query_indices
+        # mode, both return the global dataset indices of matching
+        # elements, as (n, rank) coordinate tuples
         query_dtype = np.dtype("i8")
     else:
         # GET_Chunk's query handling (h5json.query_util.arrayQuery) returns
@@ -312,6 +314,8 @@ async def read_chunk_hyperslab(
         params["query"] = query
         if limit > 0:
             params["Limit"] = limit
+        if query_indices:
+            params["query_indices"] = "1"
 
     # bucket will be used to get dset json even when s3path is used for
     # the chunk data
@@ -386,7 +390,7 @@ async def read_chunk_hyperslab(
         log.debug(f"data: {len(array_data)} bytes")
         if query is not None or query_update is not None:
             # TBD: this needs to be fixed up for variable length dtypes
-            if query_update is not None:
+            if query_update is not None or query_indices:
                 # indices are returned as (n, rank)
                 nrows = len(array_data) // (query_dtype.itemsize * dset_rank)
                 rsp_shape = (nrows, dset_rank)
@@ -637,6 +641,7 @@ class ChunkCrawler:
         select_dtype=None,
         query=None,
         query_update=None,
+        query_indices=False,
         limit=0,
         points=None,
         action=None,
@@ -660,6 +665,7 @@ class ChunkCrawler:
         self._points = points
         self._query = query
         self._query_update = query_update
+        self._query_indices = query_indices
         self._hits = 0
         self._limit = limit
         self._status_map = {}  # map of chunk_ids to status code
@@ -791,6 +797,7 @@ class ChunkCrawler:
                         select_dtype=self._select_dtype,
                         query=self._query,
                         query_update=self._query_update,
+                        query_indices=self._query_indices,
                         limit=self._limit,
                         chunk_map=self._chunk_map,
                         bucket=self._bucket,

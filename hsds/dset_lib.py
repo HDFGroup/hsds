@@ -407,6 +407,7 @@ async def getSelectionData(
     points=None,
     query=None,
     query_update=None,
+    query_indices=False,
     bucket=None,
     limit=0
 ):
@@ -479,6 +480,7 @@ async def getSelectionData(
         points=points,
         query=query,
         query_update=query_update,
+        query_indices=query_indices,
         limit=limit,
         chunk_map=chunkinfo,
         bucket=bucket,
@@ -496,6 +498,7 @@ async def doReadSelection(
     points=None,
     query=None,
     query_update=None,
+    query_indices=False,
     chunk_map=None,
     bucket=None,
     limit=0,
@@ -520,9 +523,10 @@ async def doReadSelection(
         select_dtype = dset_dtype
     if query is None:
         query_dtype = None
-    elif query_update is not None:
-        # PUT_Chunk's query-update handling returns the global dataset
-        # indices of matching elements, as (n, rank) coordinate tuples
+    elif query_update is not None or query_indices:
+        # PUT_Chunk's query-update handling, and GET_Chunk's query_indices
+        # mode, both return the global dataset indices of matching
+        # elements, as (n, rank) coordinate tuples
         log.debug(f"query: {query} limit: {limit} query_update: {query_update}")
         query_dtype = np.dtype("i8")
         query_rank = getRank(dset_json)
@@ -582,6 +586,7 @@ async def doReadSelection(
         slices=slices,
         query=query,
         query_update=query_update,
+        query_indices=query_indices,
         limit=limit,
         arr=arr,
         select_dtype=select_dtype,
@@ -606,7 +611,7 @@ async def doReadSelection(
             nrows = limit
         else:
             nrows = crawler._hits
-        if query_update is not None:
+        if query_update is not None or query_indices:
             arr = np.empty((nrows, query_rank), dtype=query_dtype)
         else:
             arr = np.empty((nrows,), dtype=query_dtype)

@@ -43,6 +43,17 @@ from . import hsds_logger as log
 from . import config
 
 
+def _localToGlobalIndices(chunk_id, chunk_dims, local_indices):
+    """ convert chunk-local query match indices (from arrayQuery) into
+    global dataset index coordinates, using the chunk's grid position
+    (encoded in its id) and its per-dimension extent (chunk_dims) """
+    rank = local_indices.shape[1]
+    chunk_index = getChunkIndex(chunk_id)
+    offset_list = [chunk_index[i] * chunk_dims[i] for i in range(rank)]
+    offset = np.array(offset_list, dtype=local_indices.dtype)
+    return local_indices + offset
+
+
 async def PUT_Chunk(request):
     """
     Update the requested chunk/selection
@@ -238,12 +249,8 @@ async def PUT_Chunk(request):
                 chunk_arr[fancy_index] = update_value
             is_dirty = True
 
-        # return the global dataset indices of the matching elements -
-        # the chunk's offset within the dataset (per dimension) is its
-        # grid index times the chunk dims along that dimension
-        chunk_index = getChunkIndex(chunk_id)
-        offset = np.array([chunk_index[i] * dims[i] for i in range(rank)], dtype=indices.dtype)
-        global_indices = indices + offset
+        # return the global dataset indices of the matching elements
+        global_indices = _localToGlobalIndices(chunk_id, dims, indices)
 
         read_resp = arrayToBytes(global_indices)
         try:
@@ -335,6 +342,7 @@ async def GET_Chunk(request):
     dims = None
     query = None
     limit = 0
+    query_indices = False
 
     app = request.app
     params = request.rel_url.query
@@ -412,6 +420,10 @@ async def GET_Chunk(request):
     if "query" in params:
         query = params["query"]
         log.debug(f"got query: {query}")
+
+    if "query_indices" in params and params["query_indices"]:
+        query_indices = True
+        log.debug("GET_Chunk - returning query match indices, not values")
 
     if "Limit" in params:
         param_limit = params["Limit"]
@@ -503,21 +515,26 @@ async def GET_Chunk(request):
             raise HTTPBadRequest(reason=msg)
         log.debug(f"GET_Chunk - query matched {len(indices)} elements")
 
-        # gather the matching values into a 1-d array
-        rank = len(chunk_arr.shape)
-        fancy_index = tuple(indices[:, i] for i in range(rank))
-        output_arr = chunk_arr[fancy_index]
+        if query_indices:
+            # return the global dataset indices of the matching elements,
+            # rather than their values
+            output_arr = _localToGlobalIndices(chunk_id, dims, indices)
+        else:
+            # gather the matching values into a 1-d array
+            rank = len(chunk_arr.shape)
+            fancy_index = tuple(indices[:, i] for i in range(rank))
+            output_arr = chunk_arr[fancy_index]
 
-        if len(select_dt) < len(chunk_arr.dtype):
-            # do a field selection
-            arr = np.zeros(output_arr.shape, dtype=select_dt)
-            fields = select_dt.names
-            if len(fields) > 1:
-                for field in fields:
-                    arr[field] = output_arr[field]
-            else:
-                arr[...] = output_arr[fields[0]]
-            output_arr = arr
+            if len(select_dt) < len(chunk_arr.dtype):
+                # do a field selection
+                arr = np.zeros(output_arr.shape, dtype=select_dt)
+                fields = select_dt.names
+                if len(fields) > 1:
+                    for field in fields:
+                        arr[field] = output_arr[field]
+                else:
+                    arr[...] = output_arr[fields[0]]
+                output_arr = arr
     else:
         # read selected data from chunk
         output_arr = chunkReadSelection(chunk_arr, selection=selection, select_dt=select_dt)

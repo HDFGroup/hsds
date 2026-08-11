@@ -55,7 +55,7 @@ def get_hrefs(request, dset_json):
     hrefs = []
     dset_id = dset_json["id"]
     dset_uri = f"/datasets/{dset_id}"
-    self_uri = f"{dset_uri}/value"
+    self_uri = request.path  # e.g. .../value or .../query, whichever was requested
     hrefs.append({"rel": "self", "href": getHref(request, self_uri)})
     root_uri = "/groups/" + dset_json["root"]
     hrefs.append({"rel": "root", "href": getHref(request, root_uri)})
@@ -378,13 +378,13 @@ async def _getRequestData(request, http_streaming=True):
 
 
 async def arrayResponse(arr, request, dset_json):
-    """ return the query-update match indices as a binary or json response
-    based on accept type """
+    """ return query match indices (from GET_Query, or PUT_Value's
+    query-update mode) as a binary or json response based on accept type """
     response_type = getAcceptType(request)
 
     if response_type == "binary":
         output_data = arr.tobytes()
-        msg = f"PUT_Value query - returning {len(output_data)} bytes binary indices"
+        msg = f"arrayResponse - returning {len(output_data)} bytes binary indices"
         log.debug(msg)
 
         # write response
@@ -401,7 +401,7 @@ async def arrayResponse(arr, request, dset_json):
         except Exception as e:
             log.error(f"Exception during binary data write: {e}")
     else:
-        log.debug("PUT Value query - returning JSON indices")
+        log.debug("arrayResponse - returning JSON indices")
         rsp_json = {}
         data = arr.tolist()
         log.debug(f"got rsp data {len(data)} indices")
@@ -1001,6 +1001,93 @@ async def GET_Value(request):
         print("traceback:", tb)
         raise HTTPInternalServerError()
 
+    return resp
+
+
+async def GET_Query(request):
+    """
+    Handler for GET /<dset_uuid>/query request - like GET_Value with a
+    query param, except the response is the global dataset indices of the
+    elements that match the query, not their values (query is required).
+    """
+    log.request(request)
+    app = request.app
+    params = request.rel_url.query
+
+    dset_id = request.match_info.get("id")
+    if not dset_id:
+        msg = "Missing dataset id"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    if not isValidUuid(dset_id, obj_class="datasets"):
+        msg = f"Invalid dataset id: {dset_id}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    username, pswd = getUserPasswordFromRequest(request)
+    if username is None and app["allow_noauth"]:
+        username = "default"
+    else:
+        await validateUserPassword(app, username, pswd)
+
+    domain = getDomainFromRequest(request)
+    if not isValidDomain(domain):
+        msg = f"Invalid domain: {domain}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    bucket = getBucketForDomain(domain)
+
+    dset_json = await getDsetJson(app, dset_id, bucket=bucket)
+    type_json = dset_json["type"]
+    dset_dtype = createDataType(type_json)
+
+    if isNullSpace(dset_json):
+        msg = "Null space datasets can not be used as target for GET query"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    await validateAction(app, domain, dset_id, username, "read")
+
+    # Get query parameter for selection
+    selection = _getSelect(params, dset_json)
+
+    query = _getQuery(params, dset_dtype)
+    if not query:
+        msg = "query parameter is required for GET_Query"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    limit = _getLimit(params)
+
+    # check that the (unfiltered) select region size is reasonable - same
+    # caveat as GET_Value's query mode: based on the select region, not
+    # the (typically much smaller) query-matched result
+    item_size = getDtypeItemSize(dset_dtype)
+    np_shape = selection.mshape
+    request_size = math.prod(np_shape)
+    if item_size == "H5T_VARIABLE":
+        request_size *= VARIABLE_AVG_ITEM_SIZE
+    else:
+        request_size *= item_size
+    max_request_size = int(config.get("max_request_size"))
+    if request_size >= max_request_size:
+        msg = "GET query request too large"
+        log.warn(msg)
+        raise HTTPRequestEntityTooLarge(max_request_size, request_size)
+
+    arr_rsp = await getSelectionData(
+        app,
+        dset_id,
+        dset_json,
+        slices=selection,
+        query=query,
+        bucket=bucket,
+        limit=limit,
+        query_indices=True,
+    )
+
+    resp = await arrayResponse(arr_rsp, request, dset_json)
+    log.response(request, resp=resp)
     return resp
 
 

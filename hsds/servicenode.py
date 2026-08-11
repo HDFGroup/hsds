@@ -37,7 +37,7 @@ from .attr_sn import DELETE_Attributes, DELETE_Attribute, GET_AttributeValue, PU
 from .ctype_sn import GET_Datatype, POST_Datatype, DELETE_Datatype
 from .dset_sn import GET_Dataset, POST_Dataset, DELETE_Dataset
 from .dset_sn import GET_DatasetShape, PUT_DatasetShape, GET_DatasetType
-from .chunk_sn import PUT_Value, GET_Value, POST_Value
+from .chunk_sn import PUT_Value, GET_Value, POST_Value, GET_Query
 
 
 async def init():
@@ -178,6 +178,9 @@ async def init():
     app.router.add_route("PUT", path, PUT_Value)
     app.router.add_route("GET", path, GET_Value)
     app.router.add_route("POST", path, POST_Value)
+
+    path = "/datasets/{id}/query"
+    app.router.add_route("GET", path, GET_Query)
 
     # Add CORS to all routes
     cors_domain = config.get("cors_domain")

@@ -108,7 +108,7 @@ class QueryTest(unittest.TestCase):
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
-        def verifyQueryRsp(rsp, expected_indices=None, expect_bin=None):
+        def verifyValueRsp(rsp, expected_indices=None, expect_bin=None):
             ROW_BYTES = 20  # 4 + 8 + 4 + 4
             self.assertEqual(rsp.status_code, 200)
             data = None
@@ -137,6 +137,7 @@ class QueryTest(unittest.TestCase):
                 rspJson = json.loads(rsp.text)
                 self.assertTrue("hrefs" in rspJson)
                 self.assertTrue("value" in rspJson)
+                self.assertFalse("indices" in rspJson)
                 data = rspJson["value"]
 
             expected_count = None
@@ -155,9 +156,53 @@ class QueryTest(unittest.TestCase):
                         self.assertEqual(item[i], expected[i])
             # indices should be unique
 
-        # end verifyQueryRsp
+        # end verifyValueRsp
 
-        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        def verifyQueryRsp(rsp, expected_indices=None, expect_bin=None):
+            self.assertEqual(rsp.status_code, 200)
+            INDEX_SIZE = 8  # 8 bytes for each index (int64)
+            if rsp.headers["Content-Type"] == "application/octet-stream":
+                if expect_bin is False:
+                    self.assertTrue(False)
+                bin_data = rsp.content
+                self.assertEqual(len(bin_data) % INDEX_SIZE, 0)
+                # assemble binary response to a python list - this dataset
+                # is rank-1, so each match is a single 8-byte coordinate
+                count = len(bin_data) // INDEX_SIZE
+                indices = []
+                for i in range(count):
+                    index_start = i * INDEX_SIZE
+                    index_end = (i + 1) * INDEX_SIZE
+                    index = int.from_bytes(bin_data[index_start:index_end], "little")
+                    indices.append(index)
+            else:
+                if expect_bin is True:
+                    self.assertTrue(False)
+                self.assertTrue(len(rsp.text) > 0)
+                rspJson = json.loads(rsp.text)
+                self.assertTrue("hrefs" in rspJson)
+                self.assertTrue("indices" in rspJson)
+                self.assertFalse("values" in rspJson)
+                # each match is a (rank,) coordinate tuple - flatten to a
+                # plain index since this dataset is rank-1
+                indices = [coord[0] for coord in rspJson["indices"]]
+
+            expected_count = None
+            if expected_indices:
+                expected_count = len(expected_indices)
+            # check we got the expected number of results
+            if expected_count is not None:
+                self.assertEqual(len(indices), expected_count)
+            for j in range(len(indices)):
+                index = indices[j]
+                if expected_indices is not None:
+                    expected = expected_indices[j]
+                    self.assertEqual(index, expected)
+            # indices should be unique
+        # end of verifyQueryRsp
+
+        value_req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        query_req = self.endpoint + "/datasets/" + dset_uuid + "/query"
 
         for query_headers in (headers, headers_bin_rsp):
             kwargs = {}
@@ -169,36 +214,41 @@ class QueryTest(unittest.TestCase):
 
             # items in list
             params = {"query": "open < 3000 AND stock_symbol IN (b'AAPL', b'EBAY')"}
-            rsp = self.session.get(req, params=params, headers=query_headers)
+            rsp = self.session.get(value_req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 200)
             kwargs["expected_indices"] = [6, 7, 9, 10]
+            verifyValueRsp(rsp, **kwargs)
+            rsp = self.session.get(query_req, params=params, headers=query_headers)
             verifyQueryRsp(rsp, **kwargs)
 
             # read first row with AAPL
             params = {"query": "stock_symbol == b'AAPL'", "Limit": 1}
-            rsp = self.session.get(req, params=params, headers=query_headers)
+            rsp = self.session.get(value_req, params=params, headers=query_headers)
             kwargs["expected_indices"] = (1,)
-
+            verifyValueRsp(rsp, **kwargs)
+            rsp = self.session.get(query_req, params=params, headers=query_headers)
             verifyQueryRsp(rsp, **kwargs)
 
             # read all rows with APPL
             params = {"query": "stock_symbol == b'AAPL'"}
-            rsp = self.session.get(req, params=params, headers=query_headers)
+            rsp = self.session.get(value_req, params=params, headers=query_headers)
             expected_indices = (1, 4, 7, 10)
             kwargs["expected_indices"] = expected_indices
+            verifyValueRsp(rsp, **kwargs)
+            rsp = self.session.get(query_req, params=params, headers=query_headers)
             verifyQueryRsp(rsp, **kwargs)
 
             # return just open and close fields
             params = {"query": "stock_symbol == b'AAPL'", "fields": "open:close"}
             # just do json to keep the verification simple
-            rsp = self.session.get(req, params=params, headers=headers)
+            rsp = self.session.get(value_req, params=params, headers=headers)
             # need to check this one by hand
             self.assertEqual(rsp.status_code, 200)
             rspJson = json.loads(rsp.text)
-            query_rsp = rspJson["value"]
-            self.assertEqual(len(query_rsp), 4)
+            value_rsp = rspJson["value"]
+            self.assertEqual(len(value_rsp), 4)
             for i in range(4):
-                item = query_rsp[i]
+                item = value_rsp[i]
                 self.assertEqual(len(item), 2)
                 expected_index = expected_indices[i]
                 row = value[expected_index]
@@ -208,37 +258,49 @@ class QueryTest(unittest.TestCase):
 
             params["select"] = "[2:12]"
             del params["fields"]  # remove key from last test
-            rsp = self.session.get(req, params=params, headers=query_headers)
+            rsp = self.session.get(value_req, params=params, headers=query_headers)
             kwargs["expected_indices"] = (4, 7, 10)
+            verifyValueRsp(rsp, **kwargs)
+            rsp = self.session.get(query_req, params=params, headers=query_headers)
             verifyQueryRsp(rsp, **kwargs)
 
             params = {"query": "stock_symbol IN (b'AAPL', b'EBAY')"}
-            rsp = self.session.get(req, params=params, headers=query_headers)
+            rsp = self.session.get(value_req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 200)
             kwargs["expected_indices"] = [0, 1, 3, 4, 6, 7, 9, 10]
+            verifyValueRsp(rsp, **kwargs)
+            rsp = self.session.get(query_req, params=params, headers=query_headers)
             verifyQueryRsp(rsp, **kwargs)
 
             params = {"query": "open < 3000 AND stock_symbol IN (b'AAPL', b'EBAY')"}
             rsp = self.session.get(req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 200)
             kwargs["expected_indices"] = [6, 7, 9, 10]
+            verifyValueRsp(rsp, **kwargs)
+            rsp = self.session.get(query_req, params=params, headers=query_headers)
             verifyQueryRsp(rsp, **kwargs)
 
             params = {"query": "open < 4000 AND stock_symbol IN (b'AAPL', b'EBAY')"}
-            rsp = self.session.get(req, params=params, headers=query_headers)
+            rsp = self.session.get(value_req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 200)
             kwargs["expected_indices"] = [0, 1, 3, 4, 6, 7, 9, 10]
+            verifyValueRsp(rsp, **kwargs)
+            rsp = self.session.get(query_req, params=params, headers=query_headers)
             verifyQueryRsp(rsp, **kwargs)
 
             # combine with Limit
             params["Limit"] = 2
-            rsp = self.session.get(req, params=params, headers=query_headers)
+            rsp = self.session.get(value_req, params=params, headers=query_headers)
             kwargs["expected_indices"] = [0, 1]
+            verifyValueRsp(rsp, **kwargs)
+            rsp = self.session.get(query_req, params=params, headers=query_headers)
             verifyQueryRsp(rsp, **kwargs)
 
             # try bad Limit
             params["Limit"] = "abc"
-            rsp = self.session.get(req, params=params, headers=query_headers)
+            rsp = self.session.get(value_req, params=params, headers=query_headers)
+            self.assertEqual(rsp.status_code, 400)
+            rsp = self.session.get(query_req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 400)
 
             # try invalid query strings
@@ -253,22 +315,28 @@ class QueryTest(unittest.TestCase):
             )
             for query in queries:
                 params = {"query": query}
-                rsp = self.session.get(req, params=params, headers=query_headers)
+                rsp = self.session.get(value_req, params=params, headers=query_headers)
+                self.assertEqual(rsp.status_code, 400)
+                rsp = self.session.get(query_req, params=params, headers=query_headers)
                 self.assertEqual(rsp.status_code, 400)
 
             # try boolean query
             params = {"query": "(open > 3000) AND (open < 3100)"}
-            rsp = self.session.get(req, params=params, headers=query_headers)
+            rsp = self.session.get(value_req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 200)
             kwargs["expected_indices"] = (0, 1, 3, 5, 11)
+            verifyValueRsp(rsp, **kwargs)
+            rsp = self.session.get(query_req, params=params, headers=query_headers)
             verifyQueryRsp(rsp, **kwargs)
 
             # query for a zero sector field (should return none)
             params = {"query": "open == 0"}  # query for zero sector
-            rsp = self.session.get(req, params=params, headers=headers)
+            rsp = self.session.get(value_req, params=params, headers=headers)
             self.assertEqual(rsp.status_code, 200)
             kwargs["expected_indices"] = ()
             kwargs["expect_bin"] = False  # will always get json for null response
+            verifyValueRsp(rsp, **kwargs)
+            rsp = self.session.get(query_req, params=params, headers=headers)
             verifyQueryRsp(rsp, **kwargs)
 
     def testChunkedRefIndirectDataset(self):
@@ -707,14 +775,22 @@ class QueryTest(unittest.TestCase):
                 row.append(i * j)
             values.append(row)
         payload = {"value": values}
-        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        value_req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        query_req = self.endpoint + "/datasets/" + dset_uuid + "/query"
+        rsp = self.session.put(value_req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 200)  # write value
 
+        expected_indices = []
+        for i in range(nrows + ncols - 1):
+            if i < nrows:
+                index = [0, i]
+            else:
+                index = [i - ncols + 1, 0]
+            expected_indices.append(index)
+
         # query for all zero values
-        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         params = {"query": "_ == 0"}
-        rsp = self.session.get(req, params=params, headers=headers)
+        rsp = self.session.get(value_req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
@@ -723,9 +799,21 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(len(data_arr), 19)
         self.assertTrue(all(index == 0 for index in data_arr))
 
+        # do a query request to get the indices of all zero values
+
+        rsp = self.session.get(query_req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("indices" in rspJson)
+        indices = rspJson["indices"]
+        self.assertTrue(isinstance(indices, list))
+        self.assertEqual(len(indices), nrows + ncols - 1)  # 19
+        self.assertEqual(indices, expected_indices)
+
         # update all zero values to 999
         update_value = {"value": 999}
-        rsp = self.session.put(req, params=params, data=json.dumps(update_value), headers=headers)
+        data = json.dumps(update_value)
+        rsp = self.session.put(value_req, params=params, data=data, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
@@ -743,7 +831,7 @@ class QueryTest(unittest.TestCase):
                 self.assertEqual(index[1], 0)
 
         # read values and verify the expected changes where made
-        rsp = self.session.get(req, headers=headers)
+        rsp = self.session.get(value_req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         read_values = rspJson["value"]
@@ -757,6 +845,15 @@ class QueryTest(unittest.TestCase):
                     self.assertEqual(n, 999)
                 else:
                     self.assertEqual(n, i * j)
+
+        # do a query request again.  Should get an empty list back
+        rsp = self.session.get(query_req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("indices" in rspJson)
+        indices = rspJson["indices"]
+        self.assertTrue(isinstance(indices, list))
+        self.assertEqual(len(indices), 0)
 
 
 if __name__ == "__main__":
