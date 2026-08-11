@@ -14,10 +14,11 @@
 # handles regauests to read/write chunk data
 #
 
+import json
 import numpy as np
 import traceback
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
-from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable, HTTPNotImplemented
+from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web import json_response, StreamResponse
 
 from h5json.hdf5dtype import createDataType, getSubType
@@ -53,10 +54,20 @@ async def PUT_Chunk(request):
     bucket = None
     input_arr = None
     element_count = None
+    limit = 0
 
     if "query" in params:
         query = params["query"]
         log.info(f"PUT_Chunk query: {query}")
+    if "Limit" in params:
+        param_limit = params["Limit"]
+        try:
+            limit = int(param_limit)
+        except ValueError:
+            msg = f"invalid Limit param: {param_limit}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"PUT_Chunk limit: {limit}")
     chunk_id = request.match_info.get("id")
     if not chunk_id:
         msg = "Missing chunk id"
@@ -184,13 +195,74 @@ async def PUT_Chunk(request):
             raise HTTPNotFound()
 
     if query:
-        # TBD: query+update support was dropped when chunkUtil.chunkQuery was
-        # removed in favor of h5json.query_util.arrayQuery. arrayQuery returns
-        # match coordinates rather than rows, so this needs to be rewritten to
-        # update chunk_arr at those coordinates and rebuild a response array.
-        msg = "PUT_Chunk with query is not currently supported"
-        log.error(msg)
-        raise HTTPNotImplemented(reason=msg)
+        try:
+            indices = arrayQuery(query, chunk_arr, selection=selection, limit=limit)
+        except (TypeError, ValueError) as e:
+            msg = f"query: {query} is not valid, got exception: {e}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+        log.debug(f"PUT_Chunk - query matched {len(indices)} elements")
+
+        try:
+            update_value = await request.json()
+        except json.JSONDecodeError:
+            msg = "Unable to load JSON body for query update"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+        rank = len(chunk_arr.shape)
+        fancy_index = tuple(indices[:, i] for i in range(rank))
+
+        if len(indices) > 0:
+            # query_update is only allowed when the value is one element -
+            # that element gets broadcast across all matching positions
+            if select_dt.names:
+                # compound type - value is a JSON object of field name to
+                # value; only the given fields are updated, others are
+                # left as-is
+                if not isinstance(update_value, dict):
+                    msg = "expected a JSON object for compound type query update"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+                for field_name, field_value in update_value.items():
+                    if field_name not in select_dt.names:
+                        msg = f"field: {field_name} not found in dataset type"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+                    chunk_arr[field_name][fancy_index] = field_value
+            else:
+                # simple type - value is the (scalar) element itself
+                if isinstance(update_value, dict) and "value" in update_value:
+                    update_value = update_value["value"]
+                chunk_arr[fancy_index] = update_value
+            is_dirty = True
+
+        # return the global dataset indices of the matching elements -
+        # the chunk's offset within the dataset (per dimension) is its
+        # grid index times the chunk dims along that dimension
+        chunk_index = getChunkIndex(chunk_id)
+        offset = np.array([chunk_index[i] * dims[i] for i in range(rank)], dtype=indices.dtype)
+        global_indices = indices + offset
+
+        read_resp = arrayToBytes(global_indices)
+        try:
+            resp = StreamResponse()
+            resp.headers["Content-Type"] = "application/octet-stream"
+            resp.content_length = len(read_resp)
+            await resp.prepare(request)
+            await resp.write(read_resp)
+        except Exception as e:
+            log.error(f"Exception during binary data write: {e}")
+            raise HTTPInternalServerError()
+        finally:
+            await resp.write_eof()
+
+        if is_dirty or config.get("write_zero_chunks", default=False):
+            save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=bucket)
+
+        log.response(request, resp=resp)
+        return resp
     else:
         # regular chunk update
         # check that the content_length is what we expect

@@ -26,7 +26,7 @@ from aiohttp.client_exceptions import ClientError
 from h5json.hdf5dtype import createDataType
 from h5json.array_util import jsonToArray, getNumpyValue
 from h5json.array_util import getNumElements, arrayToBytes, bytesToArray
-from h5json.shape_util import getShapeDims
+from h5json.shape_util import getShapeDims, getRank
 from h5json.dset_util import getChunkDims
 from h5json.time_util import getNow
 
@@ -220,6 +220,7 @@ async def read_chunk_hyperslab(
         raise HTTPInternalServerError()
     type_json = dset_json["type"]
     dset_dt = createDataType(type_json)
+    dset_rank = getRank(dset_json)
 
     chunk_shape = None  # expected return array shape
     chunk_sel = None  # for hyperslab
@@ -255,6 +256,10 @@ async def read_chunk_hyperslab(
 
     if query is None and query_update is None:
         query_dtype = None
+    elif query_update is not None:
+        # PUT_Chunk's query-update handling returns the global dataset
+        # indices of matching elements, as (n, rank) coordinate tuples
+        query_dtype = np.dtype("i8")
     else:
         # GET_Chunk's query handling (h5json.query_util.arrayQuery) returns
         # the matching values themselves, typed as select_dtype
@@ -381,9 +386,15 @@ async def read_chunk_hyperslab(
         log.debug(f"data: {len(array_data)} bytes")
         if query is not None or query_update is not None:
             # TBD: this needs to be fixed up for variable length dtypes
-            nrows = len(array_data) // query_dtype.itemsize
+            if query_update is not None:
+                # indices are returned as (n, rank)
+                nrows = len(array_data) // (query_dtype.itemsize * dset_rank)
+                rsp_shape = (nrows, dset_rank)
+            else:
+                nrows = len(array_data) // query_dtype.itemsize
+                rsp_shape = (nrows,)
             try:
-                chunk_arr = bytesToArray(array_data, query_dtype, (nrows,))
+                chunk_arr = bytesToArray(array_data, query_dtype, rsp_shape)
             except ValueError as ve:
                 log.warn(f"bytesToArray ValueError: {ve}")
                 raise HTTPBadRequest()

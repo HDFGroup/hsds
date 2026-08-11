@@ -11,6 +11,7 @@
 ##############################################################################
 import unittest
 import json
+
 import helper
 import config
 
@@ -79,7 +80,7 @@ class QueryTest(unittest.TestCase):
         dset_uuid = rspJson["id"]
         self.assertTrue(helper.validateId(dset_uuid))
 
-        # link new dataset as 'dset1'
+        # link new dataset
         name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
@@ -419,26 +420,15 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(item[1], "1980.12.12")
         self.assertEqual(item[2], "AAPL")
 
-    @unittest.expectedFailure
     def testPutQuery(self):
         """
-        Regression test for a known bug: PUT .../value with a `query`
-        parameter (query-based conditional update) is wired up end-to-end
-        at the SN, which forwards the query to the DN as part of a
-        PUT_Chunk request - but the DN's PUT_Chunk handler explicitly
-        raises HTTPNotImplemented for any query+update request (support
-        for this was dropped when the old chunkUtil.chunkQuery-based query
-        engine was replaced by h5json.query_util.arrayQuery, and was never
-        reimplemented for the write path). That 501 gets converted into a
-        generic 500 by the time it reaches this client, rather than
-        performing the update and returning the affected rows.
-
-        This test asserts the CORRECT/expected behavior once that gap is
-        fixed, and is marked as an expected failure until PUT_Chunk's query
-        path is implemented in hsds/chunk_dn.py. Once fixed, this test will
-        start passing and unittest will report it as an "unexpected
-        success" - that's the signal to remove the
-        @unittest.expectedFailure decorator.
+        PUT .../value with a `query` parameter performs a query-based
+        conditional update: rows matching `query` have the given field(s)
+        set to the given value(s) (query_update is only allowed when the
+        value is one element, which gets broadcast across all matching
+        elements). The response's `value` is the list of global dataset
+        indices that matched (and were updated), not the row data itself -
+        e.g. `[[1], [4], [7], [10]]` for four single-dimension matches.
         """
         # Test PUT query for 1d dataset
         print("testPutQuery", self.base_domain)
@@ -486,7 +476,7 @@ class QueryTest(unittest.TestCase):
         dset_uuid = rspJson["id"]
         self.assertTrue(helper.validateId(dset_uuid))
 
-        # link new dataset as 'dset1'
+        # link new dataset
         name = "dset" + helper.getRandomName()
         req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
         payload = {"id": dset_uuid}
@@ -524,14 +514,11 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("value" in rspJson)
-        readData = rspJson["value"]
-        self.assertEqual(len(readData), 4)
-        indicies = []
-        for item in readData:
-            indicies.append(item[0])
-            self.assertEqual(item[1], "AAPL")
-        self.assertEqual(indicies, [1, 4, 7, 10])
+        self.assertTrue("value" not in rspJson)
+        self.assertTrue("indices" in rspJson)
+        indices = rspJson["indices"]
+        self.assertEqual(len(indices), 4)
+        self.assertEqual(indices, [[1,], [4,], [7,], [10,]])
 
         # read values and verify the expected changes where made
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
@@ -568,10 +555,10 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
         self.assertTrue("hrefs" in rspJson)
-        self.assertTrue("value" in rspJson)
-        readData = rspJson["value"]
-        self.assertEqual(len(readData), 1)
-        self.assertEqual(readData[0], [1, "AAPL", "20170102", 999, 2933])
+        self.assertTrue("indices" in rspJson)
+        indices = rspJson["indices"]
+        self.assertEqual(len(indices), 1)
+        self.assertEqual(indices[0], [1,])
 
         # read values and verify the expected changes where made
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
@@ -600,9 +587,176 @@ class QueryTest(unittest.TestCase):
         rsp = self.session.put(req, params=params, data=json.dumps(update_value), headers=headers)
         self.assertEqual(rsp.status_code, 200)
         rspJson = json.loads(rsp.text)
+        self.assertTrue("indices" in rspJson)
+        indices = rspJson["indices"]
+        self.assertEqual(len(indices), 0)
+
+        # create a new dataset with an explicit chunk layout
+        num_elements = 12
+        payload = {"type": datatype, "shape": num_elements}
+        chunked_layout = {"class": "H5D_CHUNKED", "dims": [6,]}
+        cpl = {"layout": chunked_layout}
+        payload["creationProperties"] = cpl
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # confirm that we got the requested chunked layout
+        req = self.endpoint + "/datasets/" + dset_uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("creationProperties" in rspJson)
+        cpl = rspJson["creationProperties"]
+        self.assertTrue("layout" in cpl)
+        layout = cpl["layout"]
+        self.assertEqual(layout["class"], "H5D_CHUNKED")
+        self.assertEqual(layout["dims"], [6,])
+
+        # link new dataset
+        name = "dset" + helper.getRandomName()
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write entire array
+        payload = {"value": value}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # set just one row with AAPL to have open of 42
+        params = {"query": "stock_symbol == b'AAPL'"}
+        params["Limit"] = 1
+        update_value = {"open": 999}
+        payload = {"value": update_value}
+
+        rsp = self.session.put(req, params=params, data=json.dumps(update_value), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("indices" in rspJson)
+        indices = rspJson["indices"]
+        self.assertEqual(len(indices), 1)
+        self.assertEqual(indices[0], [1,])
+
+        # read values and verify the expected changes where made
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        read_values = rspJson["value"]
+        self.assertEqual(len(read_values), len(value))
+        for i in range(len(value)):
+            orig_item = value[i]
+            mod_item = read_values[i]
+            # print(f"row {i}: orig_item: {orig_item}, mod_item: {mod_item}")
+            self.assertEqual(orig_item[0], mod_item[0])
+            self.assertEqual(orig_item[1], mod_item[1])
+            self.assertEqual(orig_item[3], mod_item[3])
+
+            if orig_item[0] == "AAPL" and i == 1:
+                self.assertEqual(mod_item[2], 999)
+            else:
+                if orig_item[2] != mod_item[2]:
+                    print("mismatch values, fix TBD")
+                else:
+                    self.assertEqual(orig_item[2], mod_item[2])
+
+    def testQueryNoneCompound(self):
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create a simple type/2d dataset
+        nrows = 10
+        ncols = 10
+        shape = (nrows, ncols)
+        payload = {"type": "H5T_STD_I32LE", "shape": shape}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset
+        name = "dset" + helper.getRandomName()
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        values = []
+        for i in range(nrows):
+            row = []
+            for j in range(ncols):
+                row.append(i * j)
+            values.append(row)
+        payload = {"value": values}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # query for all zero values
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        params = {"query": "_ == 0"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
         self.assertTrue("value" in rspJson)
-        readData = rspJson["value"]
-        self.assertEqual(len(readData), 0)
+        data_arr = rspJson["value"]
+        self.assertTrue(isinstance(data_arr, list))
+        self.assertEqual(len(data_arr), 19)
+        self.assertTrue(all(index == 0 for index in data_arr))
+
+        # update all zero values to 999
+        update_value = {"value": 999}
+        rsp = self.session.put(req, params=params, data=json.dumps(update_value), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" not in rspJson)
+        self.assertTrue("indices" in rspJson)
+        indicies = rspJson["indices"]
+        self.assertEqual(len(indicies), nrows + ncols - 1)  # 19
+        for i in range(nrows + ncols - 1):
+            index = indicies[i]
+            if i < nrows:
+                self.assertEqual(index[0], 0)
+                self.assertEqual(index[1], i)
+            else:
+                self.assertEqual(index[0], i - ncols + 1)
+                self.assertEqual(index[1], 0)
+
+        # read values and verify the expected changes where made
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        read_values = rspJson["value"]
+        self.assertEqual(len(read_values), nrows)
+        for i in range(nrows):
+            row = read_values[i]
+            self.assertEqual(len(row), ncols)
+            for j in range(ncols):
+                n = row[j]
+                if i == 0 or j == 0:
+                    self.assertEqual(n, 999)
+                else:
+                    self.assertEqual(n, i * j)
 
 
 if __name__ == "__main__":

@@ -520,6 +520,12 @@ async def doReadSelection(
         select_dtype = dset_dtype
     if query is None:
         query_dtype = None
+    elif query_update is not None:
+        # PUT_Chunk's query-update handling returns the global dataset
+        # indices of matching elements, as (n, rank) coordinate tuples
+        log.debug(f"query: {query} limit: {limit} query_update: {query_update}")
+        query_dtype = np.dtype("i8")
+        query_rank = getRank(dset_json)
     else:
         # GET_Chunk's query handling (h5json.query_util.arrayQuery) returns
         # the matching values themselves, typed as select_dtype
@@ -600,7 +606,10 @@ async def doReadSelection(
             nrows = limit
         else:
             nrows = crawler._hits
-        arr = np.empty((nrows,), dtype=query_dtype)
+        if query_update is not None:
+            arr = np.empty((nrows, query_rank), dtype=query_dtype)
+        else:
+            arr = np.empty((nrows,), dtype=query_dtype)
         start = 0
         for chunkid in chunk_ids:
             if chunkid not in chunk_map:

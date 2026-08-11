@@ -49,9 +49,12 @@ info:
     helper (which does parse `"0"`/`"false"` correctly).
 
     ### Known service-level issues (not just documentation gaps)
-    - `PUT .../value` with a `query` parameter (query-based update) always
-      fails with `500` - the feature is wired up end-to-end at the SN but
-      explicitly rejected as unimplemented at the DN.
+    - `PUT .../value` with a `query` parameter (query-based update) and
+      `Limit` set: when the matching rows span more than one chunk, `Limit`
+      is applied independently within each chunk rather than coordinated
+      across chunks, so more than `Limit` rows total can end up updated.
+      This is a known, deliberately-deferred bug - see the `query`
+      parameter description on `PUT /datasets/{id}/value`.
   version: "1.0.0"
   license:
     name: Apache-2.0
@@ -1610,12 +1613,13 @@ paths:
 
         ### Query syntax (`query`)
         A SQL-like filter string, evaluated per-element (or per-row for
-        compound types), only usable on rank-1 datasets:
+        compound types):
         `"_ > 1.0"`, `"symbol == b'AAPL'"`,
         `"symbol IN ('AAPL','EBAY') AND date > 20170102"`. Operators:
         `==`, `!=`, `<`, `>`, `<=`, `>=`, `IN`, combined with
         `AND`/`OR`/`NOT`/`XOR`. For a simple (non-compound) dtype the only
         allowed variable name is `_`; for compound types, any field name.
+        Supported on datasets of any rank (not just rank-1).
       parameters:
         - name: select
           in: query
@@ -1628,7 +1632,7 @@ paths:
         - name: query
           in: query
           schema: { type: string }
-          description: Query-filter string (see syntax above). Only valid for rank-1 datasets.
+          description: Query-filter string (see syntax above).
         - name: Limit
           in: query
           schema: { type: integer }
@@ -1689,15 +1693,29 @@ paths:
         transparently paginated by the server (variable-length-typed data
         cannot be paginated and returns 413 if oversized).
 
-        **`query`-based update is not currently functional.** It is fully
-        wired up end-to-end at the SN (which forwards it to the DN as a
-        conditional chunk write), but the DN explicitly rejects any
-        `PUT_Chunk` call that includes a query with `501 Not Implemented`
-        (query+update support was dropped when the old query engine was
-        replaced and never re-added). That in turn surfaces to the client
-        as a generic `500`, not a successful update-and-return-matched-rows
-        response. Do not rely on this parameter for writes; it only works
-        for `GET`.
+        ### Query-based update (`query`)
+        Instead of `value`/`points`/`append`, pass `query` (same filter
+        syntax as `GET`'s `query` param, see above) plus a JSON body
+        representing a single element's worth of data - that one value is
+        broadcast across every element that matches the query. Works on
+        datasets of any rank.
+
+        - For a **compound** dtype, the body is a JSON object mapping field
+          name(s) to value(s), e.g. `{"open": 999}` - only the given
+          field(s) are updated on each matching row; fields not mentioned
+          are left unchanged.
+        - For a **simple** (non-compound) dtype, the body is just the bare
+          value to write (or `{"value": <value>}`).
+
+        The response is the list of **global dataset indices** that
+        matched (and were updated) - see the `200` response below - not
+        the row/element data itself.
+
+        **Known bug:** when `Limit` is set and the matching rows span more
+        than one chunk, the limit is applied independently within each
+        chunk rather than coordinated across chunks - so more than `Limit`
+        rows total can end up updated. This is a known, deliberately
+        deferred issue.
       parameters:
         - name: select
           in: query
@@ -1716,13 +1734,16 @@ paths:
           in: query
           schema: { type: string }
           description: |
-            Query-based update filter. Cannot be combined with `append`.
-            Only valid for rank-1 datasets, same as `GET`'s `query` param.
-            See this operation's description - this parameter is currently
-            non-functional (always 500s).
+            Query-based update filter (see this operation's description).
+            Cannot be combined with `append`.
         - name: Limit
           in: query
           schema: { type: integer }
+          description: |
+            Maximum number of matching rows to update, when `query` is
+            used. Known bug: not correctly coordinated across chunks when
+            matches span more than one chunk - see this operation's
+            description.
         - name: element_count
           in: query
           schema: { type: integer }
@@ -1733,6 +1754,15 @@ paths:
           application/json:
             schema:
               type: object
+              description: |
+                This shape applies to the regular write modes
+                (value/value_base64/points/append). When `query` is used
+                (either as a query param, or as the `query` property here),
+                the body is NOT this envelope - it is instead a single
+                element's worth of update data: a JSON object of field
+                name to value for a compound dtype, or the bare value (or
+                `{"value": <value>}`) for a simple dtype. See this
+                operation's description.
               properties:
                 value: {}
                 value_base64:
@@ -1752,6 +1782,7 @@ paths:
                   items: {}
                 query:
                   type: string
+                  description: Alternative to the `query` query-parameter - specifies the filter string via the body instead.
                 append:
                   type: integer
                 append_dim:
@@ -1766,16 +1797,33 @@ paths:
               format: binary
       responses:
         '200':
-          description: Write successful (empty body), or (query-update mode) the updated rows.
+          description: |
+            Write successful (empty body), or - in query-update mode - the
+            list of global dataset indices that matched and were updated
+            (see the `indices` property below).
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  value: {}
+                  indices:
+                    type: array
+                    description: |
+                      Only present in query-update mode. List of global
+                      dataset index coordinate tuples that matched (and
+                      were updated) - e.g. `[[1], [4], [7], [10]]` for a
+                      rank-1 dataset, or `[[2, 3], [5, 1]]` for rank-2.
+                    items:
+                      type: array
+                      items: { type: integer }
                   hrefs:
                     type: array
                     items: { $ref: '#/components/schemas/Href' }
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+                description: "Query-update mode with `Accept: application/octet-stream` - the same indices, as raw little-endian int64 coordinate tuples."
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }

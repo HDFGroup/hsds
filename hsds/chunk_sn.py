@@ -277,7 +277,7 @@ def _getPoints(body, rank=1):
     return points
 
 
-def _getQuery(params, dtype, rank=1, body=None):
+def _getQuery(params, dtype, body=None):
     """ get query parameter and validate if set """
 
     kw = "query"
@@ -291,11 +291,6 @@ def _getQuery(params, dtype, rank=1, body=None):
     if query:
         if _isAppend(params, body=body):
             msg = "Query string can not be used with append parameter"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        # validate the query string
-        if rank > 1:
-            msg = "Query string is not supported for multidimensional datasets"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
@@ -383,12 +378,13 @@ async def _getRequestData(request, http_streaming=True):
 
 
 async def arrayResponse(arr, request, dset_json):
-    """ return the array as binary or json response based on accept type """
+    """ return the query-update match indices as a binary or json response
+    based on accept type """
     response_type = getAcceptType(request)
 
     if response_type == "binary":
         output_data = arr.tobytes()
-        msg = f"PUT_Value query - returning {len(output_data)} bytes binary data"
+        msg = f"PUT_Value query - returning {len(output_data)} bytes binary indices"
         log.debug(msg)
 
         # write response
@@ -405,16 +401,16 @@ async def arrayResponse(arr, request, dset_json):
         except Exception as e:
             log.error(f"Exception during binary data write: {e}")
     else:
-        log.debug("PUT Value query - returning JSON data")
+        log.debug("PUT Value query - returning JSON indices")
         rsp_json = {}
         data = arr.tolist()
-        log.debug(f"got rsp data {len(data)} points")
+        log.debug(f"got rsp data {len(data)} indices")
         try:
-            json_query_data = bytesArrayToList(data)
+            indices_data = bytesArrayToList(data)
         except ValueError as err:
             msg = f"Cannot decode provided bytes to list: {err}"
             raise HTTPBadRequest(reason=msg)
-        rsp_json["value"] = json_query_data
+        rsp_json["indices"] = indices_data
         rsp_json["hrefs"] = get_hrefs(request, dset_json)
 
         resp = await jsonResponse(request, rsp_json)
@@ -518,7 +514,7 @@ async def PUT_Value(request):
     # if there's no selection parameter, this will return entire dataspace
     selection = _getSelect(params, dset_json, body=body)
 
-    query = _getQuery(params, dset_dtype, rank=rank, body=body)
+    query = _getQuery(params, dset_dtype, body=body)
 
     element_count = _getElementCount(params, body=body)
 
@@ -808,7 +804,7 @@ async def GET_Value(request):
         ignore_nan = False
     log.debug(f"ignore nan: {ignore_nan}")
 
-    query = _getQuery(params, dset_dtype, rank=rank)
+    query = _getQuery(params, dset_dtype)
 
     response_type = getAcceptType(request)
 
