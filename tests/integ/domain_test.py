@@ -1448,11 +1448,23 @@ class DomainTest(unittest.TestCase):
         domains = rspJson["domains"]
         self.assertEqual(len(domains), 3)
 
-        # bad query expression
-        query = "atttr1 > 7 AND"
+        # bad query expression (dangling AND with no right-hand operand -
+        # use a real attribute name here so this tests the grammar error
+        # specifically, not just a missing/unknown attribute)
+        query = "attr1 > 7 AND"
         params = {"domain": folder + "/", "query": query}
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
+
+        # query referencing an attribute that doesn't exist on any domain
+        # is not an error - it just matches nothing
+        query = "no_such_attr > 7"
+        params = {"domain": folder + "/", "query": query}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domains" in rspJson)
+        self.assertEqual(len(rspJson["domains"]), 0)
 
         # empty sub-domains
         domain = helper.getTestDomain("tall.h5") + "/"

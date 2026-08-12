@@ -528,8 +528,23 @@ paths:
       description: |
         Lists domains directly under the folder given by `domain`/`X-Hdf-domain`
         (default `/`, i.e. top-level domains). Supports glob-pattern filtering,
-        a boolean-expression filter over root-group attributes, and S3-style
-        pagination.
+        a query filter over root-group attributes, and S3-style pagination.
+
+        ### Query syntax (`query`)
+        Same engine and grammar as `GET /datasets/{id}/value`'s `query`
+        param (`h5json.query_util.arrayQuery`): `"temperature > 20"`,
+        `"city IN ('seattle', 'portland')"`, combined with
+        `AND`/`OR`/`NOT`/`XOR`. Each candidate domain's root-group scalar
+        primitive attributes (integer/float/string) are used as the query
+        variables - unlike a dataset (one fixed schema for every row),
+        each domain can have a completely different set of attributes,
+        so:
+        - A domain missing an attribute the query references (or having
+          it as a non-scalar or non-primitive type) simply doesn't match
+          - this is not an error, even if *no* domain anywhere has that
+            attribute.
+        - Folder domains (no root group) never match a query.
+        - Genuine syntax errors (unlike a missing attribute) still 400.
       parameters:
         - $ref: '#/components/parameters/DomainParam'
         - $ref: '#/components/parameters/DomainHeader'
@@ -540,7 +555,7 @@ paths:
           schema: { type: string }
         - name: query
           in: query
-          description: Boolean expression over root-group scalar attributes, used to filter domains (e.g. `"temperature > 20"`).
+          description: Query-filter string over root-group scalar attributes (see syntax above).
           schema: { type: string }
         - name: verbose
           in: query
