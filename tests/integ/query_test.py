@@ -723,7 +723,6 @@ class QueryTest(unittest.TestCase):
         for i in range(len(value)):
             orig_item = value[i]
             mod_item = read_values[i]
-            # print(f"row {i}: orig_item: {orig_item}, mod_item: {mod_item}")
             self.assertEqual(orig_item[0], mod_item[0])
             self.assertEqual(orig_item[1], mod_item[1])
             self.assertEqual(orig_item[3], mod_item[3])
@@ -731,10 +730,7 @@ class QueryTest(unittest.TestCase):
             if orig_item[0] == "AAPL" and i == 1:
                 self.assertEqual(mod_item[2], 999)
             else:
-                if orig_item[2] != mod_item[2]:
-                    print("mismatch values, fix TBD")
-                else:
-                    self.assertEqual(orig_item[2], mod_item[2])
+                self.assertEqual(orig_item[2], mod_item[2])
 
     def testQueryNoneCompound(self):
 

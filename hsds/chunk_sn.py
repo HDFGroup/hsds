@@ -41,6 +41,7 @@ from .util.dsetUtil import isSelect, getSelectParam
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .servicenode_lib import getDsetJson, validateAction
 from .dset_lib import getSelectionData, validateQuery, extendShape, doPointWrite, doHyperslabWrite
+from .dset_lib import doQueryUpdate
 from . import config
 from . import hsds_logger as log
 
@@ -529,7 +530,7 @@ async def PUT_Value(request):
         log.debug(f"got query: {query}")
         limit = _getLimit(params, body=body)
 
-        arr_rsp = await getSelectionData(
+        arr_rsp = await doQueryUpdate(
             app,
             dset_id,
             dset_json,

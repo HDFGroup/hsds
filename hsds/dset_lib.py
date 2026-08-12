@@ -409,7 +409,8 @@ async def getSelectionData(
     query_update=None,
     query_indices=False,
     bucket=None,
-    limit=0
+    limit=0,
+    only_chunk_ids=None,
 ):
     """Read selected slices and return numpy array"""
     log.debug("getSelectionData")
@@ -422,15 +423,20 @@ async def getSelectionData(
     chunkinfo = {}
 
     if slices is not None:
-        num_chunks = getNumChunks(slices, layout)
-        log.debug(f"num_chunks: {num_chunks}")
+        if only_chunk_ids is not None:
+            # caller already knows exactly which chunk(s) to target -
+            # used by doQueryUpdate to process one chunk at a time
+            chunk_ids = only_chunk_ids
+        else:
+            num_chunks = getNumChunks(slices, layout)
+            log.debug(f"num_chunks: {num_chunks}")
 
-        max_chunks = int(config.get("max_chunks_per_request", default=1000))
-        if num_chunks > max_chunks:
-            msg = f"num_chunks over {max_chunks} limit, but will attempt to fetch with crawler"
-            log.warn(msg)
+            max_chunks = int(config.get("max_chunks_per_request", default=1000))
+            if num_chunks > max_chunks:
+                msg = f"num_chunks over {max_chunks} limit, but will attempt to fetch with crawler"
+                log.warn(msg)
 
-        chunk_ids = getChunkIds(dset_id, slices, layout)
+            chunk_ids = getChunkIds(dset_id, slices, layout)
     else:
         # points - already checked it is not None
         num_points = len(points)
@@ -487,6 +493,108 @@ async def getSelectionData(
     )
 
     return arr
+
+
+def _globalIndexToChunkId(dset_id, coord, layout):
+    """ convert a (rank,) global index coordinate array into the id of
+    the chunk that contains it """
+    rank = len(layout)
+    if rank == 1:
+        point = int(coord[0])
+    else:
+        point = tuple(int(c) for c in coord)
+    return getChunkId(dset_id, point, layout)
+
+
+async def doQueryUpdate(
+    app,
+    dset_id,
+    dset_json,
+    slices=None,
+    query=None,
+    query_update=None,
+    bucket=None,
+    limit=0,
+):
+    """ Perform a query-based conditional update (PUT .../value with a
+    query param), correctly handling `limit` when the matching elements
+    span more than one chunk.
+
+    Each chunk's own query-update is only aware of its own matches, so
+    naively sending the same `limit` to every relevant chunk (as a plain
+    getSelectionData call would) can update more than `limit` elements in
+    total. Instead:
+      1. Find the (up to `limit`) global indices that would be updated,
+         without modifying anything yet (a read-only query_indices pass).
+      2. If there turn out to be fewer matches than `limit` (the limit
+         isn't actually binding), or no limit was given at all, process
+         every relevant chunk in the normal (parallel, unlimited) way.
+      3. Otherwise, process chunks one at a time, in dataset order,
+         decrementing the remaining budget by the number of elements
+         *actually* updated in each chunk (not the number predicted in
+         step 1) - the data may have changed between the read-only pass
+         and the update, so this stays correct under concurrent writes.
+         Stops as soon as the budget is exhausted (often just the first
+         chunk).
+
+    Returns the array of global indices that were actually updated. """
+    if not limit or limit <= 0:
+        # no limit - nothing to coordinate, process all chunks at once
+        return await getSelectionData(
+            app, dset_id, dset_json, slices=slices, query=query,
+            query_update=query_update, bucket=bucket, limit=0,
+        )
+
+    target_indices = await getSelectionData(
+        app, dset_id, dset_json, slices=slices, query=query,
+        query_indices=True, bucket=bucket, limit=limit,
+    )
+
+    if len(target_indices) == 0:
+        # no matches at all
+        return target_indices
+
+    if len(target_indices) < limit:
+        # fewer matches than the limit overall - limit isn't actually
+        # binding, so there's no over-application risk in processing
+        # every relevant chunk in one (parallel) pass
+        return await getSelectionData(
+            app, dset_id, dset_json, slices=slices, query=query,
+            query_update=query_update, bucket=bucket, limit=0,
+        )
+
+    # limit may be binding and could span multiple chunks - process
+    # chunks one at a time, in order, so `limit` is respected globally
+    layout = getChunkDims(dset_json)
+    ordered_chunk_ids = []
+    seen_chunk_ids = set()
+    for coord in target_indices:
+        chunk_id = _globalIndexToChunkId(dset_id, coord, layout)
+        if chunk_id not in seen_chunk_ids:
+            seen_chunk_ids.add(chunk_id)
+            ordered_chunk_ids.append(chunk_id)
+
+    remaining = limit
+    results = []
+    for chunk_id in ordered_chunk_ids:
+        if remaining <= 0:
+            break
+        chunk_result = await getSelectionData(
+            app, dset_id, dset_json, slices=slices, query=query,
+            query_update=query_update, bucket=bucket, limit=remaining,
+            only_chunk_ids=[chunk_id],
+        )
+        if len(chunk_result) > 0:
+            results.append(chunk_result)
+        # use the actual count returned (not the step-1 prediction),
+        # since the data may have been modified concurrently
+        remaining -= len(chunk_result)
+
+    if not results:
+        return target_indices[:0]
+    if len(results) == 1:
+        return results[0]
+    return np.concatenate(results, axis=0)
 
 
 async def doReadSelection(
