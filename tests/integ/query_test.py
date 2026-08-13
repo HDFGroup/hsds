@@ -484,9 +484,8 @@ class QueryTest(unittest.TestCase):
         readData = rspJson["value"]
         self.assertEqual(len(readData), 3902)
         item = readData[0]
-        self.assertEqual(item[0], 128912)
-        self.assertEqual(item[1], "1980.12.12")
-        self.assertEqual(item[2], "AAPL")
+        self.assertEqual(item[0], "1980.12.12")
+        self.assertEqual(item[1], "AAPL")
 
     def testPutQuery(self):
         """

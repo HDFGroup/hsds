@@ -13,7 +13,8 @@ from .util.dsetUtil import getSelectionList
 
 def get_cmd_options():
     """ read command line options and return as dict """
-    required = ("fileuri", "h5path", "select")
+    required = ("fileuri", "h5path")
+    optional = ("select",)
     cmd_options = {}
     for option in required:
         val = config.getCmdLineArg(option)
@@ -22,6 +23,8 @@ def get_cmd_options():
             log.error(msg)
             sys.exit(-1)
         cmd_options[option] = val
+    for option in optional:
+        cmd_options[option] = config.getCmdLineArg(option)
     return cmd_options
 
 
@@ -134,8 +137,9 @@ def get_storage_info(dset, select=None):
     log.debug(f"using chunktable_dims: {chunktable_dims}")
 
     if select:
-        slices = getSelectionList(select, chunktable_dims)
-        arr_shape = slices.mshape
+        selection = getSelectionList(select, chunktable_dims)
+        arr_shape = selection.mshape
+        slices = selection.slices
     else:
         slices = []
         for i in range(rank):
@@ -194,6 +198,9 @@ def main():
     log.setLogConfig(log_level, prefix=prefix, timestamps=log_timestamps)
     start_time = getNow()
     log.info(f"chunklocator start: {start_time:.2f}")
+
+    # expected usage example:
+    # hsds-chunklocator --h5path=/dset --fileuri=/hdf5/hdf5test/small1dchunk.h5  --select [0:200]
 
     cmd_options = get_cmd_options()
     h5path = cmd_options["h5path"]

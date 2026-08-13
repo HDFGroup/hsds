@@ -152,10 +152,11 @@ def getChunkId(dset_id, point, layout):
 
     chunk_id = "c-" + dset_id[2:] + "_"
     rank = len(layout)
+    log.debug(f"getChunkId - dset_id: {dset_id}, point: {point}, layout: {layout}")
 
     for dim in range(rank):
         coord = None
-        if rank == 1 and not isinstance(point, list) and not isinstance(point, tuple):
+        if rank == 1 and not isinstance(point, (list, tuple, np.ndarray)):
             coord = point  # integer for 1d dataset
         else:
             coord = point[dim]
