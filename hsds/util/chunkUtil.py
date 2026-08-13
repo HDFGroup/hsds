@@ -155,7 +155,7 @@ def getChunkId(dset_id, point, layout):
 
     for dim in range(rank):
         coord = None
-        if rank == 1:
+        if rank == 1 and not isinstance(point, list) and not isinstance(point, tuple):
             coord = point  # integer for 1d dataset
         else:
             coord = point[dim]

@@ -230,6 +230,10 @@ def getUUIDByPath(domain, path, username=None, password=None, session=None):
 
 def getHDF5JSON(filename):
     """Get HDF5 JSON dump for chunk locations"""
+    if not op.isabs(filename):
+        # resolve relative to this file's directory so callers work
+        # regardless of the current working directory
+        filename = op.join(op.dirname(op.abspath(__file__)), filename)
     if not op.isfile(filename):
         return None
     hdf5_json = None
