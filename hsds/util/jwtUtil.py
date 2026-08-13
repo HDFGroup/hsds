@@ -198,7 +198,7 @@ def verifyBearerToken(app, token):
             log.debug(f"claim: {name} not found in bearer token")
 
     if not username:
-        log.warn("unable to retreive username from bearer token")
+        log.warn("unable to retrieve username from bearer token")
         raise HTTPUnauthorized()
 
     exp = None

@@ -546,7 +546,7 @@ async def info(request):
 
 
 def baseInit(node_type):
-    """Intitialize application and return app object"""
+    """Initialize application and return app object"""
 
     # setup log config
     log_level = config.get("log_level")

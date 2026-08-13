@@ -15,7 +15,6 @@
 #
 
 import asyncio
-import traceback
 import random
 from asyncio import CancelledError
 import numpy as np
@@ -279,7 +278,7 @@ async def read_chunk_hyperslab(
     if "s3offset" in chunk_info:
         s3offset = chunk_info["s3offset"]
         if isinstance(s3offset, list):
-            # convert to a colon seperated string
+            # convert to a colon separated string
             s3offset = ":".join(map(str, s3offset))
         else:
             s3offset = int(s3offset)
@@ -288,7 +287,7 @@ async def read_chunk_hyperslab(
     if "s3size" in chunk_info:
         s3size = chunk_info["s3size"]
         if isinstance(s3size, list):
-            # convert to a colon seperated string
+            # convert to a colon separated string
             s3size = ":".join(map(str, s3size))
         else:
             s3size = int(s3size)
@@ -297,7 +296,7 @@ async def read_chunk_hyperslab(
     if "hyper_dims" in chunk_info:
         hyper_dims = chunk_info["hyper_dims"]
         if isinstance(hyper_dims, list):
-            # convert to colon seperated string
+            # convert to colon separated string
             hyper_dims = ":".join(map(str, hyper_dims))
         params["hyper_dims"] = hyper_dims
 
@@ -914,8 +913,6 @@ class ChunkCrawler:
                 status_code = 500
                 msg = f"Unexpected exception {type(e)} for {self._action}({chunk_id}): {e} "
                 log.error(msg)
-                tb = traceback.format_exc()
-                print("traceback:", tb)
             retry += 1
             if status_code == 200:
                 break

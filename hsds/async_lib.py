@@ -95,7 +95,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         return  # null dataspace
 
     if item_size == "H5T_VARIABLE":
-        # arbitrary lgoical size for vaariable, so just set to allocated size
+        # arbitrary logical size for variable, so just set to allocated size
         logical_bytes = dataset_info["allocated_bytes"]
     else:
         num_elements = getNumElements(dims)
@@ -361,7 +361,7 @@ def scanRootCallback(app, s3keys):
 
 async def _getDatsetValueJson(app, dset_id, dset_json, obj_ids, size_limit=None, bucket=None):
     """ If the dataset size is less than size_limit, and the chunk_ids for the dataset are
-        available, return a JSON representation of the dataset values. Othewise, return None """
+        available, return a JSON representation of the dataset values. Otherwise, return None """
 
     dims = getShapeDims(dset_json)
     if dims is None:

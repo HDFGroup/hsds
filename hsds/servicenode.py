@@ -41,7 +41,7 @@ from .chunk_sn import PUT_Value, GET_Value, POST_Value, GET_Query
 
 
 async def init():
-    """Intitialize application and return app object"""
+    """Initialize application and return app object"""
     app = baseInit("sn")
 
     # call app.router.add_get() here to add node-specific routes
@@ -301,7 +301,7 @@ def main():
         sn_url = f"http://localhost:{sn_port}"
 
     if isUnixDomainUrl(sn_url):
-        print("binding to socket:", sn_url)
+        log.info(f"binding to socket: {sn_url}")
         try:
             s = bindToSocket(sn_url)
         except OSError as oe:

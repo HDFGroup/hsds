@@ -11,7 +11,7 @@
 ##############################################################################
 #
 # value operations
-# handles regauests to read/write chunk data
+# handles requests to read/write chunk data
 #
 
 import json
@@ -384,7 +384,7 @@ async def GET_Chunk(request):
         param_s3offset = params["s3offset"]
         try:
             if param_s3offset.find(":") > 0:
-                # colon seperated index values, convert to list
+                # colon separated index values, convert to list
                 s3offset = list(map(int, param_s3offset.split(":")))
             else:
                 s3offset = int(param_s3offset)

@@ -354,7 +354,7 @@ class HsdsApp:
             logging.info(f"terminating sub-process: {pname}")
             p.terminate()
 
-        # wait for sub-proccesses to exit
+        # wait for sub-processes to exit
         SLEEP_TIME = 0.1  # time to sleep between checking on process state
         MAX_WAIT_TIME = 10.0  # max time to wait for sub-process to terminate
         start_ts = getNow()

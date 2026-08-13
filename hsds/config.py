@@ -157,7 +157,6 @@ def _load_cfg():
                     msg = "Error applying command line override value for "
                     msg += f"key: {x}: {ve}"
                     eprint(msg)
-                    # raise KeyError(msg)
             cfgval = override  # replace the yml value
 
         if _has_unit(cfgval):

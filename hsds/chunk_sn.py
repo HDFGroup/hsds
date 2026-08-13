@@ -958,8 +958,6 @@ async def GET_Value(request):
         elif response_type == "binary":
             if resp_json["status"] != 200:
                 # write json with status_code
-                # resp_json = resp_json.encode('utf-8')
-                # await resp.write(resp_json)
                 log.warn(f"GET Value - got error status: {resp_json['status']}")
             else:
                 log.debug("preparing binary response")
@@ -996,10 +994,6 @@ async def GET_Value(request):
         await resp.write_eof()
     except Exception as e:
         log.error(f"{type(e)} Exception during data write: {e}")
-        import traceback
-
-        tb = traceback.format_exc()
-        print("traceback:", tb)
         raise HTTPInternalServerError()
 
     return resp
@@ -1332,10 +1326,6 @@ async def POST_Value(request):
             await resp.write(resp_body)
     except Exception as e:
         log.error(f"{type(e)} Exception during response write")
-        import traceback
-
-        tb = traceback.format_exc()
-        print("traceback:", tb)
 
     # finalize response
     await resp.write_eof()

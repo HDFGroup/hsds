@@ -164,7 +164,7 @@ def getChunkId(dset_id, point, layout):
         chunk_index = int(coord) // c
         chunk_id += str(chunk_index)
         if dim + 1 < rank:
-            chunk_id += "_"  # seperate dimensions with underscores
+            chunk_id += "_"  # separate dimensions with underscores
 
     return chunk_id
 

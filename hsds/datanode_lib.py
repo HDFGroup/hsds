@@ -123,7 +123,7 @@ async def check_metadata_obj(app, obj_id, bucket=None):
     if obj_id in meta_cache:
         found = True
     else:
-        # Not in chache, check s3 obj exists
+        # Not in cache, check s3 obj exists
         s3_key = getS3Key(obj_id)
         log.debug(f"check_metadata_obj({s3_key})")
         # does key exist?
@@ -1088,7 +1088,6 @@ async def get_chunk(
         except ValueError as ve:
             log.error(f"Invalid URI path: {s3path} exception: {ve}")
             raise
-            # raise HTTPInternalServerError()
 
         msg = f"Using s3path bucket: {bucket} and  s3key: {s3key} "
         msg += f"offset: {s3offset} length: {s3size}"

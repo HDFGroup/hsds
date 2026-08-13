@@ -439,7 +439,7 @@ def getActiveNodeCount(app, node_type):
 
 
 async def init():
-    """Intitialize application and return app object"""
+    """Initialize application and return app object"""
 
     # setup log config
     log_level = config.get("log_level")

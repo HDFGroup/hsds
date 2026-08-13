@@ -952,15 +952,12 @@ async def PUT_Domain(request):
     linked_domain = None
     linked_bucket = None
     root_id = None
-    # domain_class = None
 
     if body and "folder" in body:
         if body["folder"]:
             is_folder = True
     if body and "owner" in body:
         owner = body["owner"]
-    # if body and "class" in body:
-    #    domain_class = body["class"]
     if body and "linked_domain" in body:
         if is_folder:
             msg = "Folder domains can not be used for links"
@@ -1124,9 +1121,6 @@ async def PUT_Domain(request):
 
     if root_id:
         body["root"] = root_id
-
-    # if domain_class:
-    #    body["class"] = domain_class
 
     log.debug(f"creating domain: {domain} with body: {body}")
     domain_json = await http_put(app, req, data=body)

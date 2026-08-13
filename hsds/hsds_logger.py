@@ -10,7 +10,7 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 #
-# Simple looger for hsds
+# Simple logger for hsds
 #
 
 import asyncio
@@ -138,7 +138,7 @@ def request(req):
         "/register",
     )
     if req.path in INFO_METHODS:
-        # always service these state requests regardles of node state and
+        # always service these state requests regardless of node state and
         # task load
         return
     node_state = app["node_state"] if "node_state" in app else None

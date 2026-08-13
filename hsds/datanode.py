@@ -14,7 +14,6 @@
 #
 
 import asyncio
-import traceback
 from aiohttp.web import run_app
 
 from h5json.objid import isValidUuid, isSchema2Id, getCollectionForId
@@ -45,7 +44,7 @@ from aiohttp.web_exceptions import HTTPForbidden, HTTPBadRequest
 
 
 async def init():
-    """Intitialize application and return app object"""
+    """Initialize application and return app object"""
     app = baseInit("dn")
 
     #
@@ -151,20 +150,14 @@ async def bucketScan(app):
                 msg = f"bucketScan - HTTPBadRequest error scanning {root_id}: "
                 msg += f"{bre}"
                 log.error(msg)
-                tb = traceback.format_exc()
-                print("traceback:", tb)
             except HTTPInternalServerError as ise:
                 msg = "bucketScan - HTTPInternalServer error scanning "
                 msg += f"{root_id}: {ise}"
                 log.error(msg)
-                tb = traceback.format_exc()
-                print("traceback:", tb)
             except Exception as e:
                 msg = "bucketScan - Unexpected exception scanning "
                 msg += f"{root_id}: {e}"
                 log.error(msg)
-                tb = traceback.format_exc()
-                print("traceback:", tb)
 
             last_action = getNow(app)
 

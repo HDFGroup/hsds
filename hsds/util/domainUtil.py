@@ -268,7 +268,6 @@ def validateDomainKey(domain_key):
 
 
 def getDomainFromRequest(request, validate=True):
-    # print(f"getDomainFromRequest: {request}, validate={validate}")
     app = request.app
     domain = None
     bucket = None

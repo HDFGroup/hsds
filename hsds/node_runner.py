@@ -13,7 +13,6 @@ def main():
         raise ValueError(f"Unexpected node type: {node_type}")
     print(f"hsds node main for node_type: {node_type}")
     print(f"python version: {sys.version}")
-    print(f"sys path: {sys.path}")
 
     if node_type == "sn":
         servicenode.main()

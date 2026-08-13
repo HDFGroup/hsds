@@ -392,10 +392,6 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
     if isinstance(s, slice):
         s = _toArraySlice(s)
         s = slice(s.start, slice_stop(s), s.step)
-    # log.debug(f"pagination dim: {paginate_dim} select: {s} paginate_extent: {paginate_extent}")
-    # page_extent = -(-max_request_size // page_size)
-    # log.debug(f"getSelectionPagination - page_extent: {page_extent}")
-    # page_count = -(-paginate_extent // page_extent)
     if paginate_extent < page_count:
         msg = f"select pagination unable to paginate select dim: {paginate_dim} "
         msg += f"into {page_count} pages"

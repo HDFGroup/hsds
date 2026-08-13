@@ -150,7 +150,7 @@ def get_storage_info(dset, select=None):
     log.debug(f"arr_shape: {arr_shape}")
 
     dtype = get_chunktable_dtype()
-    # initilize chunk table array
+    # initialize chunk table array
     chunkinfo_arr = np.zeros(arr_shape, dtype=dtype)
 
     dsid = dset.id

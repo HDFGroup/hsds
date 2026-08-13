@@ -34,7 +34,7 @@ from . import hsds_logger as log
 def _index(items, marker, create_order=False):
     """Locate the leftmost value exactly equal to x"""
     if create_order:
-        # list is not ordered, juse search linearly
+        # list is not ordered, just search linearly
         for i in range(len(items)):
             if items[i] == marker:
                 return i
