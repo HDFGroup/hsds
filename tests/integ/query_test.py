@@ -213,7 +213,7 @@ class QueryTest(unittest.TestCase):
                 kwargs["expect_bin"] = False
 
             # items in list
-            params = {"query": "open < 3000 AND stock_symbol IN (b'AAPL', b'EBAY')"}
+            params = {"query": "open < 3000 AND stock_symbol IN (AAPL, EBAY)"}
             rsp = self.session.get(value_req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 200)
             kwargs["expected_indices"] = [6, 7, 9, 10]
@@ -222,7 +222,7 @@ class QueryTest(unittest.TestCase):
             verifyQueryRsp(rsp, **kwargs)
 
             # read first row with AAPL
-            params = {"query": "stock_symbol == b'AAPL'", "Limit": 1}
+            params = {"query": "stock_symbol == AAPL", "Limit": 1}
             rsp = self.session.get(value_req, params=params, headers=query_headers)
             kwargs["expected_indices"] = (1,)
             verifyValueRsp(rsp, **kwargs)
@@ -230,7 +230,7 @@ class QueryTest(unittest.TestCase):
             verifyQueryRsp(rsp, **kwargs)
 
             # read all rows with APPL
-            params = {"query": "stock_symbol == b'AAPL'"}
+            params = {"query": "stock_symbol == AAPL"}
             rsp = self.session.get(value_req, params=params, headers=query_headers)
             expected_indices = (1, 4, 7, 10)
             kwargs["expected_indices"] = expected_indices
@@ -239,7 +239,7 @@ class QueryTest(unittest.TestCase):
             verifyQueryRsp(rsp, **kwargs)
 
             # return just open and close fields
-            params = {"query": "stock_symbol == b'AAPL'", "fields": "open:close"}
+            params = {"query": "stock_symbol == AAPL", "fields": "open:close"}
             # just do json to keep the verification simple
             rsp = self.session.get(value_req, params=params, headers=headers)
             # need to check this one by hand
@@ -264,7 +264,7 @@ class QueryTest(unittest.TestCase):
             rsp = self.session.get(query_req, params=params, headers=query_headers)
             verifyQueryRsp(rsp, **kwargs)
 
-            params = {"query": "stock_symbol IN (b'AAPL', b'EBAY')"}
+            params = {"query": "stock_symbol IN (AAPL, EBAY)"}
             rsp = self.session.get(value_req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 200)
             kwargs["expected_indices"] = [0, 1, 3, 4, 6, 7, 9, 10]
@@ -272,7 +272,7 @@ class QueryTest(unittest.TestCase):
             rsp = self.session.get(query_req, params=params, headers=query_headers)
             verifyQueryRsp(rsp, **kwargs)
 
-            params = {"query": "open < 3000 AND stock_symbol IN (b'AAPL', b'EBAY')"}
+            params = {"query": "open < 3000 AND stock_symbol IN (AAPL, EBAY)"}
             rsp = self.session.get(req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 200)
             kwargs["expected_indices"] = [6, 7, 9, 10]
@@ -280,7 +280,7 @@ class QueryTest(unittest.TestCase):
             rsp = self.session.get(query_req, params=params, headers=query_headers)
             verifyQueryRsp(rsp, **kwargs)
 
-            params = {"query": "open < 4000 AND stock_symbol IN (b'AAPL', b'EBAY')"}
+            params = {"query": "open < 4000 AND stock_symbol IN (AAPL, EBAY)"}
             rsp = self.session.get(value_req, params=params, headers=query_headers)
             self.assertEqual(rsp.status_code, 200)
             kwargs["expected_indices"] = [0, 1, 3, 4, 6, 7, 9, 10]
@@ -473,7 +473,7 @@ class QueryTest(unittest.TestCase):
 
         # read a selection
         req = self.endpoint + "/datasets/" + dset_id + "/value"
-        params = {"query": "stock_symbol == b'AAPL'"}  # query for AAPL
+        params = {"query": "stock_symbol == AAPL"}  # query for AAPL
         params["select"] = "[0:1000000]"  # search over just first 1MM rows
         rsp = self.session.get(req, params=params, headers=headers)
 
@@ -572,7 +572,7 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # set any rows with AAPL to have open of 999
-        params = {"query": "stock_symbol == b'AAPL'"}
+        params = {"query": "stock_symbol == AAPL"}
         update_value = {"open": 999}
         payload = {"value": update_value}
         rsp = self.session.put(
@@ -613,7 +613,7 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # set just one row with AAPL to have open of 42
-        params = {"query": "stock_symbol == b'AAPL'"}
+        params = {"query": "stock_symbol == AAPL"}
         params["Limit"] = 1
         update_value = {"open": 999}
         payload = {"value": update_value}
@@ -698,7 +698,7 @@ class QueryTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)  # write value
 
         # set just one row with AAPL to have open of 42
-        params = {"query": "stock_symbol == b'AAPL'"}
+        params = {"query": "stock_symbol == AAPL"}
         params["Limit"] = 1
         update_value = {"open": 999}
         payload = {"value": update_value}
