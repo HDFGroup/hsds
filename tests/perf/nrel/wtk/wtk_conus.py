@@ -73,7 +73,7 @@ if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
     msg += "[--h5path=dataset_name] [--index=index] [--bucket=bucket_name] "
     msg += "[--iter=count] [--usecache] [--mp]"
     print(msg)
-    print(f"    --folder: path to wtk conus files (defalt: {folderpath})")
+    print(f"    --folder: path to wtk conus files (default: {folderpath})")
     print("        path can be an HSDS domain path or s3 uri to HDF5 files")
     print("        example: --folder=s3://nrel-pds-wtk/conus/v1.0.0/")
     print(f"    --h5path: hdf5 path to dataset (default: {cfg['h5path']})")

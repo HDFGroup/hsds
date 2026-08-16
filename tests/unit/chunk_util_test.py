@@ -685,7 +685,7 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[1].stop, 8)
         self.assertEqual(sel[1].step, 1)
 
-        # 2-d test - non-even chunks at boundry
+        # 2-d test - non-even chunks at boundary
         dset_id = "d-12345678-1234-1234-1234-1234567890ab"
         datashape = (45, 54)
         layout = (10, 10)
@@ -739,7 +739,7 @@ class ChunkUtilTest(unittest.TestCase):
         self.assertEqual(sel[0].step, 1)
         self.assertEqual(sel[1], [2, 9])
 
-        # 3-d test with coodinates
+        # 3-d test with coordinates
         datashape = (5, 1000, 1000)
         layout = (3, 500, 500)
         selection = selections.select(datashape, (slice(0, 5, 1), [1, 10, 100], [10, 100, 500]))

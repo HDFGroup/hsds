@@ -592,7 +592,7 @@ class ValueTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create dataset
-        # pass in layout specification so that we can test selection across chunk boundries
+        # pass in layout specification so that we can test selection across chunk boundaries
         data = {"type": "H5T_STD_I32LE", "shape": [45, 54]}
         data["creationProperties"] = {
             "layout": {"class": "H5D_CHUNKED", "dims": [10, 10]}
@@ -796,7 +796,7 @@ class ValueTest(unittest.TestCase):
                 if j < len(string):
                     data[offset] = ord(string[j])
                 else:
-                    data[offset] = 0  # null padd rest of the element
+                    data[offset] = 0  # null pad rest of the element
 
         payload = {"value": data}
         rsp = self.session.put(req, data=data, headers=headers_bin_req)
@@ -1244,7 +1244,7 @@ class ValueTest(unittest.TestCase):
             self.assertEqual(len(item), 2)
             expected = (i * 10, i * 10 + i / 10.0) if i > 0 else (42, 0.42)
             self.assertEqual(item[0], expected[0])
-            tol = 0.1  # tbd: investiage why results need such a high tolerance
+            tol = 0.1  # tbd: investigate why results need such a high tolerance
             self.assertTrue(abs(item[1] - expected[1]) < tol)
 
         # read back just the "temp" field of the compound type
@@ -2258,7 +2258,7 @@ class ValueTest(unittest.TestCase):
         data = rspJson["value"]
         self.assertEqual(data, list(range(num_elements * 2)))
 
-        # test mis-match of append value and data
+        # test mismatch of append value and data
         value = list(range(num_elements, num_elements * 2))
         payload = {"value": value, "append": num_elements + 1}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
@@ -2359,7 +2359,7 @@ class ValueTest(unittest.TestCase):
         read_values = rspJson["value"]
         self.assertEqual(read_values, list(range(num_elements * 2)))
 
-        # test mis-match of append value and data
+        # test mismatch of append value and data
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
         params = {"append": num_elements + 1}
         rsp = self.session.put(req, data=data, params=params, headers=headers_bin_req)
@@ -2482,7 +2482,7 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(data[0], list(range(num_elements)))
         self.assertEqual(data[1], list(range(num_elements)))
 
-        # test mis-match of append value and data
+        # test mismatch of append value and data
         value = list(range(num_elements, num_elements * 2))
         payload = {"value": value, "append": num_elements + 1}
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
@@ -3740,7 +3740,7 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(value, [42,] * 10)
 
     def testLargeCreationProperties(self):
-        # test Dataset with artifically large creation_properties data
+        # test Dataset with artificially large creation_properties data
         print("testLargeCreationProperties", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
 

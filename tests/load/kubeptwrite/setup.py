@@ -80,7 +80,7 @@ payload = {"type": "H5T_STD_I8LE", "shape": extent}
 req = endpoint + "/datasets"
 rsp = session.post(req, data=json.dumps(payload), headers=headers)
 if rsp.status_code != 201:
-    sys.exit("Failed to create datset: {}".format(rsp.status_code))
+    sys.exit("Failed to create dataset: {}".format(rsp.status_code))
 
 rsp_json = json.loads(rsp.text)
 dset_id = rsp_json["id"]
@@ -92,7 +92,7 @@ payload = {"id": dset_id}
 print(dset_id)
 rsp = session.put(req, data=json.dumps(payload), headers=headers)
 if rsp.status_code != 201:
-    sys.exit("Failed to link datset: {}".format(rsp.status_code))
+    sys.exit("Failed to link dataset: {}".format(rsp.status_code))
 rsp_json = json.loads(rsp.text)
 
 session.close()

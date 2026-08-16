@@ -814,10 +814,10 @@ class QueryTest(unittest.TestCase):
         self.assertTrue("hrefs" in rspJson)
         self.assertTrue("value" not in rspJson)
         self.assertTrue("indices" in rspJson)
-        indicies = rspJson["indices"]
-        self.assertEqual(len(indicies), nrows + ncols - 1)  # 19
+        indices = rspJson["indices"]
+        self.assertEqual(len(indices), nrows + ncols - 1)  # 19
         for i in range(nrows + ncols - 1):
-            index = indicies[i]
+            index = indices[i]
             if i < nrows:
                 self.assertEqual(index[0], 0)
                 self.assertEqual(index[1], i)

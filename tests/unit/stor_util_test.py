@@ -224,7 +224,7 @@ class StorUtilTest(unittest.TestCase):
         await releaseStorageClient(app)
 
     def testStorUtil(self):
-        # run synchronus tests
+        # run synchronous tests
         self.s3path_test()
 
         bucket = config.get("hsds_unit_test_bucket")

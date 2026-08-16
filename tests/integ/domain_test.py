@@ -1007,7 +1007,7 @@ class DomainTest(unittest.TestCase):
         else:
             print("user2_name not set")
 
-        # delete the domain (with the orginal user)
+        # delete the domain (with the original user)
         headers = helper.getRequestHeaders(domain=domain)
         rsp = self.session.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)

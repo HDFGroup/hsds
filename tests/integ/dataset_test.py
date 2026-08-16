@@ -881,12 +881,6 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 201)
         rspJson = json.loads(rsp.text)
 
-        # reduce the size to 5 elements
-        # payload = {"shape": 5}
-        # rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
-        # self.assertEqual(rsp.status_code, 201)
-        # rspJson = json.loads(rsp.text)
-
         # verify updated-shape using the GET shape request
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -2308,7 +2302,7 @@ class DatasetTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["linkCount"], 1)
 
-        # delete the domain (with the orginal user)
+        # delete the domain (with the original user)
         req = helper.getEndpoint() + "/"
         rsp = self.session.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -2805,7 +2799,7 @@ class DatasetTest(unittest.TestCase):
         # 50K x 80K x 90K dataset
         dims = [0, 80000, 90000]
 
-        # unlimited extend in dim 0, fixeed in dimension 2, extensible by 10x in dim 3
+        # unlimited extend in dim 0, fixed in dimension 2, extensible by 10x in dim 3
         max_dims = [0, 80000, 900000]
         chunk_shape = [1000, 1000, 1000]
         layout = {

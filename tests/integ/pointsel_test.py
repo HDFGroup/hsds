@@ -76,7 +76,7 @@ class PointSelTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create dataset
-        # pass in layout specification so that we can test selection across chunk boundries
+        # pass in layout specification so that we can test selection across chunk boundaries
         data = {"type": "H5T_STD_I32LE", "shape": (100,)}
         data["creationProperties"] = {
             "layout": {
@@ -181,7 +181,7 @@ class PointSelTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create dataset
-        # pass in layout specification so that we can test selection across chunk boundries
+        # pass in layout specification so that we can test selection across chunk boundaries
         data = {"type": "H5T_STD_I32LE", "shape": [20, 30]}
         data["creationProperties"] = {
             "layout": {"class": "H5D_CHUNKED", "dims": [10, 10]}
@@ -268,7 +268,7 @@ class PointSelTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create dataset
-        # pass in layout specification so that we can test selection across chunk boundries
+        # pass in layout specification so that we can test selection across chunk boundaries
         data = {"type": "H5T_STD_I32LE", "shape": (100,)}
         data["creationProperties"] = {
             "layout": {
@@ -392,7 +392,7 @@ class PointSelTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create dataset
-        # pass in layout specification so that we can test selection across chunk boundries
+        # pass in layout specification so that we can test selection across chunk boundaries
         data = {"type": "H5T_STD_I32LE", "shape": [20, 30]}
         data["creationProperties"] = {
             "layout": {"class": "H5D_CHUNKED", "dims": [10, 10]}
@@ -878,7 +878,7 @@ class PointSelTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create dataset
-        # pass in layout specification so that we can test selection across chunk boundries
+        # pass in layout specification so that we can test selection across chunk boundaries
         data = {"type": "H5T_STD_I8LE", "shape": (100,)}
         data["creationProperties"] = {
             "layout": {
@@ -982,7 +982,7 @@ class PointSelTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create dataset
-        # pass in layout specification so that we can test selection across chunk boundries
+        # pass in layout specification so that we can test selection across chunk boundaries
         data = {"type": "H5T_STD_I32LE", "shape": [20, 30]}
         data["creationProperties"] = {
             "layout": {"class": "H5D_CHUNKED", "dims": [10, 10]}
@@ -1021,7 +1021,6 @@ class PointSelTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         # verify the correct elements got set
         value = rspJson["value"]
-        # print("value:", value)
         for x in range(20):
             row = value[x]
             for y in range(30):
@@ -1045,7 +1044,7 @@ class PointSelTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create dataset
-        # pass in layout specification so that we can test selection across chunk boundries
+        # pass in layout specification so that we can test selection across chunk boundaries
         data = {"type": "H5T_STD_I8LE", "shape": (100,)}
         data["creationProperties"] = {
             "layout": {
@@ -1153,7 +1152,7 @@ class PointSelTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create dataset
-        # pass in layout specification so that we can test selection across chunk boundries
+        # pass in layout specification so that we can test selection across chunk boundaries
         vlen_type = {"class": "H5T_VLEN", "base": "H5T_STD_I8LE"}
         data = {"type": vlen_type, "shape": (100,)}
         data["creationProperties"] = {
@@ -1275,7 +1274,7 @@ class PointSelTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create dataset
-        # pass in layout specification so that we can test selection across chunk boundries
+        # pass in layout specification so that we can test selection across chunk boundaries
         data = {"type": "H5T_STD_I32LE", "shape": [20, 30]}
         data["creationProperties"] = {
             "layout": {"class": "H5D_CHUNKED", "dims": [10, 10]}
@@ -1323,7 +1322,6 @@ class PointSelTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         # verify the correct elements got set
         value = rspJson["value"]
-        # print("value:", value)
         for x in range(20):
             row = value[x]
             for y in range(30):
@@ -1705,7 +1703,7 @@ class PointSelTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create dataset
-        # pass in layout specification so that we can test selection across chunk boundries
+        # pass in layout specification so that we can test selection across chunk boundaries
         data = {"type": "H5T_STD_I32LE", "shape": (100,)}
         #
         # create 1d dataset

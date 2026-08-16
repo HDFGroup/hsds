@@ -23,7 +23,7 @@ def usage():
 
 
 def addRow(dset):
-    """add a row to the datset"""
+    """add a row to the dataset"""
     rows = dset.shape[0]
     now = time.time()
     sensor = random.randrange(0, 16)

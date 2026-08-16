@@ -241,7 +241,7 @@ elif log_level == "warning":
 elif log_level == "error":
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.ERROR)
 else:
-    raise ValueError(f"unexepcted loglevel: {log_level}")
+    raise ValueError(f"unexpected loglevel: {log_level}")
 
 # set globals
 

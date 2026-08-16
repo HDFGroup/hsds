@@ -91,7 +91,7 @@ class LinkTest(unittest.TestCase):
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # created
 
-        # now gettting the link should succeed
+        # now getting the link should succeed
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)  # should get link now
         rspJson = json.loads(rsp.text)

@@ -98,8 +98,6 @@ def getRequestHeaders(domain=None, username=None, bucket=None, password=None, **
             password = config.get("user2_password")
     headers = dict()
     if domain is not None:
-        # if config.get("bucket_name"):
-        #    domain = config.get("bucket_name") + domain
         headers['X-Hdf-domain'] = domain.encode('utf-8')
     if username and password:
         auth_string = username + ':' + password

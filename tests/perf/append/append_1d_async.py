@@ -195,7 +195,7 @@ class DataAppender:
         logging.info(f"task: {sensor_id}: exiting")
 
     async def getDatasetId(self, session):
-        """Get the datset id for the dataset (hopefully) at H5_PATH"""
+        """Get the dataset id for the dataset (hopefully) at H5_PATH"""
         headers = self.getHeaders()
         dsetid = None
         req = f"{self.endpoint}/datasets/"
@@ -226,7 +226,7 @@ class DataAppender:
         headers = self.getHeaders()
         req = f"{self.endpoint}/datasets/{dsetid}/value"
         # the 'append' param enables the row to be added to
-        # the end of the datset without explictly extending the
+        # the end of the dataset without explicitly extending the
         # dataspace
         payload = {"value": row, "append": 1}
 

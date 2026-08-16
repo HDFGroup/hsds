@@ -788,7 +788,7 @@ class AttributeTest(unittest.TestCase):
         helper.validateId(root_uuid)
 
         # create attr
-        data = b'\xfe\xff'  # invlaid UTF sequence
+        data = b'\xfe\xff'  # invalid UTF sequence
 
         num_bytes = len(data)
         fixed_str_type = {
@@ -1591,7 +1591,6 @@ class AttributeTest(unittest.TestCase):
         self.assertTrue("type" in rspJson)
         self.assertTrue("shape" in rspJson)
         self.assertTrue("encoding" not in rspJson)
-        # self.assertEqual(rspJson["encoding"], "base64")
         self.assertEqual(rspJson["value"], value)
         # get the encoded value back
         params = {"encoding": "base64"}

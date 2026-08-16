@@ -38,7 +38,6 @@ with socket.socket(socket_type, socket.SOCK_STREAM) as s:
             data = s.recv(BATCH_SIZE)
             if not data:
                 break
-            # print(f"got {len(data)} bytes")
             if use_shared_mem:
                 # read the name of the shm block from socket
                 shm_name = data.decode("ascii")
@@ -50,7 +49,7 @@ with socket.socket(socket_type, socket.SOCK_STREAM) as s:
                 buffer[n:m] = data
             total_bytes += len(data)
         except KeyboardInterrupt:
-            print("quiting")
+            print("quitting")
             break
 tEnd = time.time()
 

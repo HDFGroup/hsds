@@ -29,9 +29,6 @@ def print_responses(results):
     print("num results: {}".format(len(results)))
     for res in results:
         print(res)
-        # delay = res.headers.get("DELAY")
-        # d = res.headers.get("DATE")
-        # print("{}:{} delay {}".format(d, res.url, delay))
 
 
 loop = asyncio.get_event_loop()
