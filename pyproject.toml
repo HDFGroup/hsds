@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-    "setuptools >=61",
+    "setuptools >=77",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -13,13 +13,12 @@ authors = [
 maintainers = [
     {name = "John Readey", email = "jreadey@hdfgroup.org"},
 ]
-license = {text = "Apache Software License"}
+license = "Apache-2.0"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: Unix",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS :: MacOS X",

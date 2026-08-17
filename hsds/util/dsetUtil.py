@@ -12,12 +12,15 @@
 
 from aiohttp.web_exceptions import HTTPBadRequest
 import math
+import re
 
 from h5json.shape_util import getShapeDims
+from h5json.objid import isValidUuid
+from h5json.array_util import jsonToArray, bytesArrayToList
 from h5json import selections
 
 from .. import hsds_logger as log
-from .chunkUtil import _toArraySlice, slice_stop
+from .chunkUtil import _toArraySlice, slice_stop, toNumpyIndex
 
 
 def isSelectAll(selection, dims):
@@ -447,6 +450,110 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
     pagination = tuple(pagination)
     # log.debug(f"returning pagination: {pagination}")
     return pagination
+
+
+_REGIONREF_ATTR_RE = re.compile(r"^/(groups|datasets)/([^/]+)/attributes/([^/]+)$")
+_REGIONREF_DSET_RE = re.compile(r"^/datasets/([^/]+)$")
+
+
+def parseRegionRefParam(regionref):
+    """Parse a 'regionref' query param value into (collection, obj_id, attr_name).
+
+    Accepts exactly these forms:
+      /groups/<id>/attributes/<attr_name>
+      /datasets/<id>/attributes/<attr_name>
+      /datasets/<id>
+    attr_name is None for the bare dataset form.  Raises HTTPBadRequest for
+    any other form, or if the extracted id isn't a valid id for its
+    collection.
+    """
+    m = _REGIONREF_ATTR_RE.match(regionref)
+    if m:
+        collection, obj_id, attr_name = m.group(1), m.group(2), m.group(3)
+    else:
+        m = _REGIONREF_DSET_RE.match(regionref)
+        if not m:
+            msg = f"Invalid regionref path: {regionref}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        collection, obj_id, attr_name = "datasets", m.group(1), None
+
+    if not isValidUuid(obj_id, obj_class=collection):
+        msg = f"Invalid regionref object id: {obj_id}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    return collection, obj_id, attr_name
+
+
+def extractJsonArrayElement(shape, dtype, json_value, selection):
+    """Extract the single JSON-decoded element selected by selection (which
+    must select exactly one element) out of a JSON-encoded array value.
+
+    shape/dtype describe json_value as a whole (e.g. an attribute's own
+    shape/type); selection is a selections.Selection over that same shape.
+    Caller is responsible for having already verified selection.nselect == 1.
+    """
+    arr = jsonToArray(shape, dtype, json_value)
+    sub_arr = arr[toNumpyIndex(selection)]
+    return unwrapSingleElement(bytesArrayToList(sub_arr))
+
+
+def unwrapSingleElement(value):
+    """Peel away single-element list nesting down to the leaf value.
+    Used after extracting a selection known to select exactly one element,
+    where the surrounding shape may still be e.g. (1,) or (1, 1)."""
+    while isinstance(value, list):
+        if len(value) != 1:
+            raise ValueError("expected a single element")
+        value = value[0]
+    return value
+
+
+def regionRefSelectionToTargetSelection(ref_json, target_dims):
+    """Given a decoded region-reference JSON value ({"id": ...} optionally
+    with "select_type"/"selection" or "selection_dict"), reconstruct its
+    selection and re-apply it against target_dims (the shape of the dataset
+    the caller actually wants to read from).
+
+    Raises HTTPBadRequest if the region reference's selection rank doesn't
+    match len(target_dims), or if it selects outside target_dims' bounds.
+    A region reference with no selection info (just {"id": ...}) selects
+    the entire target dataset.
+    """
+    if "selection_dict" in ref_json:
+        ref_sel = selections.from_dict(ref_json["selection_dict"])
+    elif "select_type" in ref_json:
+        ref_sel = selections.from_region_json(ref_json)
+    else:
+        # no selection info - the whole (target) dataset is selected
+        return selections.select(tuple(target_dims), ...)
+
+    ref_rank = len(ref_sel.shape)
+    if ref_rank != len(target_dims):
+        msg = f"regionref selection rank ({ref_rank}) does not match "
+        msg += f"dataset rank ({len(target_dims)})"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    mins, maxs = ref_sel.bbox
+    if mins is None:
+        msg = "regionref selection is empty"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    for dim in range(ref_rank):
+        if maxs[dim] > target_dims[dim]:
+            msg = f"regionref selection for dim {dim} (extent {maxs[dim]}) "
+            msg += f"exceeds dataset extent ({target_dims[dim]})"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    try:
+        return selections.select(tuple(target_dims), ref_sel.slices)
+    except ValueError as ve:
+        msg = f"Invalid regionref selection: {ve}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
 
 
 def getSliceQueryParam(sel):

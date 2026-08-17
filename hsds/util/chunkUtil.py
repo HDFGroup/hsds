@@ -34,16 +34,12 @@ def slice_stop(s):
 
 
 def _toArraySlice(s):
-    """h5json normalizes slices to (start, start + num_points, step), so
-    for step > 1 the stop value is a point count rather than a coordinate.
-    Convert to an equivalent slice with a true coordinate stop, suitable
-    for numpy indexing or coordinate-range arithmetic.
+    """h5json's Selection.slices already returns slices with a true
+    coordinate stop (start + count * step), suitable for numpy indexing
+    or coordinate-range arithmetic. Just ensure a default step of 1.
     """
     step = s.step if s.step is not None else 1
-    if step == 1:
-        return slice(s.start, s.stop, step)
-    num_points = s.stop - s.start
-    return slice(s.start, s.start + num_points * step, step)
+    return slice(s.start, s.stop, step)
 
 
 def toNumpyIndex(selection):
@@ -118,10 +114,9 @@ def getNumChunks(selection, layout):
             continue
 
         step = s.step if s.step is not None else 1
-        # h5json normalizes slices to (start, start + num_points, step), so
-        # (s.stop - s.start) is the number of points selected along this
-        # dimension rather than a coordinate span
-        num_points = s.stop - s.start
+        # s.stop is a true coordinate stop (start + num_points * step),
+        # so divide out the step to recover the number of selected points
+        num_points = (s.stop - s.start) // step
         if step > 1:
             w = num_points * step - (step - 1)
         else:
@@ -351,10 +346,9 @@ def getChunkIds(dset_id, selection, layout, prefix=None):
         if s.step is None:
             s = slice(s.start, s.stop, 1)
 
-        # h5json normalizes slices to (start, start + num_points, step), so
-        # (s.stop - s.start) is the number of points selected along this
-        # dimension rather than a coordinate span
-        num_points = s.stop - s.start
+        # s.stop is a true coordinate stop (start + num_points * step),
+        # so divide out the step to recover the number of selected points
+        num_points = (s.stop - s.start) // s.step
         chunk_indices = []
         if s.step > c:
             # chunks may not be contiguous, skip along the selection and add

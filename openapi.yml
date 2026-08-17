@@ -1635,11 +1635,46 @@ paths:
         `AND`/`OR`/`NOT`/`XOR`. For a simple (non-compound) dtype the only
         allowed variable name is `_`; for compound types, any field name.
         Supported on datasets of any rank (not just rank-1).
+
+        ### Region reference selection (`regionref`)
+        Instead of spelling out `select`, a selection can be taken from a
+        previously stored HDF5 region reference (type `H5T_REFERENCE` /
+        base `H5T_STD_REF_DSETREG`). `regionref` names where that reference
+        is stored, as one of exactly these three forms (note: these use a
+        leading `/` and a plural `attributes` segment - unlike the bare
+        `"groups/<id>"`/`"datasets/<id>"` form used internally for
+        object-reference *values* elsewhere in the API):
+        - `/groups/<id>/attributes/<attr_name>`
+        - `/datasets/<id>/attributes/<attr_name>`
+        - `/datasets/<id>`
+
+        When `regionref` is given, `select` (if present) applies to *that
+        source*, not to this dataset - it picks out one element from an
+        array of region references (e.g. `select=[4]` for the 5th element).
+        If `select` is omitted, the source itself must resolve to exactly
+        one element (a scalar attribute, or a single-element array/dataset),
+        otherwise the request is rejected with 400.
+
+        The resolved region reference's own selection is then applied
+        against *this* dataset (the `{id}` in the URL) - the dataset id
+        embedded in the reference itself is ignored. The reference's
+        selection rank must match this dataset's rank (400 otherwise), and
+        it must not select outside this dataset's actual extent (400
+        otherwise) - but the shapes themselves don't otherwise need to
+        match, since a region reference's reconstructed shape is only a
+        synthetic bounding box, not the original dataset's true shape.
+
+        If the resolved region reference is null/unbound, the response is
+        `204 No Content`. `regionref` cannot be combined with `query`.
       parameters:
         - name: select
           in: query
           schema: { type: string }
-          description: Hyperslab/coordinate selection string (see syntax above). Defaults to the entire dataset.
+          description: |
+            Hyperslab/coordinate selection string (see syntax above).
+            Defaults to the entire dataset. When `regionref` is given,
+            applies to the regionref source instead (see `regionref`
+            description).
         - name: fields
           in: query
           schema: { type: string }
@@ -1659,6 +1694,14 @@ paths:
         - name: ignore_nan
           in: query
           schema: { type: boolean, default: false }
+        - name: regionref
+          in: query
+          schema: { type: string }
+          description: |
+            Take the selection from a stored region reference instead of
+            `select` (see syntax above). One of
+            `/groups/<id>/attributes/<attr_name>`,
+            `/datasets/<id>/attributes/<attr_name>`, or `/datasets/<id>`.
       responses:
         '200':
           description: Dataset data.
@@ -1675,8 +1718,19 @@ paths:
               schema:
                 type: string
                 format: binary
+        '204':
+          description: |
+            No Content. Returned only when `regionref` resolves to a
+            null/unbound region reference.
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: |
+            Not Found. Returned when `regionref` names an attribute that
+            doesn't exist.
+          content:
+            text/plain:
+              schema: { type: string, example: "404: Not Found" }
         '413':
           description: |
             Payload Too Large. Note: for a JSON response, this check is
@@ -1731,10 +1785,27 @@ paths:
         chunk rather than coordinated across chunks - so more than `Limit`
         rows total can end up updated. This is a known, deliberately
         deferred issue.
+
+        ### Region reference selection (`regionref`)
+        As with `GET`'s `regionref` param (see that operation's
+        description for the exact accepted path forms and the
+        `select`-repurposing semantics), the write selection can be taken
+        from a stored region reference instead of `select`/`start`/`stop`/
+        `step`. Not combinable with `points`, `append`, or `query`. If the
+        resolved region reference's selection shape doesn't match the shape
+        of the data being written, or if it resolves to a null/unbound
+        region reference, the request is rejected with 400.
       parameters:
         - name: select
           in: query
           schema: { type: string }
+        - name: regionref
+          in: query
+          schema: { type: string }
+          description: |
+            Take the write selection from a stored region reference
+            instead of `select` (see this operation's description, and
+            `GET`'s `regionref` param, for the exact syntax).
         - name: fields
           in: query
           schema: { type: string }

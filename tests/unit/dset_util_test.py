@@ -13,11 +13,16 @@ import unittest
 import logging
 import sys
 
+from aiohttp.web_exceptions import HTTPBadRequest
 from h5json import selections
+from h5json.hdf5dtype import special_dtype, RegionReference
+from h5json.objid import createObjId, getUuidFromId
 
 sys.path.append("../..")
 from hsds.util.dsetUtil import get_slices
 from hsds.util.dsetUtil import getSelectionList, getSelectionPagination
+from hsds.util.dsetUtil import parseRegionRefParam, extractJsonArrayElement
+from hsds.util.dsetUtil import regionRefSelectionToTargetSelection, unwrapSingleElement
 
 
 class DsetUtilTest(unittest.TestCase):
@@ -88,8 +93,8 @@ class DsetUtilTest(unittest.TestCase):
         s = page.slices[0]
         self.assertTrue(isinstance(s, slice))
         self.assertEqual(s.start, 0)
-        # count of 25 points (start + count, per h5json's slice convention)
-        self.assertEqual(s.stop, 25)
+        # 25 points at step 8 -> true coordinate stop of start + count * step
+        self.assertEqual(s.stop, 200)
         self.assertEqual(s.step, 8)
 
         select = selections.select(datashape, (slice(0, 195, 4),))  # 196 byte selection
@@ -105,7 +110,7 @@ class DsetUtilTest(unittest.TestCase):
                 s.start % 4, 0
             )  # start value always falls in step intervals
             self.assertEqual(s.step, 4)
-            count = s.stop - s.start  # h5json encodes stop as start + count
+            count = (s.stop - s.start) // s.step  # s.stop is a true coordinate stop
             self.assertTrue(count * itemsize <= max_request_size)
             total_points += count
         self.assertEqual(total_points, 49)  # covers all 49 selected points
@@ -279,7 +284,7 @@ class DsetUtilTest(unittest.TestCase):
             self.assertEqual(len(selection.shape), 1)
             s1 = selection.slices[0]
             self.assertTrue(isinstance(s1, slice))
-            self.assertEqual(s1, slice(30, 38, 5))
+            self.assertEqual(s1, slice(30, 70, 5))
 
         body = {"start": 3, "stop": 7}
         selection = getSelectionList(body, dims)
@@ -293,7 +298,7 @@ class DsetUtilTest(unittest.TestCase):
         self.assertEqual(len(selection.shape), 1)
         s1 = selection.slices[0]
         self.assertTrue(isinstance(s1, slice))
-        self.assertEqual(s1, slice(30, 38, 5))
+        self.assertEqual(s1, slice(30, 70, 5))
 
     def testSelectionList2D(self):
         dims = [50, 100, ]
@@ -366,7 +371,7 @@ class DsetUtilTest(unittest.TestCase):
             self.assertEqual(s1, slice(1, 20, 1))
             s2 = selection.slices[1]
             self.assertTrue(isinstance(s2, slice))
-            self.assertEqual(s2, slice(30, 38, 5))
+            self.assertEqual(s2, slice(30, 70, 5))
 
         for select in ("[0:50, 0:100]", ["0:50", "0:100"]):
             selection = getSelectionList(select, dims)
@@ -396,7 +401,7 @@ class DsetUtilTest(unittest.TestCase):
         self.assertEqual(s1, slice(0, 10, 1))
         s2 = selection.slices[1]
         self.assertTrue(isinstance(s2, slice))
-        self.assertEqual(s2, slice(30, 38, 5))
+        self.assertEqual(s2, slice(30, 70, 5))
 
     def testInvalidSelectionList(self):
         dims = [50, 100,]
@@ -483,6 +488,124 @@ class DsetUtilTest(unittest.TestCase):
             self.assertTrue(False)
         except ValueError:
             pass  # expected
+
+    def testParseRegionRefParam(self):
+        group_id = createObjId("groups")
+        dset_id = createObjId("datasets", root_id=group_id)
+
+        collection, obj_id, attr_name = parseRegionRefParam(
+            f"/groups/{group_id}/attributes/foo"
+        )
+        self.assertEqual(collection, "groups")
+        self.assertEqual(obj_id, group_id)
+        self.assertEqual(attr_name, "foo")
+
+        collection, obj_id, attr_name = parseRegionRefParam(
+            f"/datasets/{dset_id}/attributes/bar"
+        )
+        self.assertEqual(collection, "datasets")
+        self.assertEqual(obj_id, dset_id)
+        self.assertEqual(attr_name, "bar")
+
+        collection, obj_id, attr_name = parseRegionRefParam(f"/datasets/{dset_id}")
+        self.assertEqual(collection, "datasets")
+        self.assertEqual(obj_id, dset_id)
+        self.assertIsNone(attr_name)
+
+        invalid_paths = (
+            f"groups/{group_id}/attributes/foo",  # no leading slash
+            f"/datasets/{dset_id}/attributes/",  # empty attr name
+            f"/groups/{dset_id}",  # bare group form not supported
+            f"/datasets/{group_id}",  # wrong id type for collection
+            "/datasets/not-a-valid-id",
+            f"/foo/{dset_id}",
+            "",
+        )
+        for path in invalid_paths:
+            try:
+                parseRegionRefParam(path)
+                self.fail(f"expected HTTPBadRequest for regionref path: {path}")
+            except HTTPBadRequest:
+                pass  # expected
+
+    def testExtractJsonArrayElement(self):
+        dt = special_dtype(ref=RegionReference)
+        root_id = createObjId("groups")
+        dset_id = createObjId("datasets", root_id=root_id)
+
+        pts_sel = selections.select((3, 16), ([0, 2], [1, 11]))
+        ref_pts = RegionReference(dset_id, pts_sel)
+        hs_sel = selections.select((3, 16), (slice(0, 2), slice(0, 4)))
+        ref_hs = RegionReference(dset_id, hs_sel)
+        value = [ref_pts.to_json(), ref_hs.to_json(), None]
+
+        sel0 = selections.select((3,), (0,))
+        elem0 = extractJsonArrayElement((3,), dt, value, sel0)
+        self.assertEqual(elem0["select_type"], "H5S_SEL_POINTS")
+
+        sel1 = selections.select((3,), (1,))
+        elem1 = extractJsonArrayElement((3,), dt, value, sel1)
+        self.assertEqual(elem1["select_type"], "H5S_SEL_HYPERSLABS")
+
+        sel2 = selections.select((3,), (2,))
+        elem2 = extractJsonArrayElement((3,), dt, value, sel2)
+        self.assertIsNone(elem2)
+
+        # 2-D source, coordinate-list select picking a single element
+        value2d = [[ref_pts.to_json(), ref_hs.to_json()], [None, ref_hs.to_json()]]
+        sel2d = selections.select((2, 2), ([1], [0]))
+        elem2d = extractJsonArrayElement((2, 2), dt, value2d, sel2d)
+        self.assertIsNone(elem2d)
+
+    def testUnwrapSingleElement(self):
+        self.assertEqual(unwrapSingleElement(42), 42)
+        self.assertIsNone(unwrapSingleElement(None))
+        self.assertEqual(unwrapSingleElement([{"id": "x"}]), {"id": "x"})
+        self.assertEqual(unwrapSingleElement([[None]]), None)
+        try:
+            unwrapSingleElement([1, 2])
+            self.fail("expected ValueError for multi-element list")
+        except ValueError:
+            pass  # expected
+
+    def testRegionRefSelectionToTargetSelection(self):
+        root_id = createObjId("groups")
+        dset_id = createObjId("datasets", root_id=root_id)
+
+        hs_sel = selections.select((3, 16), (slice(0, 2), slice(0, 4)))
+        ref_hs = RegionReference(dset_id, hs_sel)
+        ref_json = ref_hs.to_json()
+
+        # matching rank, in bounds
+        target = regionRefSelectionToTargetSelection(ref_json, (3, 16))
+        self.assertEqual(target.shape, (3, 16))
+        self.assertEqual(target.start, (0, 0))
+        self.assertEqual(target.count, (2, 4))
+
+        # rank mismatch
+        try:
+            regionRefSelectionToTargetSelection(ref_json, (3, 16, 2))
+            self.fail("expected HTTPBadRequest for rank mismatch")
+        except HTTPBadRequest:
+            pass  # expected
+
+        # out of bounds (target smaller than the ref's selection extent)
+        try:
+            regionRefSelectionToTargetSelection(ref_json, (3, 3))
+            self.fail("expected HTTPBadRequest for out-of-bounds selection")
+        except HTTPBadRequest:
+            pass  # expected
+
+        # bare {"id": ...} with no selection info -> whole target selected
+        bare_ref_json = {"id": getUuidFromId(dset_id)}
+        whole = regionRefSelectionToTargetSelection(bare_ref_json, (5, 7))
+        self.assertEqual(whole.nselect, 35)
+
+        # points selection also round-trips correctly
+        pts_sel = selections.select((3, 16), ([0, 2], [1, 11]))
+        ref_pts = RegionReference(dset_id, pts_sel)
+        pts_target = regionRefSelectionToTargetSelection(ref_pts.to_json(), (3, 16))
+        self.assertEqual(pts_target.nselect, 2)
 
 
 if __name__ == "__main__":

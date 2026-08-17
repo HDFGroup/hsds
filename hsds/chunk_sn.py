@@ -37,9 +37,11 @@ from .util.httpUtil import request_read, jsonResponse
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.dsetUtil import getSelectionPagination, get_slices
-from .util.dsetUtil import isSelect, getSelectParam
+from .util.dsetUtil import isSelect, getSelectParam, getSelect
+from .util.dsetUtil import parseRegionRefParam, extractJsonArrayElement
+from .util.dsetUtil import regionRefSelectionToTargetSelection, unwrapSingleElement
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
-from .servicenode_lib import getDsetJson, validateAction
+from .servicenode_lib import getDsetJson, validateAction, getAttributes
 from .dset_lib import getSelectionData, validateQuery, extendShape, doPointWrite, doHyperslabWrite
 from .dset_lib import doQueryUpdate
 from . import config
@@ -199,6 +201,96 @@ def _getSelect(params, dset_json, body=None):
 
     log.debug(f"_getSelect returning: {selection}")
     return selection
+
+
+def _validateRegionRefType(type_json):
+    """ raise HTTPBadRequest unless type_json is exactly a region reference
+    type (H5T_REFERENCE / H5T_STD_REF_DSETREG) - vlen/compound-wrapped
+    region references are not supported as a regionref source. """
+    msg = "regionref path does not refer to a H5T_STD_REF_DSETREG value"
+    if not isinstance(type_json, dict):
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    if type_json.get("class") != "H5T_REFERENCE":
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    if type_json.get("base") != "H5T_STD_REF_DSETREG":
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+
+async def _resolveRegionRef(app, domain, username, bucket, params, target_dims):
+    """ Resolve the 'regionref' query param to a selections.Selection over
+    target_dims (the URL's dataset - never the id embedded in the region
+    reference itself).  Returns None if the resolved region reference is
+    null/unbound (caller should respond with 204 No Content in that case).
+    """
+    collection, obj_id, attr_name = parseRegionRefParam(params.get("regionref"))
+
+    # verify the source object belongs to this domain and is readable
+    await validateAction(app, domain, obj_id, username, "read")
+
+    ref_dset_json = None
+    if attr_name is not None:
+        attributes = await getAttributes(
+            app, obj_id, attr_names=[attr_name], bucket=bucket, include_data=True
+        )
+        if not attributes:
+            msg = f"regionref attribute not found: {attr_name}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        attr_json = attributes[0]
+        src_type = attr_json["type"]
+        src_shape = attr_json["shape"]
+        src_value = attr_json["value"]
+    else:
+        ref_dset_json = await getDsetJson(app, obj_id, bucket=bucket)
+        src_type = ref_dset_json["type"]
+        src_shape = ref_dset_json["shape"]
+        src_value = None
+
+    _validateRegionRefType(src_type)
+
+    if src_shape.get("class") == "H5S_NULL":
+        msg = "regionref source can not be a null-space object"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    src_dims = getShapeDims(src_shape)
+
+    if not src_dims:
+        # scalar source - a select param, if given, isn't meaningful; ignore it
+        if attr_name is not None:
+            single_json = src_value
+        else:
+            scalar_sel = get_slices(None, ref_dset_json)
+            kwargs = {"slices": scalar_sel, "bucket": bucket}
+            sub_arr = await getSelectionData(app, obj_id, ref_dset_json, **kwargs)
+            single_json = unwrapSingleElement(bytesArrayToList(sub_arr))
+    else:
+        try:
+            sel = getSelect(params, src_dims)
+        except ValueError as ve:
+            msg = f"Invalid regionref select: {ve}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if sel.nselect != 1:
+            msg = "regionref selection must resolve to exactly one element, "
+            msg += f"got {sel.nselect}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+        if attr_name is not None:
+            arr_dtype = createDataType(src_type)
+            single_json = extractJsonArrayElement(tuple(src_dims), arr_dtype, src_value, sel)
+        else:
+            sub_arr = await getSelectionData(app, obj_id, ref_dset_json, slices=sel, bucket=bucket)
+            single_json = unwrapSingleElement(bytesArrayToList(sub_arr))
+
+    if single_json is None:
+        return None
+
+    return regionRefSelectionToTargetSelection(single_json, target_dims)
 
 
 def _getSelectDtype(params, dset_dtype, body=None):
@@ -513,7 +605,39 @@ async def PUT_Value(request):
             raise HTTPBadRequest(reason=msg)
 
     # if there's no selection parameter, this will return entire dataspace
-    selection = _getSelect(params, dset_json, body=body)
+    if params.get("regionref"):
+        if append_rows:
+            msg = "regionref cannot be combined with append"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if points is not None:
+            msg = "regionref cannot be combined with points"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if params.get("query") or (isinstance(body, dict) and body.get("query")):
+            msg = "regionref cannot be combined with query"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        selection = await _resolveRegionRef(app, domain, username, bucket, params, dims)
+        if selection is None:
+            msg = "regionref resolved to a null region reference"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if selection.select_type == selections.H5S_SEL_POINTS:
+            # a points-type region ref can't go through the hyperslab write
+            # path (chunkWriteSelection expects real slices) - convert to
+            # the same points array _getPoints() would build from a body
+            coords = list(zip(*selection.slices))
+            if rank == 1:
+                points = np.array([c[0] for c in coords], dtype=np.uint64)
+            else:
+                points = np.array(coords, dtype=np.uint64)
+        elif selection.select_type not in (selections.H5S_SEL_HYPERSLABS, selections.H5S_SEL_ALL):
+            msg = "regionref selection type is not supported for PUT Value"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        selection = _getSelect(params, dset_json, body=body)
 
     query = _getQuery(params, dset_dtype, body=body)
 
@@ -788,7 +912,17 @@ async def GET_Value(request):
     await validateAction(app, domain, dset_id, username, "read")
 
     # Get query parameter for selection
-    selection = _getSelect(params, dset_json)
+    if params.get("regionref"):
+        if params.get("query"):
+            msg = "regionref cannot be combined with query"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        selection = await _resolveRegionRef(app, domain, username, bucket, params, dims)
+        if selection is None:
+            # null/unbound region reference
+            return await jsonResponse(request, {}, status=204)
+    else:
+        selection = _getSelect(params, dset_json)
 
     # dtype for selection, or just dset_dtype if no fields are given
     select_dtype = _getSelectDtype(params, dset_dtype)
@@ -972,9 +1106,8 @@ async def GET_Value(request):
             if "reduce_dim" in params and params["reduce_dim"]:
                 arr = squeezeArray(arr)
 
-            data = arr.tolist()
             try:
-                json_data = bytesArrayToList(data)
+                json_data = bytesArrayToList(arr)
             except ValueError as err:
                 msg = f"Cannot decode bytes to list: {err}"
                 raise HTTPBadRequest(reason=msg)
@@ -1309,10 +1442,9 @@ async def POST_Value(request):
         else:
             log.debug("POST Value - returning JSON data")
             resp_json = {}
-            data = arr_rsp.tolist()
-            log.debug(f"got rsp data {len(data)} points")
+            log.debug(f"got rsp data shape: {arr_rsp.shape}")
             try:
-                json_data = bytesArrayToList(data)
+                json_data = bytesArrayToList(arr_rsp)
             except ValueError as err:
                 msg = f"Cannot decode bytes to list: {err}"
                 raise HTTPBadRequest(reason=msg)

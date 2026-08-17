@@ -1874,6 +1874,387 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(ret_values[1], "")
         self.assertEqual(ret_values[2], "groups/" + g1_uuid)
 
+    def testPutRegionRefDataset(self):
+        # Test PUT region ref values for 1d dataset
+        print("testPutRegionRefDataset", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+        helper.validateId(root_uuid)
+
+        # create target dataset that the region refs will point into
+        target_data = {"type": "H5T_STD_I32LE", "shape": [10, 10]}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(target_data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        target_id = rspJson["id"]
+        self.assertTrue(helper.validateId(target_id))
+
+        # link target dataset as 'target'
+        name = "target"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": target_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # create a dataset of region references
+        ref_type = {"class": "H5T_REFERENCE", "base": "H5T_STD_REF_DSETREG"}
+        data = {"type": ref_type, "shape": 3}
+
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # link new dataset as 'regionrefs'
+        name = "regionrefs"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+
+        # write a hyperslab region ref, a points region ref, and a null ref
+        ref_values = [
+            {
+                "id": target_id[2:],  # bare uuid, no 'd-' prefix
+                "select_type": "H5S_SEL_HYPERSLABS",
+                "selection": [[[1, 2], [3, 5]]],
+            },
+            {
+                "id": target_id[2:],
+                "select_type": "H5S_SEL_POINTS",
+                "selection": [[0, 0], [2, 2], [4, 4]],
+            },
+            None,
+        ]
+        payload = {"value": ref_values}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        ret_values = rspJson["value"]
+
+        self.assertEqual(ret_values[0]["id"], target_id[2:])
+        self.assertEqual(ret_values[0]["select_type"], "H5S_SEL_HYPERSLABS")
+        self.assertEqual(ret_values[0]["selection"], [[[1, 2], [3, 5]]])
+
+        self.assertEqual(ret_values[1]["id"], target_id[2:])
+        self.assertEqual(ret_values[1]["select_type"], "H5S_SEL_POINTS")
+        self.assertEqual(ret_values[1]["selection"], [[0, 0], [2, 2], [4, 4]])
+
+        self.assertTrue(ret_values[2] is None)
+
+    def testGetValueRegionRefDataset(self):
+        # Test GET /datasets/{id}/value?regionref=... where the regionref
+        # source is itself a dataset of region references
+        print("testGetValueRegionRefDataset", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+
+        # target dataset the region refs will point into, with real data
+        target_data = {"type": "H5T_STD_I32LE", "shape": [10, 10]}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(target_data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        target_id = json.loads(rsp.text)["id"]
+
+        req = self.endpoint + "/datasets/" + target_id + "/value"
+        target_values = [[i * 10 + j for j in range(10)] for i in range(10)]
+        rsp = self.session.put(req, data=json.dumps({"value": target_values}), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # region ref (rows 1:4, cols 2:6 inclusive-end -> a 3x4 block)
+        hyperslab_ref = {
+            "id": target_id[2:],
+            "select_type": "H5S_SEL_HYPERSLABS",
+            "selection": [[[1, 2], [3, 5]]],
+        }
+        points_ref = {
+            "id": target_id[2:],
+            "select_type": "H5S_SEL_POINTS",
+            "selection": [[0, 0], [2, 2], [4, 4]],
+        }
+
+        # dataset of 3 region refs: hyperslab, points, null
+        ref_type = {"class": "H5T_REFERENCE", "base": "H5T_STD_REF_DSETREG"}
+        data = {"type": ref_type, "shape": 3}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        ref_dset_id = json.loads(rsp.text)["id"]
+
+        req = self.endpoint + "/groups/" + root_uuid + "/links/refs1d"
+        rsp = self.session.put(req, data=json.dumps({"id": ref_dset_id}), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        req = self.endpoint + "/datasets/" + ref_dset_id + "/value"
+        payload = {"value": [hyperslab_ref, points_ref, None]}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # scalar dataset holding just the hyperslab ref (for the
+        # no-explicit-select case)
+        data = {"type": ref_type}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        scalar_ref_dset_id = json.loads(rsp.text)["id"]
+        req = self.endpoint + "/datasets/" + scalar_ref_dset_id + "/value"
+        rsp = self.session.put(req, data=json.dumps({"value": hyperslab_ref}), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # --- happy path: hyperslab ref, explicit select ---
+        req = self.endpoint + "/datasets/" + target_id + "/value"
+        params = {"regionref": f"/datasets/{ref_dset_id}", "select": "[0]"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        expected = [row[2:6] for row in target_values[1:4]]
+        self.assertEqual(rspJson["value"], expected)
+
+        # --- happy path: points ref ---
+        params = {"regionref": f"/datasets/{ref_dset_id}", "select": "[1]"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        expected_points = [target_values[0][0], target_values[2][2], target_values[4][4]]
+        self.assertEqual(rspJson["value"], expected_points)
+
+        # --- null ref -> 204 ---
+        params = {"regionref": f"/datasets/{ref_dset_id}", "select": "[2]"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 204)
+
+        # --- happy path: scalar source, no select needed ---
+        params = {"regionref": f"/datasets/{scalar_ref_dset_id}"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["value"], expected)
+
+        # --- rank mismatch: 2-D ref selection against a 1-D target -> 400 ---
+        data1d = {"type": "H5T_STD_I32LE", "shape": [10]}
+        req1d = self.endpoint + "/datasets"
+        rsp = self.session.post(req1d, data=json.dumps(data1d), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        target1d_id = json.loads(rsp.text)["id"]
+        req1d = self.endpoint + "/datasets/" + target1d_id + "/value"
+        params = {"regionref": f"/datasets/{ref_dset_id}", "select": "[0]"}
+        rsp = self.session.get(req1d, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
+        # --- out of bounds: ref selection exceeds a smaller target -> 400 ---
+        small_data = {"type": "H5T_STD_I32LE", "shape": [2, 2]}
+        req_small = self.endpoint + "/datasets"
+        rsp = self.session.post(req_small, data=json.dumps(small_data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        small_id = json.loads(rsp.text)["id"]
+        req_small = self.endpoint + "/datasets/" + small_id + "/value"
+        params = {"regionref": f"/datasets/{ref_dset_id}", "select": "[0]"}
+        rsp = self.session.get(req_small, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
+        # --- wrong-type source (not a region ref dataset) -> 400 ---
+        params = {"regionref": f"/datasets/{target_id}", "select": "[0]"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
+        # --- regionref combined with query -> 400 ---
+        params = {"regionref": f"/datasets/{ref_dset_id}", "select": "[0]", "query": "_ > 0"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
+        # --- invalid regionref path form -> 400 ---
+        params = {"regionref": f"datasets/{ref_dset_id}"}  # missing leading slash
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
+    def testGetValueRegionRefAttribute(self):
+        # Test GET /datasets/{id}/value?regionref=... where the regionref
+        # source is a scalar region-ref attribute on a group
+        print("testGetValueRegionRefAttribute", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+
+        target_data = {"type": "H5T_STD_I32LE", "shape": [10, 10]}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(target_data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        target_id = json.loads(rsp.text)["id"]
+
+        req = self.endpoint + "/datasets/" + target_id + "/value"
+        target_values = [[i * 10 + j for j in range(10)] for i in range(10)]
+        rsp = self.session.put(req, data=json.dumps({"value": target_values}), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        payload = {"link": {"id": root_uuid, "name": "g1_regionref_attr"}}
+        req = self.endpoint + "/groups"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        group_id = json.loads(rsp.text)["id"]
+
+        ref_type = {"class": "H5T_REFERENCE", "base": "H5T_STD_REF_DSETREG"}
+        attr_name = "region_ref"
+        value = {
+            "id": target_id[2:],
+            "select_type": "H5S_SEL_HYPERSLABS",
+            "selection": [[[1, 2], [3, 5]]],
+        }
+        req = self.endpoint + "/groups/" + group_id + "/attributes/" + attr_name
+        payload = {"type": ref_type, "value": value}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # happy path - scalar attribute source, no select needed
+        req = self.endpoint + "/datasets/" + target_id + "/value"
+        params = {"regionref": f"/groups/{group_id}/attributes/{attr_name}"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        expected = [row[2:6] for row in target_values[1:4]]
+        self.assertEqual(rspJson["value"], expected)
+
+        # missing attribute -> 404
+        params = {"regionref": f"/groups/{group_id}/attributes/does_not_exist"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 404)
+
+    def testPutValueRegionRefDataset(self):
+        # Test PUT /datasets/{id}/value?regionref=... - the selection for
+        # the write is taken from a stored region reference
+        print("testPutValueRegionRefDataset", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+
+        # target dataset the region refs will point into, initially all zero
+        target_data = {"type": "H5T_STD_I32LE", "shape": [10, 10]}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(target_data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        target_id = json.loads(rsp.text)["id"]
+        target_value_req = self.endpoint + "/datasets/" + target_id + "/value"
+
+        # region ref (rows 1:4, cols 2:6 inclusive-end -> a 3x4 block)
+        hyperslab_ref = {
+            "id": target_id[2:],
+            "select_type": "H5S_SEL_HYPERSLABS",
+            "selection": [[[1, 2], [3, 5]]],
+        }
+        points_ref = {
+            "id": target_id[2:],
+            "select_type": "H5S_SEL_POINTS",
+            "selection": [[0, 0], [2, 2], [4, 4]],
+        }
+
+        # dataset of 3 region refs: hyperslab, points, null
+        ref_type = {"class": "H5T_REFERENCE", "base": "H5T_STD_REF_DSETREG"}
+        data = {"type": ref_type, "shape": 3}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        ref_dset_id = json.loads(rsp.text)["id"]
+
+        req = self.endpoint + "/groups/" + root_uuid + "/links/put_refs1d"
+        rsp = self.session.put(req, data=json.dumps({"id": ref_dset_id}), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        req = self.endpoint + "/datasets/" + ref_dset_id + "/value"
+        payload = {"value": [hyperslab_ref, points_ref, None]}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # --- happy path: write a 3x4 block via the hyperslab ref ---
+        block = [[100 + i * 10 + j for j in range(4)] for i in range(3)]
+        params = {"regionref": f"/datasets/{ref_dset_id}", "select": "[0]"}
+        rsp = self.session.put(
+            target_value_req, params=params, data=json.dumps({"value": block}), headers=headers
+        )
+        self.assertEqual(rsp.status_code, 200)
+
+        # verify it landed at rows 1:4, cols 2:6
+        rsp = self.session.get(target_value_req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        target_values = json.loads(rsp.text)["value"]
+        for i in range(3):
+            self.assertEqual(target_values[1 + i][2:6], block[i])
+
+        # --- happy path: write via the points ref (3 scattered points) ---
+        params = {"regionref": f"/datasets/{ref_dset_id}", "select": "[1]"}
+        rsp = self.session.put(
+            target_value_req, params=params, data=json.dumps({"value": [7, 8, 9]}), headers=headers
+        )
+        self.assertEqual(rsp.status_code, 200)
+        rsp = self.session.get(target_value_req, headers=headers)
+        target_values = json.loads(rsp.text)["value"]
+        self.assertEqual(target_values[0][0], 7)
+        self.assertEqual(target_values[2][2], 8)
+        self.assertEqual(target_values[4][4], 9)
+
+        # --- shape mismatch: input doesn't match the ref's selection shape -> 400 ---
+        params = {"regionref": f"/datasets/{ref_dset_id}", "select": "[0]"}
+        bad_block = [[1, 2], [3, 4]]  # 2x2, but ref selects a 3x4 block
+        rsp = self.session.put(
+            target_value_req, params=params, data=json.dumps({"value": bad_block}), headers=headers
+        )
+        self.assertEqual(rsp.status_code, 400)
+
+        # --- null ref -> 400 ---
+        params = {"regionref": f"/datasets/{ref_dset_id}", "select": "[2]"}
+        rsp = self.session.put(
+            target_value_req, params=params, data=json.dumps({"value": block}), headers=headers
+        )
+        self.assertEqual(rsp.status_code, 400)
+
+        # --- regionref combined with query -> 400 ---
+        params = {"regionref": f"/datasets/{ref_dset_id}", "select": "[0]", "query": "_ > 0"}
+        rsp = self.session.put(
+            target_value_req, params=params, data=json.dumps({"value": block}), headers=headers
+        )
+        self.assertEqual(rsp.status_code, 400)
+
+        # --- regionref combined with points -> 400 ---
+        params = {"regionref": f"/datasets/{ref_dset_id}"}
+        rsp = self.session.put(
+            target_value_req,
+            params=params,
+            data=json.dumps({"points": [[0, 0]], "value": [1]}),
+            headers=headers,
+        )
+        self.assertEqual(rsp.status_code, 400)
+
     def testGet(self):
         domain = helper.getTestDomain("tall.h5")
         print("testGet", domain)

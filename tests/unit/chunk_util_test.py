@@ -390,13 +390,13 @@ class ChunkUtilTest(unittest.TestCase):
         chunk_id = chunk_ids[0]
         sel = getChunkSelection(chunk_id, selection, layout).slices
         self.assertEqual(sel[0].start, 42)
-        self.assertEqual(sel[0].stop, 44)
+        self.assertEqual(sel[0].stop, 50)
         self.assertEqual(sel[0].step, 4)
 
         chunk_id = chunk_ids[1]
         sel = getChunkSelection(chunk_id, selection, layout).slices
         self.assertEqual(sel[0].start, 50)
-        self.assertEqual(sel[0].stop, 53)
+        self.assertEqual(sel[0].stop, 62)
         self.assertEqual(sel[0].step, 4)
 
         # another 1-d with step
@@ -407,19 +407,19 @@ class ChunkUtilTest(unittest.TestCase):
         chunk_id = chunk_ids[0]
         sel = getChunkSelection(chunk_id, selection, layout).slices
         self.assertEqual(sel[0].start, 40)
-        self.assertEqual(sel[0].stop, 45)
+        self.assertEqual(sel[0].stop, 50)
         self.assertEqual(sel[0].step, 2)
 
         chunk_id = chunk_ids[1]
         sel = getChunkSelection(chunk_id, selection, layout).slices
         self.assertEqual(sel[0].start, 50)
-        self.assertEqual(sel[0].stop, 55)
+        self.assertEqual(sel[0].stop, 60)
         self.assertEqual(sel[0].step, 2)
 
         chunk_id = chunk_ids[2]
         sel = getChunkSelection(chunk_id, selection, layout).slices
         self.assertEqual(sel[0].start, 60)
-        self.assertEqual(sel[0].stop, 62)
+        self.assertEqual(sel[0].stop, 64)
         self.assertEqual(sel[0].step, 2)
 
         # test with step > chunk size
@@ -430,19 +430,19 @@ class ChunkUtilTest(unittest.TestCase):
         chunk_id = chunk_ids[0]
         sel = getChunkSelection(chunk_id, selection, layout).slices
         self.assertEqual(sel[0].start, 0)
-        self.assertEqual(sel[0].stop, 1)
+        self.assertEqual(sel[0].stop, 15)
         self.assertEqual(sel[0].step, 15)
 
         chunk_id = chunk_ids[1]
         sel = getChunkSelection(chunk_id, selection, layout).slices
         self.assertEqual(sel[0].start, 15)
-        self.assertEqual(sel[0].stop, 16)
+        self.assertEqual(sel[0].stop, 30)
         self.assertEqual(sel[0].step, 15)
 
         chunk_id = chunk_ids[2]
         sel = getChunkSelection(chunk_id, selection, layout).slices
         self.assertEqual(sel[0].start, 30)
-        self.assertEqual(sel[0].stop, 31)
+        self.assertEqual(sel[0].stop, 45)
         self.assertEqual(sel[0].step, 15)
 
         # test with coordinate
@@ -632,13 +632,13 @@ class ChunkUtilTest(unittest.TestCase):
         chunk_id = chunk_ids[0]
         sel = getChunkCoverage(chunk_id, selection, layout).slices
         self.assertEqual(sel[0].start, 2)
-        self.assertEqual(sel[0].stop, 4)
+        self.assertEqual(sel[0].stop, 10)
         self.assertEqual(sel[0].step, 4)
 
         chunk_id = chunk_ids[1]
         sel = getChunkCoverage(chunk_id, selection, layout).slices
         self.assertEqual(sel[0].start, 0)
-        self.assertEqual(sel[0].stop, 3)
+        self.assertEqual(sel[0].stop, 12)
         self.assertEqual(sel[0].step, 4)
 
         # 2-d test

@@ -1144,9 +1144,8 @@ def getValueFromRequest(body, data_type, data_shape):
 
             value_json = None
             # now try converting to JSON
-            list_data = arr.tolist()
             try:
-                value_json = bytesArrayToList(list_data)
+                value_json = bytesArrayToList(arr)
             except ValueError as err:
                 msg = f"Cannot decode bytes to list: {err}, will store as encoded bytes"
                 log.warn(msg)

@@ -438,9 +438,8 @@ async def PUT_Attributes(request):
                 raise HTTPBadRequest(reason=msg)
             log.debug(f"got arr: {arr}")
             log.debug(f"arr.shape: {arr.shape}")
-            data = arr.tolist()
             try:
-                json_data = bytesArrayToList(data)
+                json_data = bytesArrayToList(arr)
                 log.debug(f"converted encoded data to '{json_data}'")
                 if attr_shape["class"] == "H5S_SCALAR" and isinstance(json_data, list):
                     attr_json["value"] = json_data[0]  # just store the scalar

@@ -1311,6 +1311,134 @@ class AttributeTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], [[dset_id, 0], ])
 
+    def testPutRegionReference(self):
+        print("testPutRegionReference", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
+
+        # create group "g1"
+        payload = {"link": {"id": root_id, "name": "g1_regionref"}}
+        req = helper.getEndpoint() + "/groups"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        g1_id = rspJson["id"]
+        self.assertTrue(helper.validateId(g1_id))
+
+        # create dataset "dset" that will be the target of the region reference
+        payload = {
+            "type": "H5T_STD_I32LE",
+            "shape": [10, 10],
+            "link": {"id": root_id, "name": "dset_regionref"},
+        }
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # create attr of g1 that is a region reference to a hyperslab
+        # selection of dset (rows 1:4, cols 2:6)
+        ref_type = {"class": "H5T_REFERENCE", "base": "H5T_STD_REF_DSETREG"}
+        attr_name = "region_ref"
+        value = {
+            "id": dset_id[2:],  # bare uuid, no 'd-' prefix
+            "select_type": "H5S_SEL_HYPERSLABS",
+            "selection": [[[1, 2], [3, 5]]],
+        }
+        data = {"type": ref_type, "value": value}
+        req = self.endpoint + "/groups/" + g1_id + "/attributes/" + attr_name
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # read back the attribute and verify the type, space, and value
+        req = self.endpoint + "/groups/" + g1_id + "/attributes/" + attr_name
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("type" in rspJson)
+        rsp_type = rspJson["type"]
+        self.assertTrue("base" in rsp_type)
+        self.assertEqual(rsp_type["base"], "H5T_STD_REF_DSETREG")
+        self.assertTrue("class" in rsp_type)
+        self.assertEqual(rsp_type["class"], "H5T_REFERENCE")
+        self.assertTrue("shape" in rspJson)
+        rsp_shape = rspJson["shape"]
+        self.assertTrue("class" in rsp_shape)
+        self.assertEqual(rsp_shape["class"], "H5S_SCALAR")
+        self.assertTrue("value" in rspJson)
+        rsp_value = rspJson["value"]
+        self.assertEqual(rsp_value["id"], dset_id[2:])
+        self.assertEqual(rsp_value["select_type"], "H5S_SEL_HYPERSLABS")
+        self.assertEqual(rsp_value["selection"], [[[1, 2], [3, 5]]])
+
+    def testPutPointsRegionReference(self):
+        print("testPutPointsRegionReference", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
+
+        # create group "g1"
+        payload = {"link": {"id": root_id, "name": "g1_pointsregionref"}}
+        req = helper.getEndpoint() + "/groups"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        g1_id = rspJson["id"]
+        self.assertTrue(helper.validateId(g1_id))
+
+        # create dataset "dset" that will be the target of the region reference
+        payload = {
+            "type": "H5T_STD_I32LE",
+            "shape": [10, 10],
+            "link": {"id": root_id, "name": "dset_pointsregionref"},
+        }
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        # create attr of g1 that is a region reference to a point
+        # selection of dset
+        ref_type = {"class": "H5T_REFERENCE", "base": "H5T_STD_REF_DSETREG"}
+        attr_name = "region_ref_points"
+        value = {
+            "id": dset_id[2:],
+            "select_type": "H5S_SEL_POINTS",
+            "selection": [[0, 0], [2, 2], [4, 4]],
+        }
+        data = {"type": ref_type, "value": value}
+        req = self.endpoint + "/groups/" + g1_id + "/attributes/" + attr_name
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # read back the attribute and verify the type, space, and value
+        req = self.endpoint + "/groups/" + g1_id + "/attributes/" + attr_name
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("type" in rspJson)
+        rsp_type = rspJson["type"]
+        self.assertEqual(rsp_type["base"], "H5T_STD_REF_DSETREG")
+        self.assertEqual(rsp_type["class"], "H5T_REFERENCE")
+        self.assertTrue("value" in rspJson)
+        rsp_value = rspJson["value"]
+        self.assertEqual(rsp_value["id"], dset_id[2:])
+        self.assertEqual(rsp_value["select_type"], "H5S_SEL_POINTS")
+        self.assertEqual(rsp_value["selection"], [[0, 0], [2, 2], [4, 4]])
+
     def testPutNoData(self):
         # Test PUT value for 1d attribute without any data provided
         print("testPutNoData", self.base_domain)

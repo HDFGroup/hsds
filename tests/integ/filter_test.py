@@ -475,7 +475,9 @@ class FilterTest(unittest.TestCase):
             return
 
         else:
-            print("TBD: testBitDeshuffling - need to verify that the bitshuffle filter is working correctly")
+            msg = "TBD: testBitDeshuffling - need to verify that the bitshuffle "
+            msg += "filter is working correctly"
+            print(msg)
             return
 
         # Get domain
