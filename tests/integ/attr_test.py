@@ -1439,6 +1439,59 @@ class AttributeTest(unittest.TestCase):
         self.assertEqual(rsp_value["select_type"], "H5S_SEL_POINTS")
         self.assertEqual(rsp_value["selection"], [[0, 0], [2, 2], [4, 4]])
 
+    def testPutOpaqueAttribute(self):
+        print("testPutOpaqueAttribute", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
+
+        opaque_type = {"class": "H5T_OPAQUE", "size": 7}
+
+        # scalar opaque attribute
+        attr_name = "opaque_scalar"
+        value = base64.b64encode(b"OPAQUE0").decode("ascii")
+        data = {"type": opaque_type, "value": value}
+        req = self.endpoint + "/groups/" + root_id + "/attributes/" + attr_name
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("type" in rspJson)
+        rsp_type = rspJson["type"]
+        self.assertEqual(rsp_type["class"], "H5T_OPAQUE")
+        self.assertEqual(rsp_type["size"], 7)
+        self.assertTrue("shape" in rspJson)
+        self.assertEqual(rspJson["shape"]["class"], "H5S_SCALAR")
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], value)
+
+        # 1-D array of opaque values, including an empty (all-zero) element
+        attr_name = "opaque_array"
+        values = [
+            base64.b64encode(b"OPAQUE0").decode("ascii"),
+            base64.b64encode(b"OPAQUE1").decode("ascii"),
+            "",
+        ]
+        data = {"type": opaque_type, "shape": 3, "value": values}
+        req = self.endpoint + "/groups/" + root_id + "/attributes/" + attr_name
+        rsp = self.session.put(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        rsp_type = rspJson["type"]
+        self.assertEqual(rsp_type["class"], "H5T_OPAQUE")
+        self.assertEqual(rsp_type["size"], 7)
+        self.assertEqual(rspJson["shape"]["dims"], [3, ])
+        self.assertEqual(rspJson["value"], values)
+
     def testPutNoData(self):
         # Test PUT value for 1d attribute without any data provided
         print("testPutNoData", self.base_domain)

@@ -12,6 +12,7 @@
 import unittest
 import json
 import numpy as np
+import base64
 import helper
 import config
 import time
@@ -2254,6 +2255,61 @@ class ValueTest(unittest.TestCase):
             headers=headers,
         )
         self.assertEqual(rsp.status_code, 400)
+
+    def testPutOpaqueDataset(self):
+        # Test PUT/GET opaque dataset values
+        print("testPutOpaqueDataset", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+
+        opaque_type = {"class": "H5T_OPAQUE", "size": 7}
+        data = {"type": opaque_type, "shape": 4}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        dset_id = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_id))
+
+        name = "opaque_dset"
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_id}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        req = self.endpoint + "/datasets/" + dset_id + "/value"
+
+        # before any write, values should default to all-zero -> ""
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], [""] * data["shape"])
+
+        # write opaque values, including an empty (all-zero) element
+        values = [
+            base64.b64encode(b"OPAQUE0").decode("ascii"),
+            base64.b64encode(b"OPAQUE1").decode("ascii"),
+            base64.b64encode(b"OPAQUE2").decode("ascii"),
+            "",
+        ]
+        payload = {"value": values}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], values)
 
     def testGet(self):
         domain = helper.getTestDomain("tall.h5")
