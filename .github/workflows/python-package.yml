@@ -178,12 +178,7 @@ jobs:
       USER_PASSWORD: test
       USER2_NAME: test_user2
       USER2_PASSWORD: test
-      HSDS_USERNAME: test_user1
-      HSDS_PASSWORD: test
-      HSDS_PATH: /home/test_user1/
-      HDF5_API_TEST_PATH_PREFIX: /home/test_user1/
       HSDS_ENDPOINT: http+unix://%2Ftmp%2Fhs%2Fsn_1.sock
-      HDF5_VOL_CONNECTOR: REST
       ROOT_DIR: ${{github.workspace}}/hsdsdata
       BUCKET_NAME: hsdstest
 
