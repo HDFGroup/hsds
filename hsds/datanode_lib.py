@@ -239,7 +239,7 @@ async def write_s3_obj(app, obj_id, bucket=None):
                     dirty_count = chunk_cache.dirtyCount
                     msg = f"write_s3_obj: {obj_id} updated - "
                     msg += f"Chunk cache utilization: {cache_utilization} "
-                    msg += "per, dirty_count: {dirty_count}"
+                    msg += f"per, dirty_count: {dirty_count}"
                     log.debug(msg)
         else:
             # meta data update
@@ -636,7 +636,7 @@ def arange_chunk_init(
         raise None
     type_class = type_json.get("class")
     if type_class not in ("H5T_INTEGER", "H5T_FLOAT"):
-        msg = "arange initializer: unsupported type class: {type_class}"
+        msg = f"arange initializer: unsupported type class: {type_class}"
         log.warn(msg)
         raise None
 
@@ -651,7 +651,7 @@ def arange_chunk_init(
     log.debug(msg)
 
     if len(chunk_index) != 1:
-        msg = "expected chunk_index to be one-element list, but got: {chunk_index}"
+        msg = f"expected chunk_index to be one-element list, but got: {chunk_index}"
         log.error(msg)
         raise HTTPInternalServerError()
 
@@ -1174,7 +1174,7 @@ async def get_chunk(
                 # no room in the cache, just skip caching
                 msg = "getChunk, cache utilization: "
                 msg += f"{chunk_cache.cacheUtilizationPercent}, "
-                msg += "skip cache for chunk_id {chunk_id}"
+                msg += f"skip cache for chunk_id {chunk_id}"
                 log.warn(msg)
 
         if chunk_arr is None and chunk_init:

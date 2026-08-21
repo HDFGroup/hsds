@@ -697,7 +697,7 @@ class PointSelTest(unittest.TestCase):
         body = {"points": points}
         rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         if rsp.status_code == 404:
-            msg = "s3object: {s3path} not found, skipping point chunk ref test"
+            msg = f"s3object: {s3path} not found, skipping point chunk ref test"
             print(msg)
         else:
             self.assertEqual(rsp.status_code, 200)

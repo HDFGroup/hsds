@@ -636,7 +636,7 @@ async def POST_Dataset(request):
         chunk_ids = getChunkIds(dset_id, slices, layout_dims)
         log.debug(f"init data, got chunk_ids: {chunk_ids}")
         if not chunk_ids or len(chunk_ids) != 1:
-            msg = "expected one chunk for init_data but got: {chunk_ids}"
+            msg = f"expected one chunk for init_data but got: {chunk_ids}"
             log.error(msg)
             raise HTTPInternalServerError()
         chunk_id = chunk_ids[0]

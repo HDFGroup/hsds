@@ -339,7 +339,7 @@ async def POST_Root(request):
         try:
             timestamp = int(params["timestamp"])
         except ValueError:
-            log.error("unexpected value for timestamp: {params}")
+            log.error(f"unexpected value for timestamp: {params}")
             raise HTTPInternalServerError()
     else:
         timestamp = getNow(app)
