@@ -968,12 +968,12 @@ def chunkWritePoints(chunk_id=None,
         if len(select_dt) < len(dset_dtype):
             # get the element from the chunk
             chunk_val = list(chunk_arr[coord])
-            # and just update the relevant fields
-            index = 0
-            for (x, field) in zip(val, dset_dtype.names):
-                if field in select_dt.names:
-                    chunk_val[index] = x
-                index += 1
+            # and just update the relevant fields - zip against select_dt's
+            # own (narrowed) field names, not dset_dtype's full list, since
+            # val only has as many elements as select_dt has fields
+            for (x, field) in zip(val, select_dt.names):
+                index = dset_dtype.names.index(field)
+                chunk_val[index] = x
             val = tuple(chunk_val)  # this will get written back
 
         chunk_arr[coord] = val  # update the point

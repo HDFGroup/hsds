@@ -1288,6 +1288,54 @@ class ValueTest(unittest.TestCase):
             tol = 0.1
             self.assertTrue(abs(item[1] - expected[1]) < tol)
 
+        # selection write with field selection
+        payload = {"start": 9, "stop": 10, "fields": "temp", "value": 84}
+        req = self.endpoint + "/datasets/" + dset1d_uuid + "/value"
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # read back the data again
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        readData = rspJson["value"]
+        self.assertEqual(len(readData), num_elements)
+        for i in range(num_elements):
+            item = readData[i]
+            self.assertEqual(len(item), 2)
+            x = (num_elements - i - 1) * 10 if i < 9 else 84
+            y = i * 10 + i / 10 if i > 0 else 0.42
+            expected = (x, y)
+            self.assertEqual(item[0], expected[0])
+            tol = 0.1
+            self.assertTrue(abs(item[1] - expected[1]) < tol)
+
+        # selection write with field selection and base64 encoding
+
+        # "qAAAAA==" is 168 as a 4-byte int base64 encoded
+        payload = {"start": 9, "stop": 10, "fields": "temp", "value_base64": "qAAAAA=="}
+        req = self.endpoint + "/datasets/" + dset1d_uuid + "/value"
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # read back the data again
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+
+        readData = rspJson["value"]
+        self.assertEqual(len(readData), num_elements)
+        for i in range(num_elements):
+            item = readData[i]
+            self.assertEqual(len(item), 2)
+            x = (num_elements - i - 1) * 10 if i < 9 else 168
+            y = i * 10 + i / 10 if i > 0 else 0.42
+            expected = (x, y)
+            self.assertEqual(item[0], expected[0])
+            tol = 0.1
+            self.assertTrue(abs(item[1] - expected[1]) < tol)
+
         #
         # create 2d dataset
         #
@@ -1349,6 +1397,88 @@ class ValueTest(unittest.TestCase):
                 item = row[j]
                 self.assertEqual(len(item), 1)
                 self.assertEqual(item[0], i * 10)
+
+    def testPutCompoundPointsFields(self):
+        # Test PUT points value update with a "fields" selection on a
+        # compound-type dataset - only the selected field(s) should be
+        # updated at each point, other fields should be left untouched.
+        print("testPutCompoundPointsFields", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+
+        str4_type = {
+            "class": "H5T_STRING", "length": 4,
+            "charSet": "H5T_CSET_ASCII", "strPad": "H5T_STR_NULLPAD",
+        }
+        str8_type = {
+            "class": "H5T_STRING", "length": 8,
+            "charSet": "H5T_CSET_ASCII", "strPad": "H5T_STR_NULLPAD",
+        }
+        fields = (
+            {"name": "symbol", "type": str4_type},
+            {"name": "date", "type": str8_type},
+            {"name": "open", "type": "H5T_STD_I32LE"},
+            {"name": "close", "type": "H5T_STD_I32LE"},
+        )
+        datatype = {"class": "H5T_COMPOUND", "fields": fields}
+
+        num_elements = 5
+        payload = {"type": datatype, "shape": num_elements}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        name = "dset_compound_points" + helper.getRandomName()
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # initialize full records for every element
+        value = []
+        for i in range(num_elements):
+            value.append((f"SYM{i}", f"20200{i:03d}", i * 100, i * 100 + 1))
+        payload = {"value": value}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # update just the "open" field at points 1 and 3
+        points = [1, 3]
+        new_open_values = [111, 333]
+        payload = {"points": points, "value": new_open_values}
+        params = {"fields": "open"}
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        rsp = self.session.put(req, data=json.dumps(payload), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)  # write value
+
+        # read back full records at those points and verify only "open" changed
+        body = {"points": points}
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        ret_value = rspJson["value"]
+        self.assertEqual(len(ret_value), 2)
+
+        for i, pt in enumerate(points):
+            item = ret_value[i]
+            self.assertEqual(len(item), 4)
+            expected_symbol = f"SYM{pt}"
+            expected_date = f"20200{pt:03d}"
+            expected_close = pt * 100 + 1
+            self.assertEqual(item[0], expected_symbol)
+            self.assertEqual(item[1], expected_date)
+            self.assertEqual(item[2], new_open_values[i])  # updated field
+            self.assertEqual(item[3], expected_close)  # untouched field
 
     def testPutCompoundInitData(self):
         headers = helper.getRequestHeaders(domain=self.base_domain)

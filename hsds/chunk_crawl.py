@@ -589,18 +589,29 @@ async def write_point_sel(
     # create a numpy array with point_data
 
     # if point data was already decoded from binary, don't decode again
-    if len(point_data) > 0 and isinstance(point_data[0], np.ndarray):
+    if len(point_data) > 0 and isinstance(point_data[0], np.void) and len(point_data[0].dtype):
+        # a structured (compound) scalar - may be a fields-narrowed subset
+        # of dset_dtype (e.g. a "fields" selection), so use its own dtype
+        # rather than forcing it through the full dataset dtype
         data_arr = point_data
+        value_dtype = point_data[0].dtype
+    elif len(point_data) > 0 and isinstance(point_data[0], np.ndarray):
+        # already-decoded data (e.g. vlen sub-arrays) - don't decode again,
+        # but the "value" wire type is still the full dataset dtype (e.g.
+        # the object/vlen dtype), not the sub-array's own element dtype
+        data_arr = point_data
+        value_dtype = dset_dtype
     else:
-        data_arr = jsonToArray((num_points,), dset_dtype, point_data)
+        value_dtype = dset_dtype
+        data_arr = jsonToArray((num_points,), value_dtype, point_data)
 
     # create a numpy array with the following type:
-    #   (coord1, coord2, ...) | dset_dtype
+    #   (coord1, coord2, ...) | value_dtype
     if rank == 1:
         coord_type_str = "uint64"
     else:
         coord_type_str = f"({rank},)uint64"
-    type_fields = [("coord", np.dtype(coord_type_str)), ("value", dset_dtype)]
+    type_fields = [("coord", np.dtype(coord_type_str)), ("value", value_dtype)]
     comp_type = np.dtype(type_fields)
     np_arr = np.zeros((num_points,), dtype=comp_type)
 
@@ -619,6 +630,11 @@ async def write_point_sel(
     params["action"] = "put"
     params["count"] = num_points
     params["bucket"] = bucket
+    if len(value_dtype) < len(dset_dtype):
+        # field selection, pass in the field names so the DN narrows too
+        fields_param = ":".join(value_dtype.names)
+        log.debug(f"setting fields_param to: {fields_param}")
+        params["fields"] = fields_param
 
     json_rsp = await http_post(app, req, params=params, data=post_data, client=client)
     log.debug(f"post to {req} returned {json_rsp}")

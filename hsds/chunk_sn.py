@@ -747,17 +747,19 @@ async def PUT_Value(request):
                 raise HTTPBadRequest()
         else:
             # fixed item size - check against number of bytes
-            if len(input_data) % item_size != 0:
-                msg = f"Expected request size to be a multiple of {item_size}, "
+            # (use select_item_size/select_dtype, not the full dataset's
+            # item_size/dset_dtype, so a "fields" selection is accounted for)
+            if len(input_data) % select_item_size != 0:
+                msg = f"Expected request size to be a multiple of {select_item_size}, "
                 msg += f"but {len(input_data)} bytes received"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
 
-            if len(input_data) // item_size != num_elements:
-                msg = f"expected {item_size * num_elements} bytes but got {len(input_data)}"
+            if len(input_data) // select_item_size != num_elements:
+                msg = f"expected {select_item_size * num_elements} bytes but got {len(input_data)}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-            arr = np.frombuffer(input_data, dtype=dset_dtype)
+            arr = np.frombuffer(input_data, dtype=select_dtype)
             log.debug(f"read fixed type array: {arr}")
 
         if bc_shape:
