@@ -409,18 +409,18 @@ async def nodeinfo(request):
 async def getTargetNodeCount(app, node_type):
 
     if node_type == "dn":
-        key = "target_sn_count"
+        key = "target_dn_count"
     elif node_type == "sn":
         key = "target_sn_count"
     else:
         raise KeyError()
-    if "key" not in app:
+    if key not in app:
         if "is_dcos" in app:
             marathon = marathonClient.MarathonClient(app)
             if node_type == "dn":
                 app[key] = int(await marathon.getDNInstances())
             else:
-                app[key] = int(await marathon.getDNInstances())
+                app[key] = int(await marathon.getSNInstances())
         else:
             app[key] = config.get(key)
     return app[key]
