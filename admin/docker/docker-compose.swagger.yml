@@ -1,0 +1,10 @@
+services:
+  swagger-ui:
+    image: swaggerapi/swagger-ui
+    restart: ${RESTART_POLICY}
+    environment:
+      - SWAGGER_JSON=/spec/openapi.yml
+    ports:
+      - ${SWAGGER_PORT}:8080
+    volumes:
+      - ${PWD}/openapi.yml:/spec/openapi.yml:ro
