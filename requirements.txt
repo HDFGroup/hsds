@@ -29,6 +29,7 @@ jsonschema-specifications==2025.9.1
 multidict==6.7.1
 numcodecs==0.15.1
 numpy==2.5.2
+openapi-spec-validator==0.9.0
 propcache==0.5.2
 psutil==7.2.2
 pycparser==3.0
