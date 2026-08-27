@@ -722,7 +722,13 @@ def chunkReadSelection(chunk_arr, selection=None, select_dt=None):
         # no field selection
         select_dt = chunk_arr.dtype
 
-    if len(slices) != rank:
+    # rank (dimension-count) check, not a shape-value check - see the
+    # matching comment in chunkWriteSelection() below. For a dataset whose
+    # own top-level type is an array/subarray dtype, chunk_arr's rank
+    # exceeds slices' rank by exactly the array type's own (absorbed)
+    # dims; chunk_arr[slices] below already handles that correctly via
+    # numpy's partial-indexing rules.
+    if len(slices) > rank:
         msg = "Selection rank does not match shape rank"
         raise ValueError(msg)
 
@@ -740,13 +746,14 @@ def chunkReadSelection(chunk_arr, selection=None, select_dt=None):
                 log.debug(f"select_dtype: {len(select_dt)} from {len(dt)} fields")
         # create an array with just the given fields
         arr = np.zeros(output_arr.shape, select_dt)
-        # slot in each of the given fields
+        # slot in each of the given fields - assign per-field (rather than
+        # arr[...] = output_arr[fields[0]] as a single-field shortcut) so
+        # this works uniformly whether the field is a scalar type or an
+        # array type (an array-typed field's own shape doesn't fit into
+        # arr's outer shape, which a single arr[...] assignment assumes)
         fields = select_dt.names
-        if len(fields) > 1:
-            for field in fields:
-                arr[field] = output_arr[field]
-        else:
-            arr[...] = output_arr[fields[0]]
+        for field in fields:
+            arr[field] = output_arr[field]
         output_arr = arr  # return this
 
     return output_arr
@@ -763,7 +770,30 @@ def chunkWriteSelection(chunk_arr=None, selection=None, data=None):
         msg = "Expected selection.Selection type"
         log.warning(msg)
         raise ValueError(msg)
-    if len(selection.shape) != len(chunk_arr.shape):
+    # These are rank (dimension-count) checks, not shape-value checks -
+    # selection.shape is the full underlying chunk/dataset shape
+    # regardless of what sub-range is actually selected (that's
+    # selection.mshape), so only rank is meaningful to compare here; the
+    # actual sub-range size is handled later via chunk_arr[slices].
+    #
+    # For a dataset whose own top-level type is an array/subarray dtype
+    # (H5T_ARRAY, e.g. numpy's "3i1"), chunk_arr's (and data's) shape
+    # absorbs the array type's own trailing dims (chunk_arr.shape ==
+    # dataset_shape + array_dims, e.g. (2, 3) for a 2-element dataset of
+    # 3-int8 arrays), while selection is built against the dataset's
+    # logical shape only (e.g. (2,)) - so chunk_arr's rank can legitimately
+    # exceed selection's rank by exactly that many trailing (absorbed)
+    # dims, and data's rank must match chunk_arr's for the same reason.
+    # The indexing below (chunk_arr[slices]) already handles those
+    # trailing dims correctly via numpy's own partial-indexing rules (a
+    # selection tuple shorter than the array's rank selects the full
+    # trailing dimensions), so no other change is needed. Covered in
+    # tests/unit/chunk_util_test.py's testChunkWriteSelectionArrayDtype
+    # and tests/integ/value_test.py's testCreateBareArrayDataset; see
+    # also h5pyd's TestSubarray.test_write_array/test_write_list.
+    sel_rank = len(selection.shape)
+    extra_rank = len(chunk_arr.shape) - sel_rank  # absorbed array-dtype dims, if any
+    if extra_rank < 0:
         msg = "Selection rank does not match dataset rank"
         log.error(msg)
         raise ValueError(msg)
@@ -777,7 +807,7 @@ def chunkWriteSelection(chunk_arr=None, selection=None, data=None):
         log.error(msg)
         raise ValueError(msg)
 
-    if len(data.shape) != rank:
+    if len(data.shape) != sel_rank + extra_rank:
         msg = "Input arr does not match dataset rank"
         log.error(msg)
         raise ValueError(msg)

@@ -239,6 +239,13 @@ async def read_chunk_hyperslab(
         data_sel = chunk_info["data_sel"]
         log.debug(f"read_chunk_hyperslab - data_sel: {data_sel}")
         chunk_shape = chunk_sel.mshape
+        if np_arr is not None and len(np_arr.shape) > dset_rank:
+            # an array/subarray dtype's own dims are absorbed into
+            # np_arr's shape beyond the dataset's own logical rank (e.g.
+            # np_arr.shape == (2, 3) for a 2-element dataset of 3-int8
+            # arrays) - append them so bytesToArray()/reshape() below
+            # expect the correct total shape, not just the logical one
+            chunk_shape = tuple(chunk_shape) + np_arr.shape[dset_rank:]
         log.debug(f"hyperslab selection - chunk_shape: {chunk_shape}")
 
     if "points" in chunk_info:

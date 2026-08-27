@@ -775,11 +775,16 @@ async def PUT_Value(request):
                 arr = arr_tmp
 
         if element_count != 1:
+            # np.frombuffer() above already absorbed an array/subarray
+            # dtype's own shape (select_dtype.shape) into arr's shape, so
+            # it must be appended to np_shape too, or this reshape would
+            # incorrectly try to drop those elements
+            target_shape = np_shape if not select_dtype.shape else tuple(np_shape) + select_dtype.shape
             try:
-                arr = arr.reshape(np_shape)  # conform to selection shape
+                arr = arr.reshape(target_shape)  # conform to selection shape
             except ValueError:
                 msg = "Bad Request: binary input data doesn't match selection "
-                msg += f"reshaping {arr.shape} to {np_shape}"
+                msg += f"reshaping {arr.shape} to {target_shape}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
 

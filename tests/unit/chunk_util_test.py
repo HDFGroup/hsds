@@ -1173,6 +1173,161 @@ class ChunkUtilTest(unittest.TestCase):
         chunkWriteSelection(chunk_arr=chunk_arr, selection=selection, data=data)
         self.assertEqual(chunk_arr.tolist(), [2, 3, 5, 101, 121, 131, 17, 19])
 
+    def testChunkWriteSelectionArrayDtype(self):
+        # for an array/subarray dtype (H5T_ARRAY, e.g. numpy's "3i1") the
+        # chunk array's own shape absorbs the dtype's subarray dims
+        # (chunk_arr.shape == dataset_shape + dt.shape) while the
+        # selection is built against the dataset's logical shape only -
+        # chunkWriteSelection()'s rank check allows chunk_arr's/data's
+        # rank to exceed selection's by exactly those absorbed dims,
+        # rather than requiring an exact rank match.
+        dt = np.dtype(("i1", (3,)))
+        dataset_shape = (2,)
+        chunk_arr = np.zeros(dataset_shape, dtype=dt)
+        self.assertEqual(chunk_arr.shape, (2, 3))  # subarray dims absorbed
+
+        data = np.frombuffer(bytes([1, 2, 3, 4, 5, 6]), dtype=dt)
+        self.assertEqual(data.shape, (2, 3))
+
+        # selection is built against the dataset's own (1-D) logical shape,
+        # not chunk_arr's subarray-absorbed shape
+        selection = selections.select(dataset_shape, (slice(0, 2, 1),))
+        chunkWriteSelection(chunk_arr=chunk_arr, selection=selection, data=data)
+        self.assertEqual(chunk_arr.tolist(), data.tolist())
+
+        # full (non-field-restricted) read back of the same bare
+        # array-dtype chunk - chunkReadSelection() has the same rank
+        # relaxation on its own selection-rank check
+        arr = chunkReadSelection(chunk_arr, selection=selection)
+        self.assertEqual(arr.tolist(), data.tolist())
+
+    def testChunkWriteSelectionCompoundArrayField(self):
+        # compound dtype with an array-typed field - unlike a bare
+        # array/subarray dtype (see testChunkWriteSelectionArrayDtype
+        # above), a compound dtype's own shape is NOT absorbed by its
+        # array-typed field's dims, so chunk_arr.shape stays equal to the
+        # plain dataset shape and chunkWriteSelection()/chunkReadSelection()
+        # work correctly here - including for a partial (hyperslab)
+        # selection, which nothing else exercises for this dtype shape.
+        dt = np.dtype([("temp", ("<i8", (5,))), ("pressure", "<f4")])
+        dataset_shape = (4,)
+        chunk_arr = np.zeros(dataset_shape, dtype=dt)
+        self.assertEqual(chunk_arr.shape, dataset_shape)  # no absorption
+
+        data = np.zeros((2,), dtype=dt)
+        for i in range(2):
+            data[i]["temp"] = [i * 10 + j for j in range(5)]
+            data[i]["pressure"] = i + 0.5
+
+        # partial (hyperslab) write to just elements [1:3]
+        selection = selections.select(dataset_shape, (slice(1, 3, 1),))
+        chunkWriteSelection(chunk_arr=chunk_arr, selection=selection, data=data)
+
+        # partial read back of the same region
+        arr = chunkReadSelection(chunk_arr, selection=selection)
+        self.assertEqual(arr.shape, (2,))
+        for i in range(2):
+            self.assertEqual(arr[i]["temp"].tolist(), data[i]["temp"].tolist())
+            self.assertAlmostEqual(float(arr[i]["pressure"]), float(data[i]["pressure"]))
+
+        # elements outside the written region should be untouched (fill)
+        self.assertEqual(chunk_arr[0]["temp"].tolist(), [0, 0, 0, 0, 0])
+        self.assertEqual(chunk_arr[3]["temp"].tolist(), [0, 0, 0, 0, 0])
+
+    def testChunkWriteSelectionFieldUpdate(self):
+        # field-restricted write (data.dtype has fewer fields than
+        # chunk_arr's own dtype) - exercises chunkWriteSelection()'s
+        # field_update branch, which otherwise only has integration-level
+        # coverage (see tests/integ/value_test.py's field-write tests and
+        # tests/integ/pointsel_test.py's testPostCompoundDataset). The
+        # non-selected fields must be left completely untouched.
+        dt = np.dtype([("a", "<i4"), ("b", "<i4"), ("c", "<i4")])
+        chunk_arr = np.zeros((4,), dtype=dt)
+        chunk_arr["a"] = [1, 2, 3, 4]
+        chunk_arr["b"] = [10, 20, 30, 40]
+        chunk_arr["c"] = [100, 200, 300, 400]
+
+        # write just field "b" for elements [1:3]
+        field_dt = np.dtype([("b", "<i4")])
+        data = np.zeros((2,), dtype=field_dt)
+        data["b"] = [999, 888]
+
+        selection = selections.select(chunk_arr.shape, (slice(1, 3, 1),))
+        chunkWriteSelection(chunk_arr=chunk_arr, selection=selection, data=data)
+
+        self.assertEqual(chunk_arr["b"].tolist(), [10, 999, 888, 40])
+        # fields "a" and "c" must be completely unchanged
+        self.assertEqual(chunk_arr["a"].tolist(), [1, 2, 3, 4])
+        self.assertEqual(chunk_arr["c"].tolist(), [100, 200, 300, 400])
+
+        # multi-field write (two of the three fields) for elements [0:2]
+        multi_field_dt = np.dtype([("a", "<i4"), ("c", "<i4")])
+        multi_data = np.zeros((2,), dtype=multi_field_dt)
+        multi_data["a"] = [111, 222]
+        multi_data["c"] = [333, 444]
+        selection2 = selections.select(chunk_arr.shape, (slice(0, 2, 1),))
+        chunkWriteSelection(chunk_arr=chunk_arr, selection=selection2, data=multi_data)
+
+        self.assertEqual(chunk_arr["a"].tolist(), [111, 222, 3, 4])
+        self.assertEqual(chunk_arr["c"].tolist(), [333, 444, 300, 400])
+        # field "b" must still be unchanged by either write
+        self.assertEqual(chunk_arr["b"].tolist(), [10, 999, 888, 40])
+
+        # field-restricted read
+        arr = chunkReadSelection(chunk_arr, selection=selection, select_dt=field_dt)
+        self.assertEqual(arr["b"].tolist(), [999, 888])
+
+    def testChunkWriteSelectionFieldUpdateArrayField(self):
+        # field-restricted write on a compound that ALSO has an
+        # array-typed field - the combination of field-selection with an
+        # array-typed field isn't covered anywhere else (unit or
+        # integration level, HSDS or h5pyd)
+        dt = np.dtype([("vec", "<i4", (3,)), ("scale", "<f4")])
+        chunk_arr = np.zeros((3,), dtype=dt)
+        chunk_arr["vec"] = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+        chunk_arr["scale"] = [1.5, 2.5, 3.5]
+
+        # write just the scalar "scale" field for element 1
+        scale_dt = np.dtype([("scale", "<f4")])
+        data = np.zeros((1,), dtype=scale_dt)
+        data["scale"] = [99.5]
+
+        selection = selections.select(chunk_arr.shape, (slice(1, 2, 1),))
+        chunkWriteSelection(chunk_arr=chunk_arr, selection=selection, data=data)
+
+        self.assertAlmostEqual(float(chunk_arr["scale"][1]), 99.5)
+        # the array-typed "vec" field must be completely untouched
+        self.assertEqual(chunk_arr["vec"].tolist(), [[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+
+        # now the reverse: write just the array-typed "vec" field
+        vec_dt = np.dtype([("vec", "<i4", (3,))])
+        data2 = np.zeros((1,), dtype=vec_dt)
+        data2["vec"] = [[100, 101, 102]]
+        chunkWriteSelection(chunk_arr=chunk_arr, selection=selection, data=data2)
+
+        self.assertEqual(chunk_arr["vec"][1].tolist(), [100, 101, 102])
+        # "scale" must be untouched by this second, array-field-only write
+        self.assertAlmostEqual(float(chunk_arr["scale"][1]), 99.5)
+        # other elements' "vec" values untouched
+        self.assertEqual(chunk_arr["vec"][0].tolist(), [1, 2, 3])
+        self.assertEqual(chunk_arr["vec"][2].tolist(), [7, 8, 9])
+
+    def testChunkReadSelectionSingleArrayField(self):
+        # a single-field selection where that one field is array-typed -
+        # chunkReadSelection() used to have a single-field shortcut
+        # (`arr[...] = output_arr[fields[0]]`) that only worked for a
+        # scalar field; see git history / tests/integ/value_test.py's
+        # testArrayFieldSingleFieldReadArrayField for the end-to-end case.
+        dt = np.dtype([("vec", "<i4", (3,)), ("scale", "<f4")])
+        chunk_arr = np.zeros((4,), dtype=dt)
+        chunk_arr["vec"] = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]]
+        chunk_arr["scale"] = [0.5, 1.5, 2.5, 3.5]
+
+        select_dt = np.dtype([("vec", "<i4", (3,))])
+        selection = selections.select(chunk_arr.shape, ...)
+        arr = chunkReadSelection(chunk_arr, selection=selection, select_dt=select_dt)
+        self.assertEqual(arr["vec"].tolist(), chunk_arr["vec"].tolist())
+
     def testChunkReadPoints1D(self):
         chunk_id = "c-00de6a9c-6aff5c35-15d5-3864dd-0740f8_12"
         chunk_layout = (100,)

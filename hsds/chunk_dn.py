@@ -303,14 +303,19 @@ async def PUT_Chunk(request):
 
             raise HTTPBadRequest(reason="unable to decode bytestring")
 
+        # bytesToArray() already absorbs an array/subarray dtype's own
+        # shape (select_dt.shape) into input_arr's shape via frombuffer, so
+        # it must be appended to bcshape/mshape too, or the reshape below
+        # would incorrectly try to drop those elements
+        subarray_shape = select_dt.shape if select_dt.shape else ()
         if bcshape:
-            input_arr = input_arr.reshape(bcshape)
+            input_arr = input_arr.reshape(tuple(bcshape) + subarray_shape)
             log.debug(f"broadcasting {bcshape} to mshape {mshape}")
             arr_tmp = np.zeros(mshape, dtype=select_dt)
             arr_tmp[...] = input_arr
             input_arr = arr_tmp
         else:
-            input_arr = input_arr.reshape(mshape)
+            input_arr = input_arr.reshape(tuple(mshape) + subarray_shape)
 
         kwargs = {"chunk_arr": chunk_arr, "selection": selection, "data": input_arr}
         is_dirty = chunkWriteSelection(**kwargs)

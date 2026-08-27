@@ -1053,6 +1053,63 @@ class AttributeTest(unittest.TestCase):
         self.assertTrue("value" in rspJson)
         self.assertEqual(rspJson["value"], [42, 0.42])
 
+    def testPutCompoundArrayField(self):
+        # compound attribute with an array-typed field - no other
+        # attribute test exercises H5T_ARRAY at all, bare or
+        # compound-wrapped (dataset coverage for this dtype shape is in
+        # tests/integ/value_test.py's testCreateArrayDataset and friends)
+        print("testPutCompoundArrayField", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        # Get root uuid
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        root_id = rspJson["root"]
+        helper.validateId(root_id)
+
+        array_datatype = {
+            "class": "H5T_ARRAY",
+            "base": {
+                "class": "H5T_INTEGER",
+                "base": "H5T_STD_I32LE"
+            },
+            "dims": [3]
+        }
+        fields = (
+            {"name": "temp", "type": array_datatype},
+            {"name": "pressure", "type": "H5T_IEEE_F32LE"},
+        )
+        datatype = {"class": "H5T_COMPOUND", "fields": fields}
+        value = ([1, 2, 3], 0.5)
+
+        attr_name = "attr_compound_array"
+        payload = {"type": datatype, "value": value}
+        req = self.endpoint + "/groups/" + root_id + "/attributes/" + attr_name
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create attribute
+
+        # read back the attribute
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("value" in rspJson)
+        self.assertEqual(rspJson["value"], [[1, 2, 3], 0.5])
+
+        self.assertTrue("type" in rspJson)
+        rsp_type = rspJson["type"]
+        self.assertEqual(rsp_type["class"], "H5T_COMPOUND")
+        rsp_fields = rsp_type["fields"]
+        self.assertEqual(len(rsp_fields), 2)
+        self.assertEqual(rsp_fields[0]["name"], "temp")
+        self.assertEqual(rsp_fields[0]["type"]["class"], "H5T_ARRAY")
+        self.assertEqual(rsp_fields[0]["type"]["dims"], [3])
+        self.assertEqual(rsp_fields[1]["name"], "pressure")
+
+        self.assertTrue("shape" in rspJson)
+        self.assertEqual(rspJson["shape"]["class"], "H5S_SCALAR")
+
     def testPutObjReference(self):
         print("testPutObjReference", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
