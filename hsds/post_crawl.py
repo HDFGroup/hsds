@@ -264,7 +264,7 @@ async def createDatasets(app, items: list, root_id=None, bucket=None):
     """ create dataset objects based on parameters in items list """
 
     if not root_id:
-        msg = "no root_id given for createDatatypeObjs"
+        msg = "no root_id given for createDatasets"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
