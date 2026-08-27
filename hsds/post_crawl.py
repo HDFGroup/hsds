@@ -192,13 +192,13 @@ async def _createObjects(app, items: list, root_id=None, bucket=None):
     post_crawler = PostCrawler(app, root_id=root_id, bucket=bucket, items=items)
     await post_crawler.crawl()
     if post_crawler.get_status() > 201:
-        msg = f"createGroups returning status from crawler: {post_crawler.get_status()}"
+        msg = f"_createObjects returning status from crawler: {post_crawler.get_status()}"
         log.error(msg)
         raise HTTPInternalServerError()
 
     obj_list = post_crawler.get_rsp_objs()
     if not isinstance(obj_list, list):
-        msg = f"createGroups expected list but got: {type(obj_list)}"
+        msg = f"_createObjects expected list but got: {type(obj_list)}"
         log.error(msg)
         raise HTTPInternalServerError()
     return {"objects": obj_list}
