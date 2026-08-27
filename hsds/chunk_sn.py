@@ -779,7 +779,10 @@ async def PUT_Value(request):
             # dtype's own shape (select_dtype.shape) into arr's shape, so
             # it must be appended to np_shape too, or this reshape would
             # incorrectly try to drop those elements
-            target_shape = np_shape if not select_dtype.shape else tuple(np_shape) + select_dtype.shape
+            if not select_dtype.shape:
+                target_shape = np_shape
+            else:
+                target_shape = tuple(np_shape) + select_dtype.shape
             try:
                 arr = arr.reshape(target_shape)  # conform to selection shape
             except ValueError:
