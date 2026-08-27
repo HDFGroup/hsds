@@ -16,8 +16,8 @@ import sys
 PYTHON_CMD = "python"  # change to "python3" if "python" invokes python version 2.x
 
 unit_tests = ('chunk_util_test', 'compression_test', 'domain_util_test',
-              'dset_util_test', 'lru_cache_test', 'openapi_test',
-              'shuffle_test', 'rangeget_util_test')
+              'dset_util_test', 'glob_parser_test', 'lru_cache_test', 'openapi_test',
+              'rangeget_util_test', 'shuffle_test', 'stor_util_test')
 
 integ_tests = ('uptest', 'setup_test', 'domain_test', 'group_test',
                'link_test', 'attr_test', 'datatype_test', 'dataset_test',
