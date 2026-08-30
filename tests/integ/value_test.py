@@ -5288,7 +5288,6 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(shape["class"], "H5S_SIMPLE")
         self.assertEqual(shape["dims"], [num_nested_arrays])
 
-    # failing on CI even though it runs fine on my desktop!
     def testCreateBareArrayDataset(self):
         # unlike testCreateArrayDataset/testCreateArrayDatasetBinary above
         # (where the H5T_ARRAY type is one field of a compound), this
