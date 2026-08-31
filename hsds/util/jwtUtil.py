@@ -71,7 +71,7 @@ def verifyBearerToken(app, token):
     if provider not in ("azure", "google"):
         log.debug(f"Bearer authorization, using openid_url: {openid_url}")
 
-    log.debug(f"token: {token}")
+    log.debug(f"got bearer token, {len(token)} chars")
 
     try:
         token_header = jwt.get_unverified_header(token)

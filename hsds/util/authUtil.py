@@ -289,7 +289,6 @@ async def validateUserPasswordDynamoDB(app, username, password):
         if "S" not in password_item:
             log.error("Expected to find 'S' key for password item")
             raise HTTPInternalServerError()  # 500
-        log.debug(f"password: {password_item}")
         if password_item["S"] != password:
             log.warn(f"user password is not valid for user: {username}")
             raise HTTPUnauthorized()  # 401
