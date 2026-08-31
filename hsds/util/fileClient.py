@@ -45,6 +45,11 @@ class FileClient:
             msg = f"bucket: {bucket} contains invalid character, slash"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        if bucket in (".", ".."):
+            # would resolve to the storage root or its parent
+            msg = f"invalid bucket: {bucket}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
     def _validateKey(self, key):
         if not key:
@@ -55,10 +60,33 @@ class FileClient:
             msg = f"invalid key: {key}, cannot start with slash"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        if ".." in key.replace("\\", "/").split("/"):
+            msg = f"invalid key: {key}, cannot contain '..' path segment"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    def _checkPathInRoot(self, filepath):
+        """ Verify the given path resolves to somewhere under the storage root.
+
+        The bucket/key validators reject the traversal forms we know about;
+        this is the backstop that does not depend on having enumerated them,
+        and it runs after normpath has collapsed any ".." segments.
+        """
+        filepath = pp.normpath(filepath)
+        try:
+            in_root = pp.commonpath((self._root_dir, filepath)) == self._root_dir
+        except ValueError:
+            # different drives on Windows, or a mix of absolute and relative
+            in_root = False
+        if not in_root:
+            msg = f"path outside of storage root: {filepath}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        return filepath
 
     def _getFilePath(self, bucket, key=""):
         filepath = pp.join(self._root_dir, bucket, key)
-        return pp.normpath(filepath)
+        return self._checkPathInRoot(filepath)
 
     def _getFileStats(self, filepath, data=None):
         log.debug(f"_getFileStats({filepath})")
@@ -188,7 +216,7 @@ class FileClient:
     def _mkdir(self, dirpath):
         """ create the given directory if it doesn't already exist """
         try:
-            dirpath = pp.normpath(dirpath)
+            dirpath = self._checkPathInRoot(dirpath)
             log.debug(f"normpath: {dirpath}")
 
             if not pp.isdir(dirpath):
@@ -362,7 +390,7 @@ class FileClient:
         basedir = pp.join(self._root_dir, bucket)
         if prefix:
             basedir = pp.join(basedir, prefix)
-        basedir = pp.normpath(basedir)
+        basedir = self._checkPathInRoot(basedir)
         log.debug(f"fileClient listKeys for directory: {basedir}")
 
         if not pp.isdir(basedir):
