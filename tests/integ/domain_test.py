@@ -1565,6 +1565,32 @@ class DomainTest(unittest.TestCase):
         self.assertTrue("total_size" in tall_item)
         self.assertTrue(tall_item["total_size"] > 5000)
 
+    def testGetRootNoDomain(self):
+        # GET / with no domain/X-Hdf-domain returns the top-level domain
+        # list rather than 400ing - the top-level folder isn't itself a
+        # domain, so there's no domain JSON to return for it.
+        print("testGetRootNoDomain", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=None)
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(
+            rsp.headers["content-type"], "application/json; charset=utf-8"
+        )
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domains" in rspJson)
+        self.assertTrue("hrefs" in rspJson)
+        for item in rspJson["domains"]:
+            self.assertTrue("name" in item)
+            # get_domains(include_hrefs=True) mixes in a per-domain href
+            self.assertTrue("hrefs" in item)
+
+        # passing the domain path as a "host" param is not supported
+        params = {"host": self.base_domain}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
     def testGetTopLevelDomains(self):
         print("testGetTopLevelDomains", self.base_domain)
 

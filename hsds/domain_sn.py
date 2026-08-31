@@ -103,36 +103,6 @@ async def get_collections(app, root_id, bucket=None, max_objects_limit=None):
     return result
 
 
-async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
-    """Iterate through all objects in hierarchy and add to obj_dict
-    keyed by obj id
-    """
-
-    log.info(f"getDomainObjects for root: {root_id}, include_attrs: {include_attrs}")
-    max_objects_limit = int(config.get("domain_req_max_objects_limit", default=500))
-
-    kwargs = {
-        "action": "get_obj",
-        "include_attrs": include_attrs,
-        "include_links": True,
-        "follow_links": True,
-        "max_objects_limit": max_objects_limit,
-        "bucket": bucket,
-    }
-
-    crawler = DomainCrawler(app, [root_id, ], **kwargs)
-    await crawler.crawl()
-    if len(crawler._obj_dict) >= max_objects_limit:
-        msg = "getDomainObjects - too many objects:  "
-        msg += f"{len(crawler._obj_dict)}, returning None"
-        log.info(msg)
-        return None
-    else:
-        msg = f"getDomainObjects returning: {len(crawler._obj_dict)} objects"
-        log.info(msg)
-        return crawler._obj_dict
-
-
 def getIdList(objs, marker=None, limit=None):
     """takes a map of ids to objs and returns ordered list
     of ids, optionally reduced by marker and limit"""
@@ -479,7 +449,7 @@ async def GET_Domains(request):
     folder_path = getDomainFromRequest(request, validate=False)
     href = getHref(request, "/domains", domain=folder_path)
     hrefs.append({"rel": "self", "href": href})
-    rsp_json["hrefs"] = []
+    rsp_json["hrefs"] = hrefs
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
@@ -522,13 +492,6 @@ async def GET_Domain(request):
         log.warn(f"Invalid domain: {domain}")
         raise HTTPBadRequest(reason="Invalid domain name")
 
-    if not domain:
-        # no domain param/header given - use GET /domains to list
-        # top-level domains instead
-        msg = "No domain provided"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-
     bucket = getBucketForDomain(domain)
     log.debug(f"GET_Domain domain: {domain} bucket: {bucket}")
 
@@ -548,6 +511,26 @@ async def GET_Domain(request):
     # include domain objects if requested
     if params.get("getobjs"):
         getobjs = True
+
+    if not domain:
+        if "host" in params:
+            msg = "Passing domain path as 'host' parameter is no longer supported"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        # This is a special case since the top-level folder isn't an
+        # actual domain (i.e. doesn't have corresponding domain json in S3)
+        log.info("no domain passed in, returning all top-level domains")
+        # no domain passed in, return top-level domains for this request
+        domains = await get_domains(request, include_hrefs=True)
+        rsp_json = {"domains": domains}
+        hrefs = []
+        href = getHref(request, "/")
+        hrefs.append({"rel": "self", "href": href})
+
+        rsp_json["hrefs"] = hrefs
+        resp = await jsonResponse(request, rsp_json)
+        log.response(request, resp=resp)
+        return resp
 
     log.info(f"get domain: {domain}")
 

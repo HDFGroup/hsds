@@ -271,9 +271,13 @@ paths:
       summary: Get domain (or resolve an object by h5path within it)
       description: |
         Returns JSON describing the domain identified by the `domain` query
-        param / `X-Hdf-domain` header. A `domain` (or `X-Hdf-domain`) is
-        required here - omitting it 400s. Use `GET /domains` to list
-        top-level domains instead.
+        param / `X-Hdf-domain` header.
+
+        If neither is given, returns the list of top-level domains instead
+        (the same `DomainList` payload as `GET /domains`, since the
+        top-level folder is not itself a domain and has no domain JSON in
+        the object store). Passing the domain path as a `host` query param
+        is no longer supported and 400s.
 
         If `h5path` is given, resolves that path (relative to `parent_id`, or
         the domain root if `parent_id` is absent) and returns the JSON for the
@@ -323,13 +327,16 @@ paths:
           schema: { type: boolean, default: false }
       responses:
         '200':
-          description: Domain JSON, or (with `h5path`) resolved-object JSON - see description.
+          description: >
+            Domain JSON; or (with `h5path`) resolved-object JSON; or, when no
+            domain is given, the top-level domain list - see description.
           content:
             application/json:
               schema:
                 oneOf:
                   - $ref: '#/components/schemas/DomainResponse'
                   - $ref: '#/components/schemas/ObjectResponse'
+                  - $ref: '#/components/schemas/DomainList'
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
