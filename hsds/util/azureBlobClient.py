@@ -134,7 +134,7 @@ class AzureBlobClient:
             if isinstance(e, AzureError):
                 if e.status_code == 404:
                     msg = f"storage key: {key} not found "
-                    log.warn(msg)
+                    log.info(msg)
                     raise HTTPNotFound()
                 elif e.status_code in (401, 403):
                     msg = f"azureBlobClient.access denied for get key: {key}"
@@ -152,6 +152,8 @@ class AzureBlobClient:
                 log.error(msg)
                 raise HTTPInternalServerError()
 
+        if data and len(data) > 0:
+            self._azure_stats_increment("bytes_in", inc=len(data))
         return data
 
     async def put_object(self, key, data, bucket=None):

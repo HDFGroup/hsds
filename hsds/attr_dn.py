@@ -200,7 +200,7 @@ async def GET_Attributes(request):
     log.debug(f"GET attributes obj_id: {obj_id} got json")
     if "attributes" not in obj_json:
         msg = f"unexpected data for obj id: {obj_id}"
-        msg.error(msg)
+        log.error(msg)
         raise HTTPInternalServerError()
 
     # return a list of attributes based on sorted dictionary keys
@@ -312,7 +312,7 @@ async def POST_Attributes(request):
     log.debug(f"Get attributes obj_id: {obj_id} got json")
     if "attributes" not in obj_json:
         msg = f"unexpected data for obj id: {obj_id}"
-        msg.error(msg)
+        log.error(msg)
         raise HTTPInternalServerError()
 
     # return a list of attributes based on sorted dictionary keys
@@ -588,7 +588,7 @@ async def DELETE_Attributes(request):
     log.debug(f"DELETE attributes obj_id: {obj_id} got json")
     if "attributes" not in obj_json:
         msg = f"unexpected data for obj id: {obj_id}"
-        msg.error(msg)
+        log.error(msg)
         raise HTTPInternalServerError()
 
     # return a list of attributes based on sorted dictionary keys

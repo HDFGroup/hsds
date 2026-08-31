@@ -38,6 +38,7 @@ from .util.chunkUtil import getChunkIdForPartition
 
 from . import config
 from . import hsds_logger as log
+from . import metrics
 
 CHUNK_REF_LAYOUTS = (
     "H5D_CONTIGUOUS_REF",
@@ -697,6 +698,7 @@ class ChunkCrawler:
 
         for chunk_id in chunk_ids:
             self._q.put_nowait(chunk_id)
+        metrics.crawler_enqueued("chunk", len(chunk_ids))
 
         self._bucket = bucket
         max_tasks = max_tasks_per_node * getNodeCount(app)
@@ -766,27 +768,29 @@ class ChunkCrawler:
             try:
                 start = self.now()
                 chunk_id = await self._q.get()
-                if self._limit > 0 and self._hits >= self._limit:
-                    msg = f"ChunkCrawler - maxhits exceeded, skipping fetch for chunk: {chunk_id}"
-                    log.debug(msg)
-                else:
-                    dn_url = getDataNodeUrl(self._app, chunk_id)
-                    if isUnixDomainUrl(dn_url):
-                        # need a client per url for unix sockets
-                        client = get_http_client(self._app, url=dn_url, cache_client=True)
+                with metrics.crawler_task("chunk"):
+                    if self._limit > 0 and self._hits >= self._limit:
+                        msg = "ChunkCrawler - maxhits exceeded, "
+                        msg += f"skipping fetch for chunk: {chunk_id}"
+                        log.debug(msg)
                     else:
-                        # create a pool of clients and store the handles in the app dict
-                        if client_name not in self._clients:
-                            client = get_http_client(
-                                self._app, url=dn_url, cache_client=False
-                            )
-                            msg = "ChunkCrawler - creating new SessionClient for "
-                            msg += f"task: {client_name}"
-                            log.info(msg)
-                            self._clients[client_name] = client
+                        dn_url = getDataNodeUrl(self._app, chunk_id)
+                        if isUnixDomainUrl(dn_url):
+                            # need a client per url for unix sockets
+                            client = get_http_client(self._app, url=dn_url, cache_client=True)
                         else:
-                            client = self._clients[client_name]
-                    await self.do_work(chunk_id, client=client)
+                            # create a pool of clients and store the handles in the app dict
+                            if client_name not in self._clients:
+                                client = get_http_client(
+                                    self._app, url=dn_url, cache_client=False
+                                )
+                                msg = "ChunkCrawler - creating new SessionClient for "
+                                msg += f"task: {client_name}"
+                                log.info(msg)
+                                self._clients[client_name] = client
+                            else:
+                                client = self._clients[client_name]
+                        await self.do_work(chunk_id, client=client)
 
                 self._q.task_done()
                 elapsed = self.now() - start

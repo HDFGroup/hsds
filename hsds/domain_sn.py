@@ -203,7 +203,7 @@ def _domainRowArray(field_defs, values):
     return row_arr
 
 
-async def get_domains(request):
+async def get_domains(request, include_hrefs=False):
     """This method is called by GET_Domains and GET_Domain"""
     app = request.app
     params = request.rel_url.query
@@ -306,6 +306,8 @@ async def get_domains(request):
             if s3key[-1] != "/":
                 log.debug(f"get_domains - ignoring key: {s3key}")
                 continue
+            if prefix == '/' and s3key == "db":
+                log.debug("get_domains - ignoring db key at top level")
             if len(s3key) > 1 and s3key[-2] == "/":
                 # trim off double slash
                 s3key = s3key[:-1]
@@ -434,7 +436,16 @@ async def get_domains(request):
         if domain in crawler._domain_dict:
             domain_json = crawler._domain_dict[domain]
             # mixin domain name
+            log.debug(f"get_domains - adding name: {domain} to domain json")
             domain_json["name"] = domain
+            if include_hrefs:
+                hrefs = []
+                if domain[-1] == "/":
+                    domain = domain[:-1]
+                # add an href to get sub-domains if this is a folder
+                href = getHref(request, "/", domain=domain)
+                hrefs.append({"rel": "domain", "href": href})
+                domain_json["hrefs"] = hrefs
             domains.append(domain_json)
         else:
             if not query:
@@ -458,7 +469,16 @@ async def GET_Domains(request):
 
     domains = await get_domains(request)
 
+    for domain in domains:
+        domain_name = domain["name"]
+        href = getHref(request, "/", domain=domain_name)
+        domain["hrefs"] = [{"rel": "domain", "href": href}]
+
     rsp_json = {"domains": domains}
+    hrefs = []
+    folder_path = getDomainFromRequest(request, validate=False)
+    href = getHref(request, "/domains", domain=folder_path)
+    hrefs.append({"rel": "self", "href": href})
     rsp_json["hrefs"] = []
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
@@ -512,7 +532,7 @@ async def GET_Domain(request):
     bucket = getBucketForDomain(domain)
     log.debug(f"GET_Domain domain: {domain} bucket: {bucket}")
 
-    if not bucket:
+    if not bucket and domain:
         # no bucket defined, raise 400
         msg = "Bucket not provided"
         log.warn(msg)
@@ -542,6 +562,7 @@ async def GET_Domain(request):
         # if h5path is passed in, return object info for that path
         #   (if exists)
         h5path = params["h5path"]
+        log.debug(f"h5path: {h5path}")
 
         # select which object to perform path search under
         base_id = parent_id if parent_id else domain_json["root"]
@@ -566,6 +587,7 @@ async def GET_Domain(request):
 
         # client may not know class of object retrieved via path
         obj_json["class"] = getObjectClass(obj_id)
+        log.debug(f"got object json: {obj_json}")
 
         hrefs = []
         hrefs.append({"rel": "self", "href": getHref(request, "/")})
@@ -619,6 +641,10 @@ async def GET_Domain(request):
         hrefs.append({"rel": "typebase", "href": href})
         href = getHref(request, "/groups/" + root_uuid)
         hrefs.append({"rel": "root", "href": href})
+    else:
+        # add an href to get sub-domains if this is a folder
+        href = getHref(request, "/domains") + '/'
+        hrefs.append({"rel": "domains", "href": href})
 
     hrefs.append({"rel": "acls", "href": getHref(request, "/acls")})
     parent_domain = getParentDomain(domain)
@@ -633,9 +659,12 @@ async def GET_Domain(request):
 
     rsp_json["hrefs"] = hrefs
     # mixin limits, version
-    domain_json["limits"] = getLimits()
-    domain_json["compressors"] = getCompressors()
-    domain_json["version"] = getVersion()
+    if "root" in domain_json:
+        log.debug('getting limits, compressors, version for domain')
+        domain_json["limits"] = getLimits()
+        domain_json["compressors"] = getCompressors()
+        domain_json["version"] = getVersion()
+    log.debug(f"returning domain json: {domain_json}")
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp

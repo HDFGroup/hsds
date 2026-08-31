@@ -13,6 +13,12 @@ spec:
     metadata:
       labels:
         app: hsds
+      annotations:
+        # scrapes the sn container; add a PodMonitor targeting the sn and dn
+        # ports to also collect dn metrics (see docs/prometheus_metrics.md)
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5101"
+        prometheus.io/path: /metrics
     spec:
       containers:
         - name: sn
@@ -36,6 +42,7 @@ spec:
           ports:
             -
               containerPort: 5101
+              name: sn
           env:
           - name: NODE_TYPE
             value: sn
@@ -78,6 +85,7 @@ spec:
           ports:
             -
               containerPort: 6101
+              name: dn
           env:
           - name: NODE_TYPE
             value: dn

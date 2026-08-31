@@ -34,6 +34,7 @@ from .util.k8sClient import getDnLabelSelector, getPodIps
 from .util.nodeUtil import createNodeId, getNodeNumber, getNodeCount
 
 from . import hsds_logger as log
+from . import metrics
 
 HSDS_VERSION = "1.0.0"
 
@@ -239,6 +240,8 @@ async def docker_update_dn_info(app):
         app["dn_urls"] = []
         app["dn_ids"] = []
         app["cluster_state"] = "WAITING"
+    except HTTPServiceUnavailable:
+        log.warn("Head ServiceUnavailable")
     except OSError:
         log.error("failed to register")
         app["dn_urls"] = []
@@ -424,7 +427,8 @@ async def healthCheck(app):
 
     while True:
         try:
-            await doHealthCheck(app, chaos_die=chaos_die)
+            with metrics.housekeeping("health_check"):
+                await doHealthCheck(app, chaos_die=chaos_die)
         except Exception as e:
             msg = f"Unexpected {e.__class__.__name__} exception in "
             msg += f"doHealthCheck: {e}"
@@ -568,17 +572,19 @@ def baseInit(node_type):
     # setup log config
     log_level = config.get("log_level")
     prefix = config.get("log_prefix")
-    log_timestamps = config.get("log_timestamps", default=False)
+    log_timestamps = config.get("log_timestamps", default=True)
+    log_format = config.get("log_format", default="text")
 
     # Make stdout/stderr encoding consistent across all operating systems
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
-    log.setLogConfig(log_level, prefix=prefix, timestamps=log_timestamps)
+    kwargs = {"prefix": prefix, "timestamps": log_timestamps, "log_format": log_format}
+    log.setLogConfig(log_level, **kwargs)
 
     # create the app object
     log.info("Application baseInit")
-    app = Application()
+    app = Application(middlewares=[metrics.metrics_middleware])
 
     app["node_state"] = "INITIALIZING"
     app["cluster_state"] = "WAITING"
@@ -719,6 +725,7 @@ def baseInit(node_type):
 
     app.router.add_get("/info", info)
     app.router.add_get("/about", about)
+    app.router.add_get("/metrics", metrics.metrics_handler)
 
     if is_standalone:
         # can go straight to ready state

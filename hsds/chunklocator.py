@@ -194,8 +194,10 @@ def main():
     # setup log config
     log_level = config.get("log_level")
     prefix = config.get("log_prefix")
-    log_timestamps = config.get("log_timestamps", default=False)
-    log.setLogConfig(log_level, prefix=prefix, timestamps=log_timestamps)
+    log_timestamps = config.get("log_timestamps", default=True)
+    log_format = config.get("log_format", default="text")
+    kwargs = {"prefix": prefix, "timestamps": log_timestamps, "log_format": log_format}
+    log.setLogConfig(log_level, **kwargs)
     start_time = getNow()
     log.info(f"chunklocator start: {start_time:.2f}")
 

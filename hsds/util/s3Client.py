@@ -350,6 +350,8 @@ class S3Client:
                 msg = f"Unexpected Exception {type(e)} get s3 obj {bucket}/{key}: {e}"
                 log.error(msg)
                 raise HTTPInternalServerError()
+        if data and len(data) > 0:
+            self._s3_stats_increment("bytes_in", inc=len(data))
         return data
 
     async def put_object(self, key, data, bucket=None):

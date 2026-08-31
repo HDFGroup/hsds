@@ -34,7 +34,7 @@ version = "1.0.0"
 
 dependencies = [
     "aiohttp == 3.9.4",
-    "aiobotocore == 2.13.0",
+    "aiobotocore >= 2.13.0",
     "aiohttp_cors",
     "aiofiles",
     "azure-storage-blob",
@@ -45,15 +45,16 @@ dependencies = [
     "importlib_resources",
     "numcodecs <= 0.15.1",
     "numpy >=2.0.0",
+    "prometheus-client",
     "psutil",
     "pyjwt",
     "pytz",
     "pyyaml",
-    "requests <= 2.31.0",
+    "requests <= 2.32.4",
     "requests-unixsocket",
     "simplejson",
     "s3fs",
-    "urllib3 < 2.0.0"
+    "urllib3 >= 2.4.0, < 3.0"
 ]
 
 [project.optional-dependencies]

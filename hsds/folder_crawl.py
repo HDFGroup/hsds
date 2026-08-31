@@ -23,6 +23,7 @@ from .servicenode_lib import getObjectJson, getDomainResponse, getDomainJson
 from .util.nodeUtil import getNodeCount
 
 from . import hsds_logger as log
+from . import metrics
 
 
 class FolderCrawler:
@@ -44,6 +45,7 @@ class FolderCrawler:
         self._group_dict = {}
         for domain in domains:
             self._q.put_nowait(domain)
+        metrics.crawler_enqueued("folder", len(domains))
         self._bucket = bucket
         max_tasks = max_tasks_per_node * getNodeCount(app)
         if len(domains) > max_tasks:
@@ -73,7 +75,8 @@ class FolderCrawler:
         while True:
             start = self.now()
             domain = await self._q.get()
-            await self.fetch(domain)
+            with metrics.crawler_task("folder"):
+                await self.fetch(domain)
             self._q.task_done()
             elapsed = self.now() - start
             msg = f"FolderCrawler - task {domain} start: {start:.3f} "

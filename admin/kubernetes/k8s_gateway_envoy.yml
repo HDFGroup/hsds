@@ -1,0 +1,61 @@
+# Expose the public HSDS API through Gateway API (Envoy Gateway) while blocking the
+# internal endpoints (/metrics, /info, /about) from external callers.
+#
+# In-cluster access is unaffected (see the note in k8s_ingress_nginx.yml): scrapers hit
+# pod IPs directly and in-cluster clients use hsds.<namespace>.svc.cluster.local:5101,
+# neither of which traverses this Gateway.
+#
+# Requires Envoy Gateway v1.3+ for the HTTPRouteFilter `directResponse` extension.
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: hsds
+spec:
+  gatewayClassName: eg   # GatewayClass created by Envoy Gateway
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      hostname: hsds.example.com
+---
+# Envoy Gateway extension filter: return a fixed 403 response with no backend call.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: HTTPRouteFilter
+metadata:
+  name: deny-403
+spec:
+  directResponse:
+    statusCode: 403
+    body:
+      type: Inline
+      inline: "Forbidden\n"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hsds
+spec:
+  parentRefs:
+    - name: hsds
+  hostnames:
+    - hsds.example.com
+  rules:
+    # Exact matches take precedence over the PathPrefix catch-all below (Gateway API
+    # match precedence), so these internal paths get a 403 before reaching the backend.
+    - matches:
+        - path: {type: Exact, value: /metrics}
+        - path: {type: Exact, value: /info}
+        - path: {type: Exact, value: /about}
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.envoyproxy.io
+            kind: HTTPRouteFilter
+            name: deny-403
+    # Public API -> SN service.
+    - matches:
+        - path: {type: PathPrefix, value: /}
+      backendRefs:
+        - name: hsds
+          port: 5101

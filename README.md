@@ -123,6 +123,10 @@ Authorization, ACLs, and Role Based Access Control (RBAC):
 
 - See [docs/authorization.md](docs/authorization.md)
 
+Monitoring and metrics (Prometheus / Grafana):
+
+- See [docs/prometheus_metrics.md](docs/prometheus_metrics.md)
+
 ## Writing Client Applications
 
 As a REST service, clients be developed using almost any programming language. The

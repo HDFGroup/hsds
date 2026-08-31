@@ -119,7 +119,7 @@ async def GET_Links(request):
 
     log.debug(f"for id: {group_id} got group json: {group_json}")
     if "links" not in group_json:
-        msg.error(f"unexpected group data for id: {group_id}")
+        log.error(f"unexpected group data for id: {group_id}")
         raise HTTPInternalServerError()
 
     # return a list of links based on sorted dictionary keys
@@ -132,7 +132,7 @@ async def GET_Links(request):
             titles = [x for x in titles if globmatch(x, pattern)]
         except ValueError:
             log.error(f"exception getting links using pattern: {pattern}")
-            raise HTTPBadRequest(reason=msg)
+            raise HTTPBadRequest(reason=f"invalid link name pattern: {pattern}")
         msg = f"getLinks with pattern: {pattern} returning {len(titles)} "
         msg += f"links from {len(link_dict)}"
         log.debug(msg)

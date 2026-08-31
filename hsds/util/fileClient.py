@@ -108,6 +108,8 @@ class FileClient:
             log.error(f"unexpected inc for file_stats: {inc}")
             return
 
+        file_stats[counter] += inc
+
     def getURIFromKey(self, key, bucket=None):
         """ return filesystem specific URI for given key and bucket """
         if not bucket:
@@ -156,7 +158,7 @@ class FileClient:
             log.info(msg)
         except FileNotFoundError:
             msg = f"fileClient: {key} not found "
-            log.warn(msg)
+            log.info(msg)
             raise HTTPNotFound()
         except IOError as ioe:
             msg = f"fileClient: IOError reading {bucket}/{key}: {ioe}"
@@ -166,13 +168,15 @@ class FileClient:
         except CancelledError as cle:
             self._file_stats_increment("error_count")
             msg = f"CancelledError for get file obj {key}: {cle}"
-            log.error(msg)
-            raise HTTPInternalServerError()
+            log.warn(msg)
+            raise
         except Exception as e:
             self._file_stats_increment("error_count")
             msg = f"Unexpected Exception {type(e)} get get_object {key}: {e}"
             log.error(msg)
             raise HTTPInternalServerError()
+        if data and len(data) > 0:
+            self._file_stats_increment("bytes_in", inc=len(data))
 
         posix_delay = config.get("posix_delay", default=0.0)
         if posix_delay > 0.0:
@@ -245,8 +249,8 @@ class FileClient:
         except CancelledError as cle:
             # file_stats_increment(app, "error_count")
             msg = f"CancelledError for put file obj {key}: {cle}"
-            log.error(msg)
-            raise HTTPInternalServerError()
+            log.warn(msg)
+            raise
 
         except Exception as e:
             # file_stats_increment(app, "error_count")
@@ -298,8 +302,8 @@ class FileClient:
         except CancelledError as cle:
             self._file_stats_increment("error_count")
             msg = f"CancelledError deleting file obj {key}: {cle}"
-            log.error(msg)
-            raise HTTPInternalServerError()
+            log.warn(msg)
+            raise
 
         except Exception as e:
             self._file_stats_increment("error_count")

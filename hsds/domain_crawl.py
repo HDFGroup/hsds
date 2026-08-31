@@ -26,6 +26,7 @@ from .util.httpUtil import isOK, http_put
 from .util.globparser import globmatch
 from .servicenode_lib import getObjectJson, getAttributes, putAttributes, getLinks, putLinks
 from . import hsds_logger as log
+from . import metrics
 
 
 class DomainCrawler:
@@ -81,6 +82,7 @@ class DomainCrawler:
         for obj_id in objs:
             log.debug(f"adding {obj_id} to the queue")
             self._q.put_nowait(obj_id)
+        metrics.crawler_enqueued("domain", len(objs))
         if isinstance(objs, dict):
             self._objs = objs
         else:
@@ -127,6 +129,7 @@ class DomainCrawler:
                 log.debug(f"DomainCrawler - adding link_id: {link_id} to queue")
                 self._obj_dict[link_id] = {}  # placeholder for obj id
                 self._q.put_nowait(link_id)
+                metrics.crawler_enqueued("domain")
                 link_count += 1
             else:
                 log.debug(f"link: {link_id} already in object dict")
@@ -524,7 +527,8 @@ class DomainCrawler:
     async def work(self):
         while True:
             obj_id = await self._q.get()
-            await self.fetch(obj_id)
+            with metrics.crawler_task("domain"):
+                await self.fetch(obj_id)
             self._q.task_done()
 
     async def fetch(self, obj_id):

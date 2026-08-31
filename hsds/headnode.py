@@ -102,6 +102,8 @@ class Node:
 async def isClusterReady(app):
     sn_count = 0
     dn_count = 0
+    active_sn_ids = app["active_sn_ids"]
+    active_dn_ids = app["active_dn_ids"]
     target_sn_count = await getTargetNodeCount(app, "sn")
     target_dn_count = await getTargetNodeCount(app, "dn")
     last_create_time = None
@@ -114,9 +116,11 @@ async def isClusterReady(app):
         if last_create_time is None or node.create_time > last_create_time:
             last_create_time = node.create_time
         if node.type == "sn":
-            sn_count += 1
+            if node_id in active_sn_ids:
+                sn_count += 1
         else:
-            dn_count += 1
+            if node_id in active_dn_ids:
+                dn_count += 1
     if sn_count == 0 or dn_count == 0:
         log.debug("no nodes, cluster not ready")
         return False
@@ -170,6 +174,20 @@ async def info(request):
     return resp
 
 
+def getNodeUrls(nodes, node_ids):
+    """ return a list of node urls for the given set of node ids """
+
+    node_urls = []
+    for node_id in node_ids:
+        if node_id:
+            node = nodes[node_id]
+            node_url = f"http://{node.host}:{node.port}"
+            node_urls.append(node_url)
+        else:
+            node_urls.append(None)
+    return node_urls
+
+
 async def register(request):
     """HTTP method for nodes to register with head node"""
     app = request.app
@@ -207,7 +225,7 @@ async def register(request):
         log.debug("register - get ip/port from request.transport")
         peername = request.transport.get_extra_info("peername")
         if peername is None:
-            msg = "Can not determine caller IP"
+            msg = "Cannot determine caller IP"
             log.error(msg)
             raise HTTPBadRequest(reason=msg)
         if peername[0] is None or peername[0] in ("::1", "127.0.0.1"):
@@ -254,9 +272,33 @@ async def register(request):
             node_host=node_host,
             node_port=node_port,
         )
-        # delete any existing node with the same port
+        # delete any existing node with the same port and IP
         removeNode(app, host=node_host, port=node_port)
         nodes[node_id] = node
+
+        # add to the active list if there's an open slot
+        if node_type == "sn":
+            active_list = app["active_sn_ids"]
+        else:
+            active_list = app["active_dn_ids"]
+
+        tgt_count = len(active_list)
+        active_count = sum(id is not None for id in active_list)
+        if tgt_count == active_count:
+            # all the slots are filled, see if there is any unhealthy node
+            # and remove that
+            for i in range(len(active_list)):
+                id = active_list[i]
+                node = nodes[id]
+                if not node.is_healthy():
+                    active_list[i] = None  # clear the slot
+                    break
+
+        for i in range(len(active_list)):
+            if not active_list[i]:
+                log.info(f"Node {node_id} added to {node_type} active list in slot: {i}")
+                active_list[i] = node_id
+                break
 
     resp = StreamResponse()
     resp.headers["Content-Type"] = "application/json"
@@ -266,38 +308,14 @@ async def register(request):
         answer["cluster_state"] = "READY"
     else:
         answer["cluster_state"] = "WAITING"
-    sn_urls = []
-    dn_urls = []
-    sn_ids = []
-    dn_ids = []
-    for node_id in nodes:
-        node = nodes[node_id]
-        if not node.is_healthy():
-            continue
-        node_url = f"http://{node.host}:{node.port}"
-        if node.type == "sn":
-            sn_urls.append(node_url)
-            sn_ids.append(node_id)
-        else:
-            dn_urls.append(node_url)
-            dn_ids.append(node_id)
 
-    # sort dn_urls so node number can be determined
-    dn_id_map = {}
-    for i in range(len(dn_urls)):
-        dn_url = dn_urls[i]
-        dn_id = dn_ids[i]
-        dn_id_map[dn_url] = dn_id
+    sn_urls = getNodeUrls(nodes, app["active_sn_ids"])
+    dn_urls = getNodeUrls(nodes, app["active_dn_ids"])
 
-    dn_urls.sort()
-    dn_ids = []  # re-arrange to match url order
-    for dn_url in dn_urls:
-        dn_ids.append(dn_id_map[dn_url])
-
+    answer["sn_ids"] = app["active_sn_ids"]
     answer["sn_urls"] = sn_urls
+    answer["dn_ids"] = app["active_dn_ids"]
     answer["dn_urls"] = dn_urls
-    answer["sn_ids"] = sn_ids
-    answer["dn_ids"] = dn_ids
     answer["req_ip"] = node_host
     log.debug(f"register returning: {answer}")
     app["last_health_check"] = int(getNow())
@@ -429,7 +447,12 @@ async def getTargetNodeCount(app, node_type):
 def getActiveNodeCount(app, node_type):
     count = 0
     nodes = app["nodes"]
-    for node_id in nodes:
+    if node_type == "sn":
+        active_list = app["active_sn_ids"]
+    else:
+        active_list = app["active_dn_ids"]
+
+    for node_id in active_list:
         node = nodes[node_id]
         if node.type != node_type:
             continue
@@ -451,6 +474,12 @@ async def init():
 
     # set a bunch of global state
     app["id"] = createNodeId("head")
+    app["node_type"] = "head"
+    # the head node has no INITIALIZING->READY lifecycle (SN/DN register
+    # with it); it is ready as soon as it is listening.  Without this,
+    # log.request's admission check 503s the head's own status routes
+    # (e.g. /, /nodestate/{nodetype}, /nodeinfo/{statkey}).
+    app["node_state"] = "READY"
 
     bucket_name = config.get("bucket_name")
     if bucket_name:
@@ -461,8 +490,6 @@ async def init():
 
     app["head_port"] = config.get("head_port")
 
-    nodes = {}
-
     # check to see if we are running in a DCOS cluster
     if "MARATHON_APP_ID" in os.environ:
         msg = "Found MARATHON_APP_ID environment variable, setting "
@@ -472,7 +499,12 @@ async def init():
     else:
         log.info("not setting is_dcos")
 
-    app["nodes"] = nodes
+    target_sn_count = await getTargetNodeCount(app, "sn")
+    target_dn_count = await getTargetNodeCount(app, "dn")
+
+    app["nodes"] = {}
+    app["active_sn_ids"] = [None, ] * target_sn_count
+    app["active_dn_ids"] = [None, ] * target_dn_count
     app["dead_node_ids"] = set()
     app["start_time"] = int(getNow())  # seconds after epoch
     app["last_health_check"] = 0
