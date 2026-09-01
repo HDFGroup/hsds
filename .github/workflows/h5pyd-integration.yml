@@ -112,6 +112,14 @@ jobs:
           wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5
           hsload -v -e $HS_ENDPOINT tall.h5 /home/test_user1/test/
           hsls -r -e $HS_ENDPOINT /home/test_user1/test/tall.h5
+          # domain_test's testGetDomain, testGetDomainVerbose and
+          # testGetDomainsVerbose assert the test-data domain is more than ten
+          # seconds old ("created < now - 10"). That holds for the setup those
+          # tests were written against - docs/post_install.md, where hsload is
+          # run once into a long-lived server - but not here, where the domain
+          # is created seconds earlier. Wait it out rather than weaken an
+          # assertion that is correct in its intended setting.
+          sleep 11
 
       - name: Run HSDS integration tests (with test data loaded)
         env:
