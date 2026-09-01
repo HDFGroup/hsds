@@ -1,7 +1,9 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+name: h5pyd integration
 
-name: Python package
+# Combined HSDS + h5pyd test, kept apart from the HSDS-only suite because a
+# failure here can be a real h5pyd bug rather than an HSDS one - and while
+# it shared a workflow with the HSDS jobs, a red h5pyd run made HSDS itself
+# look broken.
 
 on:
   push:
@@ -12,43 +14,6 @@ env:
   ROOT_DIR: ${{github.workspace}}/data
 
 jobs:
-  build-and-test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-22.04, ubuntu-latest, windows-latest]
-        python-version: ["3.11", "3.12", "3.13"]
-        build-method: ["manual", "docker"]
-
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Lint with flake8
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install flake8
-          # stop the build if there are Python syntax errors or undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-          flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
-
-      - name: Start HSDS and run its tests
-        uses: ./.github/actions/run-hsds
-        with:
-          build-method: ${{ matrix.build-method }}
-          os: ${{ matrix.os }}
-
-      - name: Shut down Docker
-        if: ${{matrix.build-method == 'docker' && matrix.os != 'windows-latest'}}
-        run: |
-          ./stopall.sh
-
   h5pyd-integration:
     # Combined HSDS + h5pyd test. Unlike build-and-test, a failure here can be
     # a real h5pyd bug (not just HSDS), so it's kept as its own job/check.
@@ -166,67 +131,3 @@ jobs:
         run: |
           ./stopall.sh
 
-  build-and-test-socket:
-    env:
-      ADMIN_PASSWORD: admin
-      ADMIN_USERNAME: admin
-      USER_NAME: test_user1
-      USER_PASSWORD: test
-      USER2_NAME: test_user2
-      USER2_PASSWORD: test
-      HSDS_ENDPOINT: http+unix://%2Ftmp%2Fhs%2Fsn_1.sock
-      ROOT_DIR: ${{github.workspace}}/hsdsdata
-      BUCKET_NAME: hsdstest
-
-    name: Test HSDS with socket
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        python-version: ["3.12"]
-
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install HSDS dependencies
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install pytest
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
-      - name: Install HSDS package
-        shell: bash
-        run: |
-          pip install -e .
-
-      # Requests 2.32.0 breaks requests-unixsocket, used by HSDS for socket connections
-      # - name: Fix requests version
-      #  run: |
-      #    pip install requests==2.31.0
-
-      - name: Run HSDS unit tests
-        shell: bash
-        run: |
-          pytest
-
-      - name: Start HSDS
-        run: |
-          mkdir ${{github.workspace}}/hsdsdata
-          mkdir ${{github.workspace}}/hsdsdata/hsdstest
-          cp admin/config/groups.default admin/config/groups.txt
-          cp admin/config/passwd.default admin/config/passwd.txt
-          ROOT_DIR=${{github.workspace}}/hsdsdata ./runall.sh --no-docker 1 &
-          sleep 10
-
-      - name: Test HSDS setup
-        run: |
-          python tests/integ/setup_test.py
-
-      - name: Test HSDS
-        run : |
-          python testall.py

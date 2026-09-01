@@ -1,0 +1,15 @@
+name: HSDS Windows
+
+# Thin caller so this OS family gets its own status badge. The suite itself
+# lives in hsds-tests.yml.
+
+on:
+  push:
+  pull_request:
+    branches: [master]
+
+jobs:
+  hsds:
+    uses: ./.github/workflows/hsds-tests.yml
+    with:
+      os-list: '["windows-latest"]'

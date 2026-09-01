@@ -1,3 +1,6 @@
+[![HSDS Linux](https://github.com/HDFGroup/hsds/actions/workflows/hsds-linux.yml/badge.svg)](https://github.com/HDFGroup/hsds/actions/workflows/hsds-linux.yml)
+[![HSDS Windows](https://github.com/HDFGroup/hsds/actions/workflows/hsds-windows.yml/badge.svg)](https://github.com/HDFGroup/hsds/actions/workflows/hsds-windows.yml)
+[![h5pyd integration](https://github.com/HDFGroup/hsds/actions/workflows/h5pyd-integration.yml/badge.svg)](https://github.com/HDFGroup/hsds/actions/workflows/h5pyd-integration.yml)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/hdfgroup/hsds)
 
 
