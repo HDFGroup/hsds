@@ -102,7 +102,7 @@ async def create_group(parent_grp_id, grp_name):
 
 
 async def create_dataset(parent_grp_id, dataset_name, value=None):
-    logging.info("create_dataset:  {dataset_name}")
+    logging.info(f"create_dataset:  {dataset_name}")
     req = globals["endpoint"] + "/datasets"
     headers = get_headers()
     params = {"domain": globals["domain"]}
@@ -241,7 +241,7 @@ elif log_level == "warning":
 elif log_level == "error":
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.ERROR)
 else:
-    raise ValueError(f"unexepcted loglevel: {log_level}")
+    raise ValueError(f"unexpected loglevel: {log_level}")
 
 # set globals
 
@@ -286,7 +286,7 @@ loop = asyncio.get_event_loop()
 timingsData = np.zeros(N)
 timingsIm = np.zeros(N)
 
-logging.info("creating domain: {fqdn}")
+logging.info(f"creating domain: {domain}")
 with h5py.File(domain, mode="w") as f:
     start = time.time()
     g = f.require_group("/test")

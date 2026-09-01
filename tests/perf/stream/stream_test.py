@@ -118,7 +118,7 @@ class StreamTest(unittest.TestCase):
 
         if create_dataset:
             # create dataset
-            print(f"create datset with shape: [{num_row}, {num_col}]")
+            print(f"create dataset with shape: [{num_row}, {num_col}]")
             data = {"type": "H5T_STD_U64LE", "shape": [num_row, num_col]}
 
             req = self.endpoint + "/datasets"

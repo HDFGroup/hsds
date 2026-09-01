@@ -17,25 +17,32 @@ import asyncio
 import json
 import os.path as op
 
+import numpy as np
+
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPNotFound
-from aiohttp.web_exceptions import HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPInternalServerError, HTTPGone
 from aiohttp.web_exceptions import HTTPConflict, HTTPServiceUnavailable
 from aiohttp.web import json_response
 
+from h5json.objid import createObjId, getCollectionForId
+from h5json.objid import isValidUuid, isRootObjId, isSchema2Id
+from h5json.time_util import getNow
+from h5json.hdf5dtype import createDataType
+from h5json.array_util import getNumpyValue
+from h5json.query_util import arrayQuery
+
+
+from .util.nodeUtil import getNodeCount, getDataNodeUrl
 from .util.httpUtil import getObjectClass, http_post, http_put, http_delete
 from .util.httpUtil import getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse
-from .util.idUtil import getDataNodeUrl, createObjId, getCollectionForId
-from .util.idUtil import isValidUuid, isSchema2Id, getNodeCount
 from .util.authUtil import getUserPasswordFromRequest, aclCheck, isAdminUser
 from .util.authUtil import validateUserPassword, getAclKeys
 from .util.domainUtil import getParentDomain, getDomainFromRequest
 from .util.domainUtil import isValidDomain, getBucketForDomain, isValidBucketName
 from .util.domainUtil import getPathForDomain, getLimits
 from .util.storUtil import getStorKeys, getCompressors
-from .util.boolparser import BooleanParser
 from .util.globparser import globmatch
-from .util.timeUtil import getNow
 from .servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
 from .servicenode_lib import getRootInfo, checkBucketAccess, doFlush, getDomainResponse
 from .basenode import getVersion
@@ -96,36 +103,6 @@ async def get_collections(app, root_id, bucket=None, max_objects_limit=None):
     return result
 
 
-async def getDomainObjects(app, root_id, include_attrs=False, bucket=None):
-    """Iterate through all objects in heirarchy and add to obj_dict
-    keyed by obj id
-    """
-
-    log.info(f"getDomainObjects for root: {root_id}, include_attrs: {include_attrs}")
-    max_objects_limit = int(config.get("domain_req_max_objects_limit", default=500))
-
-    kwargs = {
-        "action": "get_obj",
-        "include_attrs": include_attrs,
-        "include_links": True,
-        "follow_links": True,
-        "max_objects_limit": max_objects_limit,
-        "bucket": bucket,
-    }
-
-    crawler = DomainCrawler(app, [root_id, ], **kwargs)
-    await crawler.crawl()
-    if len(crawler._obj_dict) >= max_objects_limit:
-        msg = "getDomainObjects - too many objects:  "
-        msg += f"{len(crawler._obj_dict)}, returning None"
-        log.info(msg)
-        return None
-    else:
-        msg = f"getDomainObjects returning: {len(crawler._obj_dict)} objects"
-        log.info(msg)
-        return crawler._obj_dict
-
-
 def getIdList(objs, marker=None, limit=None):
     """takes a map of ids to objs and returns ordered list
     of ids, optionally reduced by marker and limit"""
@@ -146,6 +123,54 @@ def getIdList(objs, marker=None, limit=None):
         if limit and len(ret_ids) == limit:
             break
     return ret_ids
+
+
+_QUERYABLE_ATTR_TYPES = ("H5T_INTEGER", "H5T_FLOAT", "H5T_STRING")
+
+
+def _isMissingAttributeError(exc):
+    """ True if the given h5json.query_util.arrayQuery exception is just
+    because a referenced attribute name isn't defined for the dtype it
+    was run against - as opposed to a genuine syntax error. Not treated
+    as fatal for domain queries, since different domains can have
+    different attributes: a query naming an attribute that doesn't exist
+    on a given domain (or on any domain at all) should just not match
+    that domain, not fail the whole request. """
+    msg = str(exc)
+    return "not found in dtype" in msg or "is not valid for non-compound dtype" in msg
+
+
+def _getQueryableFields(attributes):
+    """ Given a group's "attributes" dict (as returned by the crawler),
+    return (field_defs, values) for just the scalar primitive attributes,
+    suitable for building a single-row structured numpy array to
+    evaluate a domain query against - the same query syntax/engine used
+    by GET .../value (h5json.query_util.arrayQuery). """
+    field_defs = []
+    values = []
+    for attr_name in attributes:
+        attr_json = attributes[attr_name]
+        attr_type = attr_json.get("type", {})
+        if attr_type.get("class") not in _QUERYABLE_ATTR_TYPES:
+            continue
+        attr_shape = attr_json.get("shape", {})
+        if attr_shape.get("class") != "H5S_SCALAR":
+            continue
+        field_defs.append({"name": attr_name, "type": attr_type})
+        values.append(attr_json.get("value"))
+    return field_defs, values
+
+
+def _domainRowArray(field_defs, values):
+    """ Build a single-row structured numpy array from the given field
+    definitions and values (as returned by _getQueryableFields). """
+    row_type = {"class": "H5T_COMPOUND", "fields": field_defs}
+    row_dtype = createDataType(row_type)
+    row_arr = np.zeros((1,), dtype=row_dtype)
+    for field_def, value in zip(field_defs, values):
+        field_name = field_def["name"]
+        row_arr[field_name][0] = getNumpyValue(value, dt=row_dtype[field_name])
+    return row_arr
 
 
 async def get_domains(request, include_hrefs=False):
@@ -304,16 +329,41 @@ async def get_domains(request, include_hrefs=False):
 
     if query:
         log.info(f"get_domains - proccessing query: {query}")
-        try:
-            parser = BooleanParser(query)
-        except IndexError as ie:
-            log.warn(f"get_domains - domain query syntax error: {ie}")
-            raise HTTPBadRequest(reason="Invalid query expression")
-        attr_names = parser.getVariables()
-        log.info(f"get_domains - query variables: {attr_names}")
-        # remove any domains from dict for which the attribute query is false
+        # remove any domains from dict for which the attribute query is
+        # false (or doesn't apply - e.g. folders, or missing attributes)
         domain_keys = list(crawler._domain_dict.keys())
         log.debug(f"get_domains - querying through {len(domain_keys)}")
+
+        # Validate the query once upfront, against the union of every
+        # queryable attribute seen across all candidate domains. This
+        # surfaces genuine syntax errors as 400 without rejecting the
+        # whole request just because some (or all) domains don't happen
+        # to have a given attribute - that's a per-domain non-match
+        # below, not a request error.
+        union_fields = {}
+        for domain in domain_keys:
+            domain_json = crawler._domain_dict[domain]
+            if "root" not in domain_json:
+                continue
+            root_id = domain_json["root"]
+            if root_id not in crawler._group_dict:
+                continue
+            root_json = crawler._group_dict[root_id]
+            field_defs, _ = _getQueryableFields(root_json.get("attributes", {}))
+            for field_def in field_defs:
+                union_fields.setdefault(field_def["name"], field_def["type"])
+
+        if union_fields:
+            union_field_defs = [{"name": n, "type": t} for n, t in union_fields.items()]
+            try:
+                union_type = {"class": "H5T_COMPOUND", "fields": union_field_defs}
+                dummy_arr = np.zeros((1,), dtype=createDataType(union_type))
+                arrayQuery(query, dummy_arr)
+            except (TypeError, ValueError) as e:
+                if not _isMissingAttributeError(e):
+                    msg = f"get_domains - invalid query: {query}: {e}"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason="Invalid query expression")
 
         for domain in domain_keys:
             log.debug(f"get_domains - query search for: {domain}")
@@ -321,58 +371,36 @@ async def get_domains(request, include_hrefs=False):
             if "root" not in domain_json:
                 msg = f"get_domains - skipping folder: {domain} for "
                 msg += "attribute query search"
-                log.debug()
-                del domain_keys[domain]
+                log.debug(msg)
+                del crawler._domain_dict[domain]
                 continue
 
             root_id = domain_json["root"]
             if root_id not in crawler._group_dict:
                 log.warn(f"Expected to find {root_id} in crawler group dict")
+                del crawler._domain_dict[domain]
                 continue
             root_json = crawler._group_dict[root_id]
-            attributes = root_json["attributes"]
-            variable_dict = {}
-            for attr_name in attr_names:
-                if attr_name not in attributes:
-                    log.debug(f"{attr_name} not found")
-                    del crawler._domain_dict[domain]
-                    continue
-                attr_json = attributes[attr_name]
-                log.debug(f"{attr_name}: {attr_json}")
-                attr_type = attr_json["type"]
-                attr_type_class = attr_type["class"]
-                primative_types = ("H5T_INTEGER", "H5T_FLOAT", "H5T_STRING")
-                if attr_type_class not in primative_types:
-                    msg = "unable to query non-primitive attribute class: "
-                    msg += f"{attr_type_class}"
-                    log.debug(msg)
-                    del crawler._domain_dict[domain]
-                    continue
-                attr_shape = attr_json["shape"]
-                attr_shape_class = attr_shape["class"]
-                if attr_shape_class == "H5S_SCALAR":
-                    variable_dict[attr_name] = attr_json["value"]
-                else:
-                    msg = "get_domains - unable to query non-scalar "
-                    msg += "attributes"
-                    log.debug(msg)
-                    del crawler._domain_dict[domain]
-                    continue
-            # evaluate the boolean expression
-            if len(variable_dict) == len(attr_names):
-                # we have all the variables, evaluate
-                parser_value = False
-                try:
-                    parser_value = parser.evaluate(variable_dict)
-                except TypeError as te:
-                    msg = f"get_domains - evaluate {query} for {domain} but "
-                    msg += f"got error: {te}"
-                    log.warn(msg)
-                if parser_value:
-                    log.info(f"get_domains - {domain} passed query test")
-                else:
-                    log.debug(f"get_domains - {domain} failed query test")
-                    del crawler._domain_dict[domain]
+            field_defs, values = _getQueryableFields(root_json.get("attributes", {}))
+
+            if not field_defs:
+                log.debug(f"get_domains - no queryable attributes for {domain}")
+                del crawler._domain_dict[domain]
+                continue
+
+            try:
+                matches = arrayQuery(query, _domainRowArray(field_defs, values))
+            except (TypeError, ValueError) as e:
+                msg = f"get_domains - query: {query} for {domain}: {e}"
+                log.debug(msg)
+                del crawler._domain_dict[domain]
+                continue
+
+            if len(matches) > 0:
+                log.info(f"get_domains - {domain} passed query test")
+            else:
+                log.debug(f"get_domains - {domain} failed query test")
+                del crawler._domain_dict[domain]
 
     for domain in domainNames:
         if domain in crawler._domain_dict:
@@ -421,7 +449,7 @@ async def GET_Domains(request):
     folder_path = getDomainFromRequest(request, validate=False)
     href = getHref(request, "/domains", domain=folder_path)
     hrefs.append({"rel": "self", "href": href})
-    rsp_json["hrefs"] = []
+    rsp_json["hrefs"] = hrefs
     resp = await jsonResponse(request, rsp_json)
     log.response(request, resp=resp)
     return resp
@@ -478,6 +506,11 @@ async def GET_Domain(request):
     verbose = False
     if "verbose" in params and params["verbose"]:
         verbose = True
+
+    getobjs = False
+    # include domain objects if requested
+    if params.get("getobjs"):
+        getobjs = True
 
     if not domain:
         if "host" in params:
@@ -572,18 +605,8 @@ async def GET_Domain(request):
         return resp
 
     # return just the keys as per the REST API
-    kwargs = {"verbose": verbose, "bucket": bucket}
+    kwargs = {"verbose": verbose, "getobjs": getobjs, "bucket": bucket}
     rsp_json = await getDomainResponse(app, domain_json, **kwargs)
-
-    # include domain objects if requested
-    if params.get("getobjs") and "root" in domain_json:
-
-        log.debug("getting all domain objects")
-        root_id = domain_json["root"]
-        kwargs = {"include_attrs": include_attrs, "bucket": bucket}
-        domain_objs = await getDomainObjects(app, root_id, **kwargs)
-        if domain_objs:
-            rsp_json["domain_objs"] = domain_objs
 
     # include dn_ids if requested
     if "getdnids" in params and params["getdnids"]:
@@ -787,7 +810,7 @@ async def PUT_Domain(request):
     username, pswd = getUserPasswordFromRequest(request)
     await validateUserPassword(app, username, pswd)
 
-    # inital perms for owner and default
+    # initial perms for owner and default
     owner_perm = {
         "create": True,
         "read": True,
@@ -888,17 +911,22 @@ async def PUT_Domain(request):
         log.info(f"rescan for domain: {domain}")
         domain_json = await getDomainJson(app, domain, reload=True)
         log.debug(f"got domain_json: {domain_json}")
-        if "root" in domain_json:
-            # nothing to update for folders
+        if "root" not in domain_json:
+            # rescan only makes sense for domains with a root group -
+            # folder domains have nothing to scan
+            msg = f"rescan not supported for folder domain: {domain}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        else:
             root_id = domain_json["root"]
-            if not isValidUuid(root_id):
+            if not isValidUuid(root_id, obj_class="groups"):
                 msg = f"domain: {domain} with invalid  root id: {root_id}"
                 log.error(msg)
                 raise HTTPInternalServerError()
             if not isSchema2Id(root_id):
                 msg = "rescan not supported for v1 ids"
                 log.info(msg)
-                raise HTTPBadRequest(reashon=msg)
+                raise HTTPBadRequest(reason=msg)
             aclCheck(app, domain_json, "update", username)
             log.debug(f"notify_root: {root_id}")
             notify_req = getDataNodeUrl(app, root_id) + "/roots/" + root_id
@@ -936,15 +964,12 @@ async def PUT_Domain(request):
     linked_domain = None
     linked_bucket = None
     root_id = None
-    # domain_class = None
 
     if body and "folder" in body:
         if body["folder"]:
             is_folder = True
     if body and "owner" in body:
         owner = body["owner"]
-    # if body and "class" in body:
-    #    domain_class = body["class"]
     if body and "linked_domain" in body:
         if is_folder:
             msg = "Folder domains can not be used for links"
@@ -1018,8 +1043,33 @@ async def PUT_Domain(request):
 
     if not is_folder and not linked_json:
         # create a root group for the new domain
-        root_id = createObjId("roots")
-        log.debug(f"new root group id: {root_id}")
+        if body and "root_id" in body:
+            root_id = body["root_id"]
+            if not isRootObjId(root_id):
+                msg = f"invalid client provided root id: {root_id}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            # verify that the group object doesn't already exist
+            log.debug(f"attempting to fetch root id: {root_id}")
+            kwargs = {
+                "refresh": True,
+                "include_links": False,
+                "include_attrs": False,
+                "bucket": bucket,
+            }
+            try:
+                await getObjectJson(app, root_id, **kwargs)
+                msg = "client specified root_id already exists"
+                log.warn(msg)
+                raise HTTPConflict()
+            except HTTPNotFound:
+                log.debug(f"root_id: {root_id} not found (expected)")
+            except HTTPGone:
+                log.debug(f"root_id: {root_id} has been removed (expected)")
+            log.debug(f"using client supplied root_id: {root_id}")
+        else:
+            root_id = createObjId("groups")
+            log.debug(f"new root group id: {root_id}")
         group_json = {"id": root_id, "root": root_id, "domain": domain}
         log.debug(f"create group for domain, body: {group_json}")
 
@@ -1083,9 +1133,6 @@ async def PUT_Domain(request):
 
     if root_id:
         body["root"] = root_id
-
-    # if domain_class:
-    #    body["class"] = domain_class
 
     log.debug(f"creating domain: {domain} with body: {body}")
     domain_json = await http_put(app, req, data=body)
@@ -1415,6 +1462,13 @@ async def PUT_ACL(request):
     bucket = getBucketForDomain(domain)
     if bucket:
         checkBucketAccess(app, bucket, action="write")
+
+    # use reload to get authoritative domain json
+    domain_json = await getDomainJson(app, domain, reload=True)
+
+    # validate that the requesting user has permission to update ACLs
+    # in this domain - throws exception if not authorized
+    aclCheck(app, domain_json, "updateACL", username)
 
     # don't use app["domain_cache"]  if a direct domain request is made
     # as opposed to an implicit request as with other operations, query

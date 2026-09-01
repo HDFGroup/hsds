@@ -29,11 +29,12 @@ config_value() {
 
 # script to startup hsds service
 if [[ $# -eq 1 ]] && ([[ $1 == "-h" ]] || [[ $1 == "--help" ]]); then
-   echo "Usage: runall.sh [--no-docker] [--no-docker-tcp] [--stop] [--config] [dn_count] [sn_count]"
+   echo "Usage: runall.sh [--no-docker] [--no-docker-tcp] [--stop] [--config] [--swagger] [dn_count] [sn_count]"
    echo "  --no-docker: run server as set of processes rather than Docker containers (using unix sockets)"
    echo "  --no-docker-tcp: run server as set of processes rather than Docker containers (using tcp)"
    echo "  --stop: shutdown the server (Docker only)"
    echo "  --config: view config options"
+   echo "  --swagger: also launch a swagger-ui container configured to talk to the HSDS service (Docker only)"
    echo "  count: set number of DN processes/containers (default is 4)"
    exit 1
 fi
@@ -52,6 +53,8 @@ while [[ $# -gt 0 ]]; do
     export DOCKER_CMD="down"
   elif [[ $1 == "--config" ]]; then
     PRINT_CONFIG=1
+  elif [[ $1 == "--swagger" ]]; then
+    export SWAGGER=1
   elif  [[ -z ${DN_CORES} ]]; then
     export DN_CORES=$1
   else
@@ -59,6 +62,11 @@ while [[ $# -gt 0 ]]; do
   fi
   shift
 done
+
+if [[ ${NO_DOCKER} ]] && [[ ${SWAGGER} ]]; then
+  echo "--swagger is only supported with docker (not compatible with --no-docker or --no-docker-tcp)"
+  exit 1
+fi
 
 
 if [[ -z $CONFIG_DIR ]]; then
@@ -105,6 +113,13 @@ if [[ -z $SN_CORES ]]; then
   export SN_PORT_RANGE=$SN_PORT
 else
   export SN_PORT_RANGE=$SN_PORT-$((SN_PORT + SN_CORES - 1))
+fi
+
+if [[ -z ${SWAGGER_PORT} ]]; then
+  # set even when --swagger isn't passed: the "down" path always
+  # references the swagger compose file too (see below), so this avoids
+  # a "variable not set" warning from docker compose in that case
+  export SWAGGER_PORT=8080
 fi
 
 
@@ -199,33 +214,66 @@ if [[ $NO_DOCKER ]] ; then
   fi
   # this will run until server is killed by ^C
 else
-  if [[ $DOCKER_CMD == "down" ]]; then
-    # use the compose file to shutdown the sevice
-    echo "Running docker compose -f ${COMPOSE_FILE} down"
-    docker compose -f ${COMPOSE_FILE} down
-    exit 0  # can quit now
-  else
-    echo "Running docker compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}"
-    docker compose -f ${COMPOSE_FILE} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
+  COMPOSE_FILES="-f ${COMPOSE_FILE}"
+  if [[ ${SWAGGER} ]]; then
+    COMPOSE_FILES="${COMPOSE_FILES} -f admin/docker/docker-compose.swagger.yml"
   fi
 
-  # wait for the server to be ready
+  if [[ $DOCKER_CMD == "down" ]]; then
+    # Always include the swagger compose file here, regardless of whether
+    # --swagger was passed to this invocation: there's no persisted record
+    # of whether the running cluster was started with --swagger, and
+    # `docker compose down` for a service that isn't running is a no-op,
+    # so this is the only reliable way to make sure a leftover
+    # swagger-ui container (which would otherwise keep the shared network
+    # in use and block its removal) actually gets torn down.
+    DOWN_COMPOSE_FILES="${COMPOSE_FILES}"
+    if [[ -z ${SWAGGER} ]]; then
+      DOWN_COMPOSE_FILES="${DOWN_COMPOSE_FILES} -f admin/docker/docker-compose.swagger.yml"
+    fi
+    echo "Running docker compose ${DOWN_COMPOSE_FILES} down"
+    docker compose ${DOWN_COMPOSE_FILES} down
+    exit 0  # can quit now
+  else
+    if [[ -z ${SWAGGER} ]]; then
+      # if a swagger-ui container from a previous --swagger run is still
+      # around, remove it explicitly rather than passing --remove-orphans
+      # to `docker compose up`: that flag's orphan cleanup can race with
+      # network setup for the scaled sn/dn services, leaving them stuck
+      # with "failed to set up container networking: network ... not
+      # found" errors.
+      swagger_container="${COMPOSE_PROJECT_NAME}-swagger-ui-1"
+      if docker ps -a --format '{{.Names}}' | grep -qx "${swagger_container}"; then
+        echo "removing orphaned ${swagger_container} container"
+        docker rm -f "${swagger_container}" >/dev/null
+      fi
+    fi
+    echo "Running docker compose ${COMPOSE_FILES} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}"
+    docker compose ${COMPOSE_FILES} up -d --scale sn=${SN_CORES} --scale dn=${DN_CORES}
+  fi
+
+  # wait for the server to be up and reporting state READY
+  READY=
   for i in {1..120}
   do
-    STATUS_CODE=`curl -s -o /dev/null -w "%{http_code}" http://localhost:${SN_PORT}/about`
-    if [[ $STATUS_CODE == "200" ]]; then
-      echo "service ready!"
+    if HSDS_ENDPOINT="http://localhost:${SN_PORT}" python3 tools/status_check.py --no-stream --quiet; then
+      echo "HSDS ready at: http://localhost:${SN_PORT}"
+      READY=1
       break
     else
-      echo "${i}: waiting for server startup (status: ${STATUS_CODE}) "
+      echo "${i}: waiting for server startup"
       sleep 1
     fi
   done
 
-  if [[ $STATUS_CODE != "200" ]]; then
+  if [[ -z ${READY} ]]; then
     echo "service failed to start"
     echo "SN_1 logs:"
     docker logs --tail 100 hsds_sn_1
     exit 1
+  fi
+
+  if [[ ${SWAGGER} ]]; then
+    echo "Swagger UI available at http://localhost:${SWAGGER_PORT}"
   fi
 fi

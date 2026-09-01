@@ -1,0 +1,118 @@
+name: Release
+
+# Cuts a GitHub release from a pushed tag.
+#
+# HSDS is not published to PyPI, so this workflow does one thing: turn an
+# annotated tag into a GitHub release whose notes are generated from the
+# commits/PRs since the previous release. Docker images are built separately
+# by docker-image.yml, which already triggers on the same `v*` tags.
+#
+# To cut a release:
+#   1. Bump the version in pyproject.toml (the SSOT) AND the matching
+#      HSDS_VERSION in hsds/basenode.py - the `version` job fails if the two
+#      disagree, since basenode's copy is what /about reports to clients.
+#   2. git tag -a v0.9.5 -m "v0.9.5" && git push origin v0.9.5
+#
+# `workflow_dispatch` runs the validation half only (publishes nothing), so
+# the version/tag checks can be rehearsed off a branch before tagging.
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+[abrc]*[0-9]*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Validate only - publish nothing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Single place to change if the release pipeline moves to a newer Python.
+  # Needs >= 3.11 for tomllib in release_version.py.
+  BUILD_PYTHON_VERSION: "3.12"
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Resolve and validate the version before anything is published, so a tag
+  # that disagrees with the source tree fails fast rather than producing a
+  # release that misstates its own version.
+  # ---------------------------------------------------------------------
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ssot.outputs.version }}
+      tag: ${{ steps.ssot.outputs.tag }}
+      prerelease: ${{ steps.ssot.outputs.prerelease }}
+      dry_run: ${{ steps.mode.outputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.BUILD_PYTHON_VERSION }}
+
+      - name: Determine run mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Read version from SSOT and validate against tag
+        id: ssot
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: python .github/scripts/release_version.py
+
+      - name: Summary
+        run: |
+          {
+            echo "### Release ${{ steps.ssot.outputs.tag }}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Version | \`${{ steps.ssot.outputs.version }}\` |"
+            echo "| Tag | \`${{ steps.ssot.outputs.tag }}\` |"
+            echo "| Pre-release | \`${{ steps.ssot.outputs.prerelease }}\` |"
+            echo "| Dry run | \`${{ steps.mode.outputs.dry_run }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------
+  # GitHub release. Notes come from --generate-notes (commits/PRs since the
+  # previous release) rather than a hand-maintained CHANGELOG, which HSDS
+  # does not have.
+  # ---------------------------------------------------------------------
+  github-release:
+    name: GitHub release
+    needs: version
+    if: needs.version.outputs.dry_run == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          args=(--title "$TAG" --verify-tag --generate-notes)
+          if [ "$PRERELEASE" = "true" ]; then
+            args+=(--prerelease)
+          fi
+          gh release create "$TAG" "${args[@]}"

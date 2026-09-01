@@ -13,8 +13,6 @@ aws_dynamodb_gateway: null # use for dynamodb endpint, e.g. 'https://dynamodb.us
 aws_dynamodb_users_table: null # set to table name if dynamodb is used to store usernames and passwords
 azure_connection_string: null # use for connecting to Azure blob storage
 azure_resource_id: null # resource id for use with Azure Active Directory
-azure_storage_account: null # storage account to use on Azure
-azure_resource_group: null # Azure resource group the container (BUCKET_NAME) belongs to
 root_dir: null # base directory to use for Posix storage
 password_salt: null # salt value to generate password based on username.  Not recommended for public deployments
 bucket_name: hsdstest # set to use a default bucket, otherwise bucket param is needed for all requests
@@ -48,6 +46,7 @@ flush_sleep_interval: 1 # time to wait between checking on dirty objects
 flush_timeout: 10 # max time to wait on all I/O operations to complete for a flush
 min_chunk_size: 1m # 1 MB
 max_chunk_size: 4m # 4 MB
+default_vlen_type_size: 128 # guess for average size of variable length types
 max_request_size: 100m # 100 MB - should be no smaller than client_max_body_size in nginx tmpl (if using nginx)
 max_chunks_per_folder: 0 # max number of chunks per s3 folder. 0 for unlimiited
 max_task_count: 100 # maximum number of concurrent tasks per node before server will return 503 error
@@ -71,15 +70,13 @@ admin_group: null # enable admin privileges for any user in this group
 openid_provider: azure # OpenID authentication provider
 openid_url: null # OpenID connect endpoint if provider is not azure or google
 openid_audience: null # OpenID audience. This is synonymous with azure_resource_id for azure
-openid_claims: unique_name,appid,roles # Comma seperated list of claims to resolve to usernames.
+openid_claims: unique_name,appid,roles # Comma separated list of claims to resolve to usernames.
 chaos_die: 0 # if > 0, have nodes randomly die after n seconds (for testing)
-standalone_app: false # True when run as a single application
 blosc_nthreads: 2 # number of threads to use for blosc compression.  Set to 0 to have blosc auto-determine thread count
 http_compression: false # Use HTTP compression
 http_max_url_length: 512 # Limit http request url + params to be less than this
 http_streaming: true  # enable HTTP streaming 
 k8s_dn_label_selector: app=hsds # Selector for getting data node pods from a k8s deployment (https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors)
-k8s_namespace: null # Specifies if a the client should be limited to a specific namespace. Useful for some RBAC configurations.
 restart_policy: on-failure # Docker restart policy
 # the following two values with give backoff times of approx: 0.2, 0.4, 0.8, 1.6, 3.2, 6.4, 12.8
 dn_max_retries: 7 # number of time to retry DN requests
@@ -89,11 +86,10 @@ allow_any_bucket_read: true  # enable reads to buckets other than default bucket
 allow_any_bucket_write: true # enable writes to buckets other than default bucket
 bit_shuffle_default_blocksize: 2048 # default blocksize for bitshuffle filter
 max_rangeget_gap: 1024 # max gap in byte for intelligent range get requests
+predate_max_time: 10.0 # max delta between object created timestamp in request and actual time
+posix_delay: 0.0  # delay for POSIX IO operations for simulating cloud storage latencies
+max_timestamp_drift: 300  # number of seconds a client-based timestamp can differ from current time
 # DEPRECATED - the remaining config values are not used in currently but kept for backward compatibility with older container images
-aws_lambda_chunkread_function: null # name of aws lambda function for chunk reading
-aws_lambda_threshold: 4 # number of chunks per node per request to reach before using lambda
-aws_lambda_max_invoke: 1000 # max number of lambda functions to invoke simultaneously
-aws_lambda_gateway: null # use lambda endpoint for region HSDS is running in
 k8s_app_label: null # The app label for k8s deployments (use k8s_dn_label_selector instead)
 write_zero_chunks: False # write chunk to storage even when it's all zeros (or in general equal to the fill value)
 max_chunks_per_request: 1000 # maximum number of chunks to be serviced by one request
@@ -104,4 +100,9 @@ data_cache_max_req_size: 128k # max size for rangeget fetches
 data_cache_expire_time: 3600 # expire cache items after one hour
 data_cache_page_size: 4m # page size for range get cache, set to zero to disable proxy
 data_cache_max_concurrent_read: 16 # maximum number of inflight storage read requests
-domain_req_max_objects_limit: 500 # maximum number of objects to return in GET domain request with use_cache
+domain_req_max_objects_limit: 500 # maximum number of objects to return in GET domain request
+azure_storage_account: null # storage account to use on Azure
+azure_resource_group: null # Azure resource group the container (BUCKET_NAME) belongs to with use_cache
+standalone_app: false # True when run as a single application
+k8s_namespace: null # Specifies if a the client should be limited to a specific namespace. Useful for some RBAC configurations.
+max_compact_dset_size: 65536  # size in bytes for maximum compact storage size

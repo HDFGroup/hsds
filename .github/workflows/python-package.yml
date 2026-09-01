@@ -17,7 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, ubuntu-latest, windows-latest]
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
         build-method: ["manual", "docker"]
 
     runs-on: ${{ matrix.os }}
@@ -28,119 +28,56 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install flake8 pytest
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
       - name: Lint with flake8
         shell: bash
         run: |
+          python -m pip install --upgrade pip
+          python -m pip install flake8
           # stop the build if there are Python syntax errors or undefined names
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
           flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
-          
-      - name: Install package
-        shell: bash
-        run: |
-          pip install -e .
 
-      - name: Run unit tests
-        shell: bash
-        run: |
-          pytest
-      - name: Start HSDS (Manual)
-        shell: bash
-        if: ${{matrix.build-method == 'manual'}}
-        env:
-          ADMIN_PASSWORD: admin
-          ADMIN_USERNAME: admin
-          USER_NAME: test_user1
-          USER_PASSWORD: test
-          USER2_NAME: test_user2
-          USER2_PASSWORD: test
-          HSDS_ENDPOINT: http://127.0.0.1:5101
-          BUCKET_NAME: hsdstest
-          LOG_LEVEL: DEBUG
-        run: |
-          cp admin/config/groups.default admin/config/groups.txt
-          cp admin/config/passwd.default admin/config/passwd.txt
-          hsds --root_dir data --host localhost --port 5101 --password_file admin/config/passwd.txt --logfile hs.log   --loglevel DEBUG  --config_dir=admin/config --count=4 &
+      - name: Start HSDS and run its tests
+        uses: ./.github/actions/run-hsds
+        with:
+          build-method: ${{ matrix.build-method }}
+          os: ${{ matrix.os }}
 
-      - name: Start HSDS (Docker)
-        shell: bash
+      - name: Shut down Docker
         if: ${{matrix.build-method == 'docker' && matrix.os != 'windows-latest'}}
-        env:
-          ADMIN_PASSWORD: admin
-          ADMIN_USERNAME: admin
-          USER_NAME: test_user1
-          USER_PASSWORD: test
-          USER2_NAME: test_user2
-          USER2_PASSWORD: test
-          HSDS_ENDPOINT: http://127.0.0.1:5101
-          BUCKET_NAME: hsdstest
-          LOG_LEVEL: DEBUG
         run: |
-          cp admin/config/groups.default admin/config/groups.txt
-          cp admin/config/passwd.default admin/config/passwd.txt
-          ./build.sh --nolint
-          ./runall.sh
+          ./stopall.sh
 
-      - name: Wait for node startup
-        shell: bash
-        run: |
-          sleep 45
+  h5pyd-integration:
+    # Combined HSDS + h5pyd test. Unlike build-and-test, a failure here can be
+    # a real h5pyd bug (not just HSDS), so it's kept as its own job/check.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Run HSDS tests
-        if: ${{!(matrix.build-method == 'docker' && matrix.os == 'windows-latest')}}
-        id: hsds-tests
-        shell: bash
-        env:
-          ADMIN_PASSWORD: admin
-          ADMIN_USERNAME: admin
-          USER_NAME: test_user1
-          USER_PASSWORD: test
-          USER2_NAME: test_user2
-          USER2_PASSWORD: test
-          BUCKET_NAME: hsdstest
-          LOG_LEVEL: DEBUG
-        run: |
-          python testall.py
-      
-      - name: Show HSDS Logs on Fail (Docker)
-        # Only run if the whole workflow failed due to HSDS tests
-        if: ${{failure() && steps.hsds-tests.outcome == 'failure' && (matrix.build-method == 'docker' && matrix.os != 'windows-latest')}}
-        run: |
-          docker logs hsds-sn-1 >&1
-          docker logs hsds-dn-1 >&1
-          docker logs hsds-dn-2 >&1
-          docker logs hsds-dn-3 >&1
-          docker logs hsds-dn-4 >&1
-      
-      - name: Show HSDS Logs on Fail (Manual)
-        # Only run if the whole workflow failed due to HSDS tests
-        if: ${{failure() && steps.hsds-tests.outcome == 'failure' && (matrix.build-method == 'manual')}}
-        run: |
-          cat hs.log
+      - name: Start HSDS and run its tests
+        uses: ./.github/actions/run-hsds
+        with:
+          build-method: docker
+          os: ubuntu-latest
 
       - name: Checkout h5pyd
-        if: ${{ ( matrix.os != 'windows-latest' ) }}
         uses: actions/checkout@v4
         with:
           repository: HDFGroup/h5pyd
           path: ${{github.workspace}}/h5pyd
 
       - name: Install h5pyd
-        if: ${{ ( matrix.os != 'windows-latest' ) }}
         working-directory: ${{github.workspace}}/h5pyd
         run: |
           pip install . -v
-        
+
       - name: Create h5pyd test folder
-        if: ${{ ( matrix.os != 'windows-latest' ) }}
         working-directory: ${{github.workspace}}/h5pyd
         env:
           HS_USERNAME: test_user1
@@ -153,7 +90,6 @@ jobs:
           hstouch -e $HS_ENDPOINT /home/test_user1/h5pyd_tests/
 
       - name: Run h5pyd tests
-        if: ${{ ( matrix.os != 'windows-latest' ) }}
         working-directory: ${{github.workspace}}/h5pyd
         env:
           HS_USERNAME: test_user1
@@ -166,10 +102,70 @@ jobs:
           python testall.py
 
       - name: Shut down Docker
-        if: ${{matrix.build-method == 'docker' && matrix.os != 'windows-latest'}}
+        if: always()
         run: |
           ./stopall.sh
-  
+
+  test-data-setup:
+    # Loads the sample test data described in docs/post_install.md
+    # ("Test Data Setup") so integration tests that depend on it actually
+    # exercise their assertions instead of skipping with
+    # "WARNING: Failed to get domain: ... Is test data setup?"
+    needs: h5pyd-integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Start HSDS
+        uses: ./.github/actions/run-hsds
+        with:
+          build-method: docker
+          os: ubuntu-latest
+
+      - name: Checkout h5pyd
+        uses: actions/checkout@v4
+        with:
+          repository: HDFGroup/h5pyd
+          path: ${{github.workspace}}/h5pyd
+
+      - name: Install h5pyd
+        working-directory: ${{github.workspace}}/h5pyd
+        run: |
+          pip install . -v
+
+      - name: Load test data
+        env:
+          HS_USERNAME: test_user1
+          HS_PASSWORD: test
+          HS_ENDPOINT: http://127.0.0.1:5101
+        run: |
+          hstouch -e $HS_ENDPOINT /home/test_user1/test/
+          wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5
+          hsload -v -e $HS_ENDPOINT tall.h5 /home/test_user1/test/
+          hsls -r -e $HS_ENDPOINT /home/test_user1/test/tall.h5
+
+      - name: Run HSDS integration tests (with test data loaded)
+        env:
+          ADMIN_PASSWORD: admin
+          ADMIN_USERNAME: admin
+          USER_NAME: test_user1
+          USER_PASSWORD: test
+          USER2_NAME: test_user2
+          USER2_PASSWORD: test
+          BUCKET_NAME: hsdstest
+          LOG_LEVEL: DEBUG
+        run: |
+          python testall.py --skip_unit
+
+      - name: Shut down Docker
+        if: always()
+        run: |
+          ./stopall.sh
+
   build-and-test-socket:
     env:
       ADMIN_PASSWORD: admin
@@ -178,12 +174,7 @@ jobs:
       USER_PASSWORD: test
       USER2_NAME: test_user2
       USER2_PASSWORD: test
-      HSDS_USERNAME: test_user1
-      HSDS_PASSWORD: test
-      HSDS_PATH: /home/test_user1/
-      HDF5_API_TEST_PATH_PREFIX: /home/test_user1/
       HSDS_ENDPOINT: http+unix://%2Ftmp%2Fhs%2Fsn_1.sock
-      HDF5_VOL_CONNECTOR: REST
       ROOT_DIR: ${{github.workspace}}/hsdsdata
       BUCKET_NAME: hsdstest
 
@@ -212,6 +203,11 @@ jobs:
         shell: bash
         run: |
           pip install -e .
+
+      # Requests 2.32.0 breaks requests-unixsocket, used by HSDS for socket connections
+      # - name: Fix requests version
+      #  run: |
+      #    pip install requests==2.31.0
 
       - name: Run HSDS unit tests
         shell: bash

@@ -71,7 +71,7 @@ def getDynamoDBClient(app):
 
     if aws_iam_role and not aws_secret_access_key:
         # TODO - refactor with similar code in s3Util
-        log.info("getted EC2 IAM role credentials")
+        log.info("got EC2 IAM role credentials")
         # Use EC2 IAM role to get credentials
         # See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/
         #    iam-roles-for-amazon-ec2.html?icmpid=docs_ec2_console
@@ -190,7 +190,7 @@ def initUserDB(app):
     """
     log.info("initUserDB")
     if "user_db" in app:
-        msg = "user_db already initilized"
+        msg = "user_db already initialized"
         log.warn(msg)
         return
 
@@ -289,7 +289,6 @@ async def validateUserPasswordDynamoDB(app, username, password):
         if "S" not in password_item:
             log.error("Expected to find 'S' key for password item")
             raise HTTPInternalServerError()  # 500
-        log.debug(f"password: {password_item}")
         if password_item["S"] != password:
             log.warn(f"user password is not valid for user: {username}")
             raise HTTPUnauthorized()  # 401
@@ -461,7 +460,7 @@ def initGroupDB(app):
     """
     log.info("initgroupDB")
     if "group_db" in app:
-        msg = "group_db already initilized"
+        msg = "group_db already initialized"
         log.warn(msg)
         return
 

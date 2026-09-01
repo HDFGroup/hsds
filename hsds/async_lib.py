@@ -15,18 +15,24 @@ import numpy as np
 from aiohttp.client_exceptions import ClientError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPForbidden
-from .util.idUtil import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey
-from .util.idUtil import getObjId, isValidChunkId, getCollectionForId
-from .util.chunkUtil import getDatasetId, getNumChunks, ChunkIterator
-from .util.hdf5dtype import getItemSize, createDataType
-from .util.arrayUtil import getNumElements, bytesToArray
-from .util.dsetUtil import getHyperslabSelection, getFilterOps, getChunkDims, getFilters
-from .util.dsetUtil import getDatasetLayoutClass, getDatasetLayout, getShapeDims
+from h5json.hdf5dtype import getItemSize
+from h5json.hdf5dtype import createDataType
+from h5json.array_util import getNumElements, bytesToArray, bytesArrayToList
+from h5json.objid import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey
+from h5json.objid import getObjId, isValidChunkId, getCollectionForId
+from h5json.filters import getFilters
+from h5json.shape_util import getShapeDims, getDataSize
+from h5json.dset_util import getDatasetLayoutClass, getDatasetLayout, getChunkDims
+from h5json.time_util import getNow
+from h5json import selections
+
+from .util.chunkUtil import getDatasetId, getNumChunks, ChunkIterator, getChunkIndex, getChunkIds
 from .util.storUtil import getStorKeys, putStorJSONObj, getStorJSONObj
 from .util.storUtil import deleteStorObj, getStorBytes, isStorObj
+from .datanode_lib import getFilterOps
 from . import hsds_logger as log
 from . import config
-import time
+
 
 # List all keys under given root and optionally update info.json
 # Note: only works with schema v2 domains!
@@ -71,9 +77,10 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         msg += f"{dset_id}"
         log.warn(msg)
         return
+
     type_json = dset_json["type"]
     item_size = getItemSize(type_json)
-    if "layout" not in dset_json:
+    if not getDatasetLayout(dset_json):
         msg = "updateDatasetInfo - expected to find layout in dataset_json "
         msg += f"for {dset_id}"
         log.warn(msg)
@@ -88,7 +95,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         return  # null dataspace
 
     if item_size == "H5T_VARIABLE":
-        # arbitrary lgoical size for vaariable, so just set to allocated size
+        # arbitrary logical size for variable, so just set to allocated size
         logical_bytes = dataset_info["allocated_bytes"]
     else:
         num_elements = getNumElements(dims)
@@ -99,14 +106,14 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
     layout_class = getDatasetLayoutClass(dset_json)
     msg = f"updateDatasetInfo - {dset_id} has layout_class: {layout_class}"
     log.debug(msg)
-    selection = getHyperslabSelection(dims)  # select entire datashape
+    selection = selections.select(tuple(dims), ...)  # select entire datashape
     linked_bytes = 0
     num_linked_chunks = 0
 
     if layout_class == "H5D_CONTIGUOUS_REF":
         # In H5D_CONTIGUOUS_REF a non-compressed part of the HDF5 is divided
         # into equal size chunks, so we can just compute link bytes and num
-        # chunks based on the size of the coniguous dataset
+        # chunks based on the size of the contiguous dataset
         layout_dims = getChunkDims(dset_json)
         num_chunks = getNumChunks(selection, layout_dims)
         chunk_size = item_size
@@ -170,7 +177,7 @@ async def updateDatasetInfo(app, dset_id, dataset_info, bucket=None):
         # read chunktable one chunk at a time - this can be slow if there
         # are a lot of chunks, but this is only used by the async bucket
         # scan task
-        sel = getHyperslabSelection(chunktable_dims)
+        sel = selections.select(tuple(chunktable_dims), ...)
         it = ChunkIterator(chunktable_id, sel, dims)
         msg = f"updateDatasetInfo - iterating over chunks in {chunktable_id}"
         log.debug(msg)
@@ -262,20 +269,26 @@ def scanRootCallback(app, s3keys):
     results = app["scanRoot_results"]
     scanRoot_keyset = app["scanRoot_keyset"]
     checksums = results["checksums"]
+
     for s3key in s3keys.keys():
 
         if not isS3ObjKey(s3key):
-            log.info(f"not s3obj key, ignoring: {s3key}")
+            log.info(f"scanRoot -not s3obj key, ignoring: {s3key}")
             continue
         if s3key in scanRoot_keyset:
-            log.warn(f"scanRoot - dejavu for key: {s3key}")
+            log.warn(f"scanRoot -scanRoot - dejavu for key: {s3key}")
             continue
         scanRoot_keyset.add(s3key)
-        msg = f"scanRoot adding key: {s3key} to keyset, "
+        msg = f"scanRoot - adding key: {s3key} to keyset, "
         msg += f"{len(scanRoot_keyset)} keys"
         log.debug(msg)
 
         objid = getObjId(s3key)
+
+        if objid in app["deleted_ids"]:
+            log.debug(f"scanRoot - skipping deleted id: {objid}")
+            continue
+
         etag = None
         obj_size = None
         lastModified = None
@@ -300,8 +313,15 @@ def scanRootCallback(app, s3keys):
             is_chunk = True
             results["num_chunks"] += 1
             results["allocated_bytes"] += obj_size
+            chunk_index = getChunkIndex(objid)
+            if max(chunk_index) == 0:
+                # save the first chunk if present
+                # this will be used to save dataset values to
+                # the the obj_ids set for small datasets
+                results["obj_ids"].add(objid)
         else:
             results["metadata_bytes"] += obj_size
+            results["obj_ids"].add(objid)
 
         if is_chunk or getCollectionForId(objid) == "datasets":
             if is_chunk:
@@ -337,6 +357,144 @@ def scanRootCallback(app, s3keys):
         else:
             msg = f"scanRoot - Unexpected collection type for id: {objid}"
             log.error(msg)
+
+
+async def _getDatsetValueJson(app, dset_id, dset_json, obj_ids, size_limit=None, bucket=None):
+    """ If the dataset size is less than size_limit, and the chunk_ids for the dataset are
+        available, return a JSON representation of the dataset values. Otherwise, return None """
+
+    dims = getShapeDims(dset_json)
+    if dims is None:
+        return None  # null dataspace
+    if "type" not in dset_json:
+        msg = f"_getDatsetValueJson - expected to find type in dataset_json for {dset_id}"
+        log.warn(msg)
+        return None
+    type_json = dset_json["type"]
+    item_size = getItemSize(type_json)
+    if item_size == "H5T_VARIABLE":
+        item_size = 1024  # make a guess for variable length types
+    dataset_size = getDataSize(dims, item_size)
+    if dataset_size > size_limit:
+        log.debug(f"_getDatasetValueJson - dataset size {dataset_size} exceeds limit {size_limit}")
+        return None
+
+    chunk_dims = getChunkDims(dset_json)
+    if not chunk_dims:
+        log.warning(f"_getDatasetValueJson - no layout found for dataset: {dset_id}")
+        return None
+    if chunk_dims != dims:
+        msg = f"_getDatasetValueJson - dataset layout {chunk_dims} does not match dims {dims} "
+        msg += f"for dataset: {dset_id}, ignoring"
+        log.warning(msg)
+        return None
+    select_all = selections.select(tuple(dims), ...)  # select entire datashape
+    chunk_ids = getChunkIds(dset_id, select_all, dims)
+    if len(chunk_ids) == 0:
+        log.debug(f"_getDatasetValueJson - no chunk ids found for dataset: {dset_id}")
+        return None
+    if len(chunk_ids) > 1:
+        log.debug(f"_getDatasetValueJson - more than one chunk id found for dataset: {dset_id}")
+        return None
+    chunk_id = chunk_ids[0]
+    if chunk_id not in obj_ids:
+        log.debug(f"_getDatasetValueJson - chunk id {chunk_id} not in scanned obj_ids")
+        return None
+    log.debug(f"using chunk: {chunk_id} to get dataset value for {dset_id}")
+
+    # fetch the chunk - using getStoreBytes since this will not be used with
+    # chunk cache or chunk crawlers
+    # TBD: need parameters for s3path, s3offset, s3size for ref layouts
+    # regular store read
+
+    filters = getFilters(dset_json)
+    dt = createDataType(type_json)
+    filter_ops = getFilterOps(app, dset_id, filters, dtype=dt, chunk_shape=chunk_dims)
+
+    kwargs = {
+        "filter_ops": filter_ops,
+        "offset": None,
+        "length": None,
+        "bucket": bucket
+    }
+    s3key = getS3Key(chunk_id)
+
+    try:
+        chunk_bytes = await getStorBytes(app, s3key, **kwargs)
+    except HTTPNotFound:
+        log.warning(f"_getDatasetValueJson - HTTPNotFound for chunk {chunk_id} bucket:{bucket}")
+        return None
+    except HTTPForbidden:
+        log.warning(f"_getDatasetValueJson - HTTPForbidden for chunk {chunk_id} bucket:{bucket}")
+        return None
+    except HTTPInternalServerError:
+        msg = "_getDatasetValueJson - "
+        msg += f"HTTPInternalServerError for chunk {chunk_id} bucket:{bucket}"
+        log.warning(msg)
+        return None
+
+    if chunk_bytes is None:
+        msg = f"_getDatasetValueJson -read {chunk_id} bucket: {bucket} returned None"
+        log.warning(msg)
+        return None
+
+    arr = bytesToArray(chunk_bytes, dt, chunk_dims)
+
+    json_value = bytesArrayToList(arr)
+    log.debug(f"_getDatsetValueJson - returning {json_value}")
+
+    return json_value
+
+
+async def getConsolidatedMetaData(app, obj_ids, bucket=None):
+    # create a consolidated metadata summary for all objects in the domain
+    # return a dict of obj_ids to their metadata summaries
+    log.info("getConsolidatedMetaData - creating consolidated metadata summary")
+    consolidated_metadata = {}
+    for obj_id in obj_ids:
+        if isValidChunkId(obj_id):
+            # skip chunks - we may use the chunk later when processing it's dataset object
+            continue
+        s3_key = getS3Key(obj_id)
+        try:
+            obj_json = await getStorJSONObj(app, s3_key, bucket=bucket)
+        except HTTPNotFound:
+            log.warn(f"HTTPNotFound for {s3_key} bucket:{bucket}")
+            continue
+        except HTTPForbidden:
+            log.warn(f"HTTPForbidden error for {s3_key} bucket:{bucket}")
+            continue
+        except HTTPInternalServerError:
+            msg = f"HTTPInternalServerError error for {s3_key} bucket:{bucket}"
+            log.warn(msg)
+            continue
+        log.debug(f"getConsolidatedMetaData - got json for obj_id: {obj_id}: {obj_json}")
+        # extract relevant metadata
+        metadata_summary = {}
+        if "type" in obj_json:
+            metadata_summary["type"] = obj_json["type"]
+        if "shape" in obj_json:
+            metadata_summary["shape"] = obj_json["shape"]
+        if "attributes" in obj_json:
+            metadata_summary["attributes"] = obj_json["attributes"]
+        if "links" in obj_json:
+            metadata_summary["links"] = obj_json["links"]
+        if "creationProperties" in obj_json:
+            metadata_summary["creationProperties"] = obj_json["creationProperties"]
+        if getCollectionForId(obj_id) == "datasets":
+            log.debug("getConsolidatedMetaData - got dataset")
+            size_limit = 4096  # TBD - make this a config
+            kwargs = {"size_limit": size_limit, "bucket": bucket}
+            json_value = await _getDatsetValueJson(app, obj_id, obj_json, obj_ids, **kwargs)
+            if json_value is not None:
+                log.debug(f"adding dataset value to metadata summary for dataset: {obj_id}")
+                metadata_summary["value"] = json_value
+        else:
+            log.debug("getConsolidatedMetaData - not a dataset")
+
+        consolidated_metadata[obj_id] = metadata_summary
+    log.info("getConsolidatedMetaData - done creating consolidated metadata summary")
+    return consolidated_metadata
 
 
 async def scanRoot(app, rootid, update=False, bucket=None):
@@ -380,9 +538,10 @@ async def scanRoot(app, rootid, update=False, bucket=None):
     results["num_linked_chunks"] = 0
     results["linked_bytes"] = 0
     results["logical_bytes"] = 0
-    results["checksums"] = {}  # map of objid to checksums
+    results["obj_ids"] = set()  # map of object ids scanned (and first chunk id for datasets)
+    results["checksums"] = {}   # map of objid to checksums
     results["bucket"] = bucket
-    results["scan_start"] = time.time()
+    results["scan_start"] = getNow(app=app)
 
     app["scanRoot_results"] = results
     app["scanRoot_keyset"] = set()
@@ -399,6 +558,9 @@ async def scanRoot(app, rootid, update=False, bucket=None):
     num_objects += len(results["datasets"])
     num_objects += results["num_chunks"]
     log.info(f"scanRoot - got {num_objects} keys for rootid: {rootid}")
+    obj_ids = results["obj_ids"]
+    log.info(f"scanRoot - got {len(obj_ids)} unique object ids")
+    log.debug(f"scanRoot - obj_ids: {obj_ids}")
 
     dataset_results = results["datasets"]
     for dsetid in dataset_results:
@@ -437,7 +599,12 @@ async def scanRoot(app, rootid, update=False, bucket=None):
     # free up memory used by the checksums
     del results["checksums"]
 
-    results["scan_complete"] = time.time()
+    results["scan_complete"] = getNow(app=app)
+
+    # extract the obj_ids set, that won't go into .info.json
+    obj_ids = results["obj_ids"]
+    del results["obj_ids"]
+    log.debug(f"obj_ids set: {obj_ids}")
 
     if update:
         # write .info object back to S3
@@ -446,6 +613,17 @@ async def scanRoot(app, rootid, update=False, bucket=None):
         msg += f"{results}"
         log.info(msg)
         await putStorJSONObj(app, info_key, results, bucket=bucket)
+
+        # create a json summary of objects in ths domain
+        log.debug(f"Creating consolidated metadata summary for root {rootid}")
+        summary_key = root_prefix + ".summary.json"
+        summary_data = await getConsolidatedMetaData(app, obj_ids, bucket=bucket)
+        if summary_data:
+            log.info(f"Got consolidated metadata summary for root {rootid}")
+            log.debug(f"Summary data: {summary_data}")
+            await putStorJSONObj(app, summary_key, summary_data, bucket=bucket)
+        else:
+            log.info(f"No consolidated metadata summary for root {rootid}")
     return results
 
 

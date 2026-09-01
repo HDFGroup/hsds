@@ -15,13 +15,14 @@ import sys
 
 PYTHON_CMD = "python"  # change to "python3" if "python" invokes python version 2.x
 
-unit_tests = ('array_util_test', 'chunk_util_test', 'compression_test', 'domain_util_test',
-              'dset_util_test', 'hdf5_dtype_test', 'id_util_test', 'lru_cache_test',
-              'metrics_test', 'shuffle_test', 'rangeget_util_test')
+unit_tests = ('chunk_util_test', 'compression_test', 'domain_util_test',
+              'dset_util_test', 'file_client_test', 'glob_parser_test', 'logger_test',
+              'lru_cache_test', 'metrics_test', 'openapi_test', 'rangeget_util_test',
+              'shuffle_test', 'stor_util_test')
 
 integ_tests = ('uptest', 'setup_test', 'domain_test', 'group_test',
                'link_test', 'attr_test', 'datatype_test', 'dataset_test',
-               'acl_test', 'value_test',  # 'filter_test',
+               'acl_test', 'value_test', 'broadcast_test', 'filter_test',
                'pointsel_test', 'query_test', 'vlen_test')
 
 skip_unit = False

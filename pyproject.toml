@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-    "setuptools >=61",
+    "setuptools >=77",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -13,13 +13,12 @@ authors = [
 maintainers = [
     {name = "John Readey", email = "jreadey@hdfgroup.org"},
 ]
-license = {text = "Apache Software License"}
+license = "Apache-2.0"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: Unix",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS :: MacOS X",
@@ -30,8 +29,8 @@ classifiers = [
     "Topic :: Database",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-requires-python = ">=3.10"
-version = "0.9.4"
+requires-python = ">=3.11"
+version = "1.0.0"
 
 dependencies = [
     "aiohttp == 3.9.4",
@@ -42,6 +41,7 @@ dependencies = [
     "bitshuffle >=0.5.2",
     "cryptography",
     "h5py >= 3.6.0",
+    "h5json@git+https://github.com/HDFGroup/hdf5-json@master",
     "importlib_resources",
     "numcodecs <= 0.15.1",
     "numpy >=2.0.0",
@@ -67,7 +67,7 @@ Data can be stored in either a POSIX files system, or using object-based storage
 AWS S3, Azure Blob Storage, or [MinIO](https://min.io).
 HSDS can be run a single machine or on a cluster using Kubernetes (or AKS on Microsoft Azure).
 
-In addition, HSDS can b  e run in serverless mode with AWS Lambda or h5pyd local mode.
+In addition, HSDS can be run in serverless mode using h5pyd local mode.
 """
 content-type = "text/x-rst"
 

@@ -45,6 +45,11 @@ class FileClient:
             msg = f"bucket: {bucket} contains invalid character, slash"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        if bucket in (".", ".."):
+            # would resolve to the storage root or its parent
+            msg = f"invalid bucket: {bucket}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
     def _validateKey(self, key):
         if not key:
@@ -55,10 +60,33 @@ class FileClient:
             msg = f"invalid key: {key}, cannot start with slash"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
+        if ".." in key.replace("\\", "/").split("/"):
+            msg = f"invalid key: {key}, cannot contain '..' path segment"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    def _checkPathInRoot(self, filepath):
+        """ Verify the given path resolves to somewhere under the storage root.
+
+        The bucket/key validators reject the traversal forms we know about;
+        this is the backstop that does not depend on having enumerated them,
+        and it runs after normpath has collapsed any ".." segments.
+        """
+        filepath = pp.normpath(filepath)
+        try:
+            in_root = pp.commonpath((self._root_dir, filepath)) == self._root_dir
+        except ValueError:
+            # different drives on Windows, or a mix of absolute and relative
+            in_root = False
+        if not in_root:
+            msg = f"path outside of storage root: {filepath}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        return filepath
 
     def _getFilePath(self, bucket, key=""):
         filepath = pp.join(self._root_dir, bucket, key)
-        return pp.normpath(filepath)
+        return self._checkPathInRoot(filepath)
 
     def _getFileStats(self, filepath, data=None):
         log.debug(f"_getFileStats({filepath})")
@@ -88,7 +116,7 @@ class FileClient:
         return key_stats
 
     def _file_stats_increment(self, counter, inc=1):
-        """Incremenet the indicated connter"""
+        """Increment the indicated counter"""
         if "file_stats" not in self._app:
             # setup stats
             file_stats = {}
@@ -177,7 +205,33 @@ class FileClient:
             raise HTTPInternalServerError()
         if data and len(data) > 0:
             self._file_stats_increment("bytes_in", inc=len(data))
+
+        posix_delay = config.get("posix_delay", default=0.0)
+        if posix_delay > 0.0:
+            log.warn(f"posix_delay for get_object, sleep for: {posix_delay}")
+            await asyncio.sleep(posix_delay)
+
         return data
+
+    def _mkdir(self, dirpath):
+        """ create the given directory if it doesn't already exist """
+        try:
+            dirpath = self._checkPathInRoot(dirpath)
+            log.debug(f"normpath: {dirpath}")
+
+            if not pp.isdir(dirpath):
+                log.debug(f"mkdir({dirpath})")
+                mkdir(dirpath)
+            else:
+                log.debug(f"isdir {dirpath} found")
+        except IOError as ioe:
+            if ioe.errno == 17:
+                # likely directory was created by another process since we checked
+                log.warn(f"mkdir failed, {dirpath} created outside this process")
+            else:
+                msg = f"fileClient: IOError on mkdir {dirpath}: {ioe}"
+                log.warn(msg)
+                raise HTTPInternalServerError()
 
     async def put_object(self, key, data, bucket=None):
         """Write data to given key.
@@ -206,15 +260,7 @@ class FileClient:
                 for key_dir in key_dirs:
                     dirpath = pp.join(dirpath, key_dir)
                     log.debug(f"pp.join({key_dir}) => {dirpath}")
-
-                    dirpath = pp.normpath(dirpath)
-                    log.debug(f"normpath: {dirpath}")
-
-                    if not pp.isdir(dirpath):
-                        log.debug(f"mkdir({dirpath})")
-                        mkdir(dirpath)
-                    else:
-                        log.debug(f"isdir {dirpath} found")
+                    self._mkdir(dirpath)
             log.debug(f"open({filepath}, 'wb')")
             async with aiofiles.open(filepath, loop=loop, mode="wb") as f:
                 await f.write(data)
@@ -246,6 +292,12 @@ class FileClient:
             msg = f"fileClient.put_object {key} complete, "
             msg += f"write_rsp: {write_rsp}"
             log.debug(msg)
+
+        posix_delay = config.get("posix_delay", default=0.0)
+        if posix_delay > 0.0:
+            log.warn(f"posix_delay for put_object, sleep for: {posix_delay}")
+            await asyncio.sleep(posix_delay)
+
         return write_rsp
 
     async def delete_object(self, key, bucket=None):
@@ -286,7 +338,11 @@ class FileClient:
             msg = f"Unexpected Exception {type(e)} deleting file obj {key}: {e}"
             log.error(msg)
             raise HTTPInternalServerError()
-        await asyncio.sleep(0)  # for async compat
+
+        posix_delay = config.get("posix_delay", default=0.0)
+        if posix_delay > 0.0:
+            log.warn(f"posix_delay for delete_object , sleep for: {posix_delay}")
+        await asyncio.sleep(posix_delay)  # for async compat
 
     async def is_object(self, key, bucket=None):
         self._validateBucket(bucket)
@@ -334,7 +390,7 @@ class FileClient:
         basedir = pp.join(self._root_dir, bucket)
         if prefix:
             basedir = pp.join(basedir, prefix)
-        basedir = pp.normpath(basedir)
+        basedir = self._checkPathInRoot(basedir)
         log.debug(f"fileClient listKeys for directory: {basedir}")
 
         if not pp.isdir(basedir):
@@ -420,6 +476,11 @@ class FileClient:
             msg = f"expected {count} keys in return list but "
             msg == f"got {len(key_names)}"
             log.warning(msg)
+
+        posix_delay = config.get("posix_delay", default=0.0)
+        if posix_delay > 0.0:
+            log.warn(f"posix_delay for list_keys, sleep for: {posix_delay}")
+            await asyncio.sleep(posix_delay)
 
         return key_names
 

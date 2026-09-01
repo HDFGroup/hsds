@@ -13,6 +13,9 @@ import unittest
 import time
 import json
 from os import path as pp
+
+from h5json.objid import createObjId, getCollectionForId
+
 import config
 import helper
 
@@ -113,34 +116,22 @@ class DomainTest(unittest.TestCase):
         attr_count = 0
         for objid in domain_objs:
             obj_json = domain_objs[objid]
-            self.assertTrue("id" in obj_json)
-            self.assertTrue("attributeCount" in obj_json)
-            attr_count += obj_json["attributeCount"]
-            self.assertFalse("attributes" in obj_json)
+            collection_type = getCollectionForId(objid)
+            if collection_type == "datasets":
+                self.assertTrue("attributes" in obj_json)
+                self.assertTrue("type" in obj_json)
+                self.assertTrue("shape" in obj_json)
+                self.assertTrue("creationProperties" in obj_json)
+            elif collection_type == "groups":
+                self.assertTrue("attributes" in obj_json)
+                self.assertTrue("links" in obj_json)
+            else:
+                self.assertTrue(False)  # unexpected type
+            attr_count += len(obj_json["attributes"])
 
         self.assertEqual(attr_count, 4)
 
-        # get a dict of all objects in the domain including any attributes
-        params["include_attrs"] = 1
-        rsp = self.session.get(req, headers=headers, params=params)
-        self.assertEqual(rsp.status_code, 200)
-        rspJson = json.loads(rsp.text)
-        self.assertTrue("domain_objs" in rspJson)
-        domain_objs = rspJson["domain_objs"]
-        self.assertEqual(len(domain_objs), 10)
-        attr_count = 0
-        for objid in domain_objs:
-            obj_json = domain_objs[objid]
-            self.assertTrue("attributeCount" in obj_json)
-            self.assertTrue("attributes" in obj_json)
-            attributes = obj_json["attributes"]
-            for attr_name in attributes:
-                # only the names "attr1" and "attr2" are used in this domain
-                self.assertTrue(attr_name in ("attr1", "attr2"))
-                attr_count += 1
-        self.assertEqual(attr_count, 4)
-
-        # passing domain via the host parameters is deprecated
+        # passing domain via the host header is deprecated
         # Previously his returned 200, now it is a 400
         del headers["X-Hdf-domain"]
         params = {"host": domain}
@@ -489,6 +480,94 @@ class DomainTest(unittest.TestCase):
                 self.assertTrue(k in rspJson)
             # we should get the same value for root id
             self.assertEqual(root_id, rspJson["root"])
+
+    def testCreateDomainWithId(self):
+        domain = self.base_domain + "/newdomainwithid.h5"
+        print("testCreateDomainWithId", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        root_id = createObjId("groups")
+        body = {"root_id": root_id}
+        req = helper.getEndpoint() + "/"
+
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rspJson = json.loads(rsp.text)
+        for k in (
+            "root",
+            "owner",
+            "acls",
+            "created",
+            "lastModified",
+            "version",
+            "limits",
+            "compressors",
+        ):
+            self.assertTrue(k in rspJson)
+
+        self.assertEqual(rspJson["root"], root_id)
+
+        limit_keys = ("min_chunk_size", "max_chunk_size", "max_request_size")
+        limits = rspJson["limits"]
+        for k in limit_keys:
+            self.assertTrue(k in limits)
+            limit = limits[k]
+            self.assertTrue(isinstance(limit, int))
+            self.assertTrue(limit > 0)
+        compressors = rspJson["compressors"]
+        for compressor in EXPECTED_COMPRESSORS:
+            self.assertTrue(compressor in compressors)
+
+        # do a get on the new domain
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        for k in (
+            "root",
+            "owner",
+            "class",
+            "created",
+            "lastModified",
+            "limits",
+            "version",
+        ):
+            self.assertTrue(k in rspJson)
+        # we should get the same value for root id
+        self.assertEqual(root_id, rspJson["root"])
+        # should get limits here too
+        limits = rspJson["limits"]
+        for k in limit_keys:
+            self.assertTrue(k in limits)
+            limit = limits[k]
+            self.assertTrue(isinstance(limit, int))
+            self.assertTrue(limit > 0)
+
+        # verify we can access root groups
+        root_req = helper.getEndpoint() + "/groups/" + root_id
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = self.session.get(root_req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # verify that putting the same domain again fails with a 409 error
+        rsp = self.session.put(req, headers=headers)
+        self.assertEqual(rsp.status_code, 409)
+
+        # PUT with a different domain name should also give a 409
+        # (due to the root_id conflicting)
+        domain2 = self.base_domain + "/newdomainwithid2.h5"
+        headers2 = helper.getRequestHeaders(domain=domain2)
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers2)
+        self.assertEqual(rsp.status_code, 409)
+
+        # Delete the original domain
+        headers = helper.getRequestHeaders(domain=domain)
+        rsp = self.session.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # re-create the domain with the same root id
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
     """
     def testCreateDomainWithCustomClass(self):
         domain = self.base_domain + "/newclassdomain.h6"
@@ -682,6 +761,13 @@ class DomainTest(unittest.TestCase):
         # verify that putting the same domain again fails with a 409 error
         rsp = self.session.put(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 409)
+
+        # rescan doesn't make sense for a folder domain (no root group to
+        # scan) - should get a 400 rather than falling through to domain
+        # creation logic (which would 409 as above)
+        params = {"rescan": 1}
+        rsp = self.session.put(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
 
         # do a get on the new folder
         rsp = self.session.get(req, headers=headers)
@@ -938,7 +1024,7 @@ class DomainTest(unittest.TestCase):
         else:
             print("user2_name not set")
 
-        # delete the domain (with the orginal user)
+        # delete the domain (with the original user)
         headers = helper.getRequestHeaders(domain=domain)
         rsp = self.session.delete(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
@@ -1379,11 +1465,23 @@ class DomainTest(unittest.TestCase):
         domains = rspJson["domains"]
         self.assertEqual(len(domains), 3)
 
-        # bad query expression
-        query = "atttr1 > 7 AND"
+        # bad query expression (dangling AND with no right-hand operand -
+        # use a real attribute name here so this tests the grammar error
+        # specifically, not just a missing/unknown attribute)
+        query = "attr1 > 7 AND"
         params = {"domain": folder + "/", "query": query}
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 400)
+
+        # query referencing an attribute that doesn't exist on any domain
+        # is not an error - it just matches nothing
+        query = "no_such_attr > 7"
+        params = {"domain": folder + "/", "query": query}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domains" in rspJson)
+        self.assertEqual(len(rspJson["domains"]), 0)
 
         # empty sub-domains
         domain = helper.getTestDomain("tall.h5") + "/"
@@ -1466,6 +1564,32 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(tall_item["allocated_bytes"], 580)
         self.assertTrue("total_size" in tall_item)
         self.assertTrue(tall_item["total_size"] > 5000)
+
+    def testGetRootNoDomain(self):
+        # GET / with no domain/X-Hdf-domain returns the top-level domain
+        # list rather than 400ing - the top-level folder isn't itself a
+        # domain, so there's no domain JSON to return for it.
+        print("testGetRootNoDomain", self.base_domain)
+
+        headers = helper.getRequestHeaders(domain=None)
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(
+            rsp.headers["content-type"], "application/json; charset=utf-8"
+        )
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("domains" in rspJson)
+        self.assertTrue("hrefs" in rspJson)
+        for item in rspJson["domains"]:
+            self.assertTrue("name" in item)
+            # get_domains(include_hrefs=True) mixes in a per-domain href
+            self.assertTrue("hrefs" in item)
+
+        # passing the domain path as a "host" param is not supported
+        params = {"host": self.base_domain}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
 
     def testGetTopLevelDomains(self):
         print("testGetTopLevelDomains", self.base_domain)

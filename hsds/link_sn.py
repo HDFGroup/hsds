@@ -13,21 +13,27 @@
 # service node of hsds cluster
 #
 
-from aiohttp.web_exceptions import HTTPBadRequest
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from json import JSONDecodeError
 
+from h5json.objid import isValidUuid, getCollectionForId
+from h5json.link_util import validateLinkName, getLinkClass, getLinkId
+from h5json.link_util import getLinkPath, getLinkFilePath
+
+from .util.nodeUtil import getDataNodeUrl
 from .util.httpUtil import getHref, getBooleanParam
 from .util.httpUtil import jsonResponse
 from .util.globparser import globmatch
-from .util.idUtil import isValidUuid, getDataNodeUrl, getCollectionForId
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
-from .util.domainUtil import getDomainFromRequest, isValidDomain, verifyRoot
-from .util.domainUtil import getBucketForDomain
-from .util.linkUtil import validateLinkName, getLinkClass
+from .util.domainUtil import getDomainFromRequest, isValidDomain, verifyRoot, getBucketForDomain
+from .util.linkUtil import getRequestLink
+
+
 from .servicenode_lib import getDomainJson, validateAction
 from .servicenode_lib import getLink, putLink, putLinks, getLinks, deleteLinks
 from .domain_crawl import DomainCrawler
 from . import hsds_logger as log
+from . import config
 
 
 async def GET_Links(request):
@@ -43,7 +49,7 @@ async def GET_Links(request):
         msg = "Missing group id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(group_id, obj_class="Group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -140,7 +146,15 @@ async def GET_Links(request):
 
         # mix in collection key, target and hrefs
         for link in links:
+            for key in ("class", "title"):
+                if key not in link:
+                    log.error(f"expected to find {key} key in link")
+                    raise HTTPInternalServerError()
+
             if link["class"] == "H5L_TYPE_HARD":
+                if "id" not in link:
+                    log.error("expected to id key in hard link")
+                    raise HTTPInternalServerError()
                 collection_name = getCollectionForId(link["id"])
                 link["collection"] = collection_name
                 target_uri = "/" + collection_name + "/" + link["id"]
@@ -175,7 +189,7 @@ async def GET_Link(request):
         msg = "Missing group id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(group_id, obj_class="Group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -211,13 +225,13 @@ async def GET_Link(request):
     link_class = link_json["class"]
     resp_link["class"] = link_class
     if link_class == "H5L_TYPE_HARD":
-        resp_link["id"] = link_json["id"]
+        resp_link["id"] = getLinkId(link_json)
         resp_link["collection"] = getCollectionForId(link_json["id"])
     elif link_class == "H5L_TYPE_SOFT":
-        resp_link["h5path"] = link_json["h5path"]
+        resp_link["h5path"] = getLinkPath(link_json)
     elif link_class == "H5L_TYPE_EXTERNAL":
-        resp_link["h5path"] = link_json["h5path"]
-        resp_link["h5domain"] = link_json["h5domain"]
+        resp_link["h5path"] = getLinkPath(link_json)
+        resp_link["file"] = getLinkFilePath(link_json)
     else:
         log.warn(f"Unexpected link class: {link_class}")
     resp_json = {}
@@ -281,14 +295,32 @@ async def PUT_Link(request):
         msg = f"Invalid domain: {domain}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    bucket = getBucketForDomain(domain)
 
     await validateAction(app, domain, group_id, username, "create")
-    # putLink will validate these arguments
-    kwargs = {"bucket": bucket}
-    kwargs["tgt_id"] = body.get("id")
-    kwargs["h5path"] = body.get("h5path")
-    kwargs["h5domain"] = body.get("h5domain")
+
+    predate_max_time = config.get("predate_max_time", default=10.0)
+
+    try:
+        link_json = getRequestLink(link_title, body, predate_max_time=predate_max_time)
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPBadRequest(reason=str(e))
+
+    link_class = getLinkClass(link_json)
+
+    kwargs = {}
+    kwargs["bucket"] = getBucketForDomain(domain)
+    if link_class == "H5L_TYPE_HARD":
+        kwargs["tgt_id"] = getLinkId(link_json)
+    elif link_class == "H5L_TYPE_SOFT":
+        kwargs["h5path"] = getLinkPath(link_json)
+    elif link_class == "H5L_TYPE_EXTERNAL":
+        kwargs["h5path"] = getLinkPath(link_json)
+        kwargs["h5domain"] = getLinkFilePath(link_json)
+    else:
+        raise HTTPBadRequest(reason=f"unexpected link class: {link_class}")
+
+    if "created" in link_json:
+        kwargs["created"] = link_json["created"]
 
     status = await putLink(app, group_id, link_title, **kwargs)
 
@@ -324,6 +356,16 @@ async def PUT_Links(request):
         body = await request.json()
     except JSONDecodeError:
         msg = "Unable to load JSON body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if not body:
+        msg = "PUT links with empty body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if not isinstance(body, dict):
+        msg = f"PUT links expected dictionary body but got: {type(body)}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -422,6 +464,7 @@ async def PUT_Links(request):
                             link_item = link_items[title]
                             getLinkClass(link_item)
                         except ValueError:
+                            log.warn(f"invalid link for {title}: {link_item}")
                             raise HTTPBadRequest(reason="invalid link item")
                     grp_ids[grp_id] = link_items
 
@@ -447,7 +490,7 @@ async def PUT_Links(request):
     count = len(grp_ids)
     if count == 0:
         msg = "no grp_ids defined"
-        log.warn(f"PUT_Attributes: {msg}")
+        log.warn(f"PUT_Links: {msg}")
         raise HTTPBadRequest(reason=msg)
     elif count == 1:
         # just send one PUT Attributes request to the dn
@@ -493,7 +536,7 @@ async def DELETE_Links(request):
         msg = "Missing group id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(group_id, obj_class="Group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -640,7 +683,7 @@ async def POST_Links(request):
 
     # do a check that everything is as it should with the item list
     for group_id in items:
-        if not isValidUuid(group_id, obj_class="Group"):
+        if not isValidUuid(group_id, obj_class="groups"):
             msg = f"Invalid group id: {group_id}"
             log.warn(msg)
 
@@ -747,7 +790,7 @@ async def DELETE_Link(request):
         msg = "Missing group id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(group_id, obj_class="Group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         msg = f"Invalid group id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

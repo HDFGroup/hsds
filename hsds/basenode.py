@@ -25,16 +25,18 @@ from aiohttp.web_exceptions import HTTPNotFound, HTTPGone
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPServiceUnavailable
 
+
 from . import config
 from .util.httpUtil import http_get, http_post, jsonResponse
-from .util.idUtil import createNodeId, getNodeNumber, getNodeCount
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword
 from .util.authUtil import isAdminUser
 from .util.k8sClient import getDnLabelSelector, getPodIps
+from .util.nodeUtil import createNodeId, getNodeNumber, getNodeCount
+
 from . import hsds_logger as log
 from . import metrics
 
-HSDS_VERSION = "0.9.4"
+HSDS_VERSION = "1.0.0"
 
 
 def getVersion():
@@ -237,17 +239,25 @@ async def docker_update_dn_info(app):
         log.error("HEAD node seems to be down.")
         app["dn_urls"] = []
         app["dn_ids"] = []
+        app["cluster_state"] = "WAITING"
     except HTTPServiceUnavailable:
         log.warn("Head ServiceUnavailable")
     except OSError:
         log.error("failed to register")
         app["dn_urls"] = []
         app["dn_ids"] = []
+        app["cluster_state"] = "WAITING"
 
     if rsp_json is not None:
         log.debug(f"register response: {rsp_json}")
         app["dn_urls"] = rsp_json["dn_urls"]
         app["dn_ids"] = rsp_json["dn_ids"]
+        # the head node only reports "READY" once the *target* number of
+        # sn/dn nodes have registered - use it (rather than just "did this
+        # node see a non-empty, self-consistent dn_urls list") to decide
+        # readiness, so a node doesn't start routing/serving requests
+        # against a partial dn roster while the cluster is still scaling up
+        app["cluster_state"] = rsp_json.get("cluster_state", "WAITING")
 
 
 def get_dn_id_set(app):
@@ -305,6 +315,15 @@ def updateReadyState(app, old_dn_urls=None):
     if len(dn_urls) == 0 or len(dn_urls) != len(dn_ids):
         if len(dn_urls) > 0:
             log.warning(f"not all dn_ids found, got: {dn_ids}")
+        is_ready = False
+    elif app.get("cluster_state") != "READY":
+        # the head node hasn't seen the full target number of sn/dn nodes
+        # register yet - don't flip this node to READY (and start
+        # routing/serving requests against a partial dn roster) until it
+        # has, otherwise nodes with different partial views of dn_urls can
+        # compute different partitions for the same obj_id (getObjPartition
+        # depends on dn count) and reject each other's requests
+        log.debug("updateReadyState - cluster_state from head is not READY yet")
         is_ready = False
 
     if app["node_type"] == "dn":
@@ -548,7 +567,7 @@ async def info(request):
 
 
 def baseInit(node_type):
-    """Intitialize application and return app object"""
+    """Initialize application and return app object"""
 
     # setup log config
     log_level = config.get("log_level")
@@ -568,6 +587,7 @@ def baseInit(node_type):
     app = Application(middlewares=[metrics.metrics_middleware])
 
     app["node_state"] = "INITIALIZING"
+    app["cluster_state"] = "WAITING"
     app["node_number"] = -1
     app["node_type"] = node_type
     app["start_time"] = int(time.time())  # seconds after epoch

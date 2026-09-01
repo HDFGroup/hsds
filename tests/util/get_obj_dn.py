@@ -39,7 +39,7 @@ uri = sys.argv[nargs]
 print("uri:", uri)
 
 if uri[0] != "/":
-    sys.exit("uri must start wtih '/'")
+    sys.exit("uri must start with '/'")
 
 req = "http://" + endpoint + ":" + str(port) + uri
 

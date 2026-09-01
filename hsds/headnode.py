@@ -15,14 +15,13 @@
 
 import asyncio
 import os
-import time
 
 from aiohttp.web import Application, StreamResponse, run_app, json_response
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
+from h5json.time_util import unixTimeToUTC, elapsedTime, getNow
 
 from . import config
-from .util.timeUtil import unixTimeToUTC, elapsedTime
-from .util.idUtil import createNodeId
+from .util.nodeUtil import createNodeId
 from . import hsds_logger as log
 from .util import query_marathon as marathonClient
 
@@ -46,7 +45,7 @@ class Node:
         self._type = node_type
         self._host = node_host
         self._port = node_port
-        now = time.time()
+        now = getNow()
         self._create_time = now
         self._last_poll = now
         self._stats = {}
@@ -87,13 +86,13 @@ class Node:
         return info
 
     def poll_update(self):
-        now = time.time()
+        now = getNow()
         self._last_poll = now
 
     def is_healthy(self):
         sleep_sec = int(config.get("node_sleep_time"))
 
-        now = time.time()
+        now = getNow()
         if now - self._last_poll < sleep_sec * 2:
             return True
         else:
@@ -319,7 +318,7 @@ async def register(request):
     answer["dn_urls"] = dn_urls
     answer["req_ip"] = node_host
     log.debug(f"register returning: {answer}")
-    app["last_health_check"] = int(time.time())
+    app["last_health_check"] = int(getNow())
 
     resp = json_response(answer)
     log.response(request, resp=resp)
@@ -433,13 +432,13 @@ async def getTargetNodeCount(app, node_type):
         key = "target_sn_count"
     else:
         raise KeyError()
-    if "key" not in app:
+    if key not in app:
         if "is_dcos" in app:
             marathon = marathonClient.MarathonClient(app)
             if node_type == "dn":
                 app[key] = int(await marathon.getDNInstances())
             else:
-                app[key] = int(await marathon.getDNInstances())
+                app[key] = int(await marathon.getSNInstances())
         else:
             app[key] = config.get(key)
     return app[key]
@@ -463,7 +462,7 @@ def getActiveNodeCount(app, node_type):
 
 
 async def init():
-    """Intitialize application and return app object"""
+    """Initialize application and return app object"""
 
     # setup log config
     log_level = config.get("log_level")
@@ -507,7 +506,7 @@ async def init():
     app["active_sn_ids"] = [None, ] * target_sn_count
     app["active_dn_ids"] = [None, ] * target_dn_count
     app["dead_node_ids"] = set()
-    app["start_time"] = int(time.time())  # seconds after epoch
+    app["start_time"] = int(getNow())  # seconds after epoch
     app["last_health_check"] = 0
     app["max_task_count"] = config.get("max_task_count")
     app.router.add_get("/", info)

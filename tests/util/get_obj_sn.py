@@ -56,7 +56,7 @@ print("uri:", uri)
 print("user:", username)
 
 if uri[0] != "/":
-    sys.exit("uri must start wtih '/'")
+    sys.exit("uri must start with '/'")
 
 headers = {"host": domain}
 if username and password:

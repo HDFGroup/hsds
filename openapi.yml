@@ -1,0 +1,2980 @@
+openapi: 3.1.0
+info:
+  title: HSDS REST API
+  description: |
+    HSDS (Highly Scalable Data Service) is a REST-based web service for HDF5 data.
+    It implements the HDF5 REST API convention used by h5pyd and h5serv: domains
+    (roughly analogous to HDF5 files), groups, datasets, committed datatypes,
+    links, and attributes, plus dataset value read/write with hyperslab/point/query
+    selection.
+
+    This spec documents the public Service-Node (SN) REST API - the interface
+    exposed to REST clients. It was generated from the HSDS source code
+    (hsds/domain_sn.py, group_sn.py, link_sn.py, attr_sn.py, ctype_sn.py,
+    dset_sn.py, chunk_sn.py, servicenode.py) rather than hand-written, so it
+    should closely track actual server behavior; however some undocumented
+    edge cases / internal inconsistencies noted in the source are called out
+    in operation descriptions rather than fully modeled.
+
+    ### Addressing a domain
+    Every request (except `GET /domains`) operates on a "domain" (an HDF5
+    file-like container). The domain is specified either via the `domain`
+    query parameter or the `X-Hdf-domain` request header. An optional `bucket`
+    query parameter (or `X-Hdf-bucket` header) selects a non-default storage
+    bucket.
+
+    ### Authentication
+    Basic Auth (`Authorization: Basic <base64(user:pass)>`). Many read (GET)
+    operations also accept anonymous requests (no `Authorization` header) if
+    the server is configured with `allow_noauth` - in that case the request
+    is treated as user `"default"`. All write operations (PUT/POST/DELETE)
+    require a valid `Authorization` header.
+
+    ### Error responses
+    HSDS does not use a JSON error envelope. Error responses use aiohttp's
+    default plain-text rendering: `Content-Type: text/plain`, body of the
+    form `"<status>: <reason>"` (e.g. `"400: Invalid domain name"`).
+
+    ### Boolean query parameters
+    Many query-string boolean parameters (e.g. `verbose`, `include_attrs`,
+    `include_links`, `getalias`, `getdnids`, `flush`, `rescan`, `meta_only`,
+    `keep_root`) are, in several handlers, parsed with a naive
+    "is this key present and non-empty string" check rather than true
+    boolean parsing. In those handlers `?flag=0` or `?flag=false` are
+    **truthy** (they enable the flag, they do not disable it) - only
+    omitting the parameter entirely is guaranteed to mean "false". This is
+    called out per-parameter below where explicitly confirmed against the
+    source; treat any other boolean query parameter with the same
+    suspicion unless it's documented as using the shared `getBooleanParam`
+    helper (which does parse `"0"`/`"false"` correctly).
+
+    ### Known service-level issues (not just documentation gaps)
+    - `PUT .../value` with a `query` parameter (query-based update) and
+      `Limit` set: when the matching rows span more than one chunk, `Limit`
+      is applied independently within each chunk rather than coordinated
+      across chunks, so more than `Limit` rows total can end up updated.
+      This is a known, deliberately-deferred bug - see the `query`
+      parameter description on `PUT /datasets/{id}/value`.
+  version: "1.0.0"
+  license:
+    name: Apache-2.0
+
+servers:
+  - url: "{scheme}://{host}:{port}"
+    description: HSDS service node endpoint
+    variables:
+      scheme:
+        enum: [http, https]
+        default: http
+      host:
+        default: localhost
+      port:
+        default: "5101"
+
+security:
+  - basicAuth: []
+  - {}   # anonymous access is allowed for many read operations when the server has allow_noauth set
+
+tags:
+  - name: Status
+    description: Service/node status and health-check endpoints. Not domain-specific - no `domain` param is needed or used.
+  - name: Domains
+    description: Domain (HDF5-file-equivalent) and folder operations
+  - name: ACLs
+    description: Access control list operations
+  - name: Groups
+    description: Group operations
+  - name: Links
+    description: Link operations (hard/soft/external links between groups and objects)
+  - name: Attributes
+    description: Attribute operations, shared across groups/datasets/datatypes
+  - name: Datatypes
+    description: Committed (named) datatype operations
+  - name: Datasets
+    description: Dataset metadata, shape, and type operations
+  - name: Value
+    description: Dataset data read/write (hyperslab, point, and query selection)
+
+paths:
+  /about:
+    get:
+      operationId: GetAbout
+      tags: [Status]
+      summary: Get service status and version info
+      description: |
+        Returns general information about the service as a whole (not a
+        specific node): overall cluster state, version, and node count.
+        This is the endpoint `tools/status_check.py` polls to determine
+        when the service has finished starting up (`state == "READY"`).
+
+        Authentication is optional. If `Authorization` is supplied it is
+        validated and the response reflects the authenticated user;
+        otherwise the response reports `username: "anonymous"`.
+      security: []
+      responses:
+        '200':
+          description: Service status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  start_time:
+                    type: integer
+                    description: Unix timestamp the service node started.
+                  state:
+                    type: string
+                    enum: [INITIALIZING, WAITING, READY, TERMINATING]
+                    description: Overall cluster readiness state.
+                  hsds_version: { type: string }
+                  name:
+                    type: string
+                    description: Configured server name (`server_name` config value).
+                  greeting: { type: string }
+                  about: { type: string }
+                  node_count:
+                    type: integer
+                    description: Number of DN nodes currently registered.
+                  dn_urls:
+                    type: array
+                    items: { type: string }
+                  dn_ids:
+                    type: array
+                    items: { type: string }
+                  username:
+                    type: string
+                    description: The authenticated username, or "anonymous" if no credentials were supplied.
+                  isadmin: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /info:
+    get:
+      operationId: GetInfo
+      tags: [Status]
+      summary: Get this node's state and resource usage
+      description: |
+        Returns state and OS-level resource usage (CPU, disk I/O, network
+        I/O) for the specific node that handles the request - unlike
+        `/about`, this reflects one node's local state, not the cluster
+        as a whole. No authentication is required or checked.
+      security: []
+      responses:
+        '200':
+          description: Node status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  node:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      type:
+                        type: string
+                        description: Node type - "sn" for the service node handling this request.
+                        enum: [sn, dn, head_node]
+                      start_time: { type: integer }
+                      state:
+                        type: string
+                        enum: [INITIALIZING, WAITING, READY, TERMINATING]
+                      node_number:
+                        type: integer
+                        description: Only present for `dn` nodes.
+                      node_count: { type: integer }
+                  cpu:
+                    type: object
+                    properties:
+                      percent: { type: number }
+                      cores: { type: integer }
+                  diskio:
+                    type: object
+                    properties:
+                      read_count: { type: integer }
+                      read_time: { type: integer }
+                      read_bytes: { type: integer }
+                      write_count: { type: integer }
+                      write_time: { type: integer }
+                      write_bytes: { type: integer }
+                  netio:
+                    type: object
+                    properties:
+                      bytes_sent:
+                        type: integer
+                        description: "Note: a source-level bug (hsds/basenode.py) assigns bytes_recv over this key immediately after setting it, so this actually reports received bytes, and sent-byte count is not exposed."
+                      packets_sent: { type: integer }
+                      packets_recv: { type: integer }
+                      errin: { type: integer }
+                      errout: { type: integer }
+                      dropin: { type: integer }
+                      dropout: { type: integer }
+                  memory:
+                    type: object
+                    properties:
+                      phys_total: { type: integer }
+                      phys_available: { type: integer }
+                      swap_total: { type: integer }
+                      swap_used: { type: integer }
+                      swap_free: { type: integer }
+                      percent: { type: number }
+                  disk:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      used: { type: integer }
+                      free: { type: integer }
+                      percent: { type: number }
+                  log_stats:
+                    type: object
+                    description: Count of log messages emitted, by level.
+                  req_count:
+                    type: integer
+                    description: Number of HTTP requests handled by this node so far.
+                  s3_stats:
+                    type: object
+                    description: Present only when using S3 storage.
+                  azure_stats:
+                    type: object
+                    description: Present only when using Azure Blob storage.
+                  meta_cache_stats:
+                    type: object
+                    description: Metadata object cache stats. Populated only on DN nodes - empty on SN/head.
+                    properties:
+                      count: { type: integer }
+                      dirty_count: { type: integer }
+                      utililization_per: { type: number }
+                      mem_used: { type: integer }
+                      mem_target: { type: integer }
+                  chunk_cache_stats:
+                    type: object
+                    description: Chunk data cache stats. Populated only on DN nodes - empty on SN/head.
+                    properties:
+                      count: { type: integer }
+                      dirty_count: { type: integer }
+                      utililization_per: { type: number }
+                      mem_used: { type: integer }
+                      mem_target: { type: integer }
+                  domain_cache_stats:
+                    type: object
+                    description: Domain object cache stats. Populated only on DN nodes - empty on SN/head.
+                    properties:
+                      count: { type: integer }
+                      dirty_count: { type: integer }
+                      utililization_per: { type: number }
+                      mem_used: { type: integer }
+                      mem_target: { type: integer }
+
+  /:
+    get:
+      operationId: GetDomain
+      tags: [Domains]
+      summary: Get domain (or resolve an object by h5path within it)
+      description: |
+        Returns JSON describing the domain identified by the `domain` query
+        param / `X-Hdf-domain` header.
+
+        If neither is given, returns the list of top-level domains instead
+        (the same `DomainList` payload as `GET /domains`, since the
+        top-level folder is not itself a domain and has no domain JSON in
+        the object store). Passing the domain path as a `host` query param
+        is no longer supported and 400s.
+
+        If `h5path` is given, resolves that path (relative to `parent_id`, or
+        the domain root if `parent_id` is absent) and returns the JSON for the
+        object found there (group/dataset/datatype) instead of the domain
+        itself. `getdnids`/`verbose`/`getobjs` only apply to the plain
+        domain-JSON response - they're silently ignored when `h5path` is
+        used.
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+        - name: parent_id
+          in: query
+          description: Base group id to resolve `h5path` under. Defaults to the domain root.
+          schema: { type: string }
+        - name: h5path
+          in: query
+          description: If present, resolve this path and return the target object's JSON instead of the domain JSON.
+          schema: { type: string }
+        - name: include_links
+          in: query
+          description: Include links when returning an `h5path`-resolved object.
+          schema: { type: boolean, default: false }
+        - name: include_attrs
+          in: query
+          description: Include attributes when returning an `h5path`-resolved object.
+          schema: { type: boolean, default: false }
+        - name: follow_soft_links
+          in: query
+          description: Allow following soft links while resolving `h5path`.
+          schema: { type: boolean, default: false }
+        - name: follow_external_links
+          in: query
+          description: Allow following external links while resolving `h5path`.
+          schema: { type: boolean, default: false }
+        - name: verbose
+          in: query
+          description: Include extended domain statistics (num_groups, num_datasets, total_size, md5_sum, etc.)
+          schema: { type: boolean, default: false }
+        - name: getobjs
+          in: query
+          description: Include a full `domain_objs` map of every object in the domain.
+          schema: { type: boolean, default: false }
+        - name: getdnids
+          in: query
+          description: Include the list of data-node ids serving this domain.
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: >
+            Domain JSON; or (with `h5path`) resolved-object JSON; or, when no
+            domain is given, the top-level domain list - see description.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/DomainResponse'
+                  - $ref: '#/components/schemas/ObjectResponse'
+                  - $ref: '#/components/schemas/DomainList'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+    put:
+      operationId: PutDomain
+      tags: [Domains]
+      summary: Create a domain or folder, flush pending writes, or trigger a rescan
+      description: |
+        Default behavior creates a new domain (or folder, if `folder: true`).
+        Passing `flush: true` (query param or body key) flushes the domain
+        instead. Passing `rescan: true` triggers a background rescan of the
+        domain's root group. `flush` and `rescan` may be combined; flush runs
+        first.
+
+        `rescan` only makes sense for domains that have a `root` group
+        (ordinary, non-folder domains) - passing `rescan=true` for an
+        existing *folder* domain 400s rather than attempting a rescan.
+
+        The `201` response does not actually include a `class` field (the
+        DN's creation handler never sets it, even though `DomainResponse` -
+        shared with `GET /` - declares one); fetch the domain again via
+        `GET /` if you need `class`.
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+        - name: getdnids
+          in: query
+          schema: { type: boolean, default: false }
+          description: Include `dn_ids` in the response (also settable via body).
+        - name: flush
+          in: query
+          schema: { type: boolean, default: false }
+          description: Flush the domain instead of creating it (also settable via body).
+        - name: rescan
+          in: query
+          schema: { type: boolean, default: false }
+          description: Rescan the domain root instead of creating it (also settable via body).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                getdnids: { type: boolean }
+                flush: { type: boolean }
+                rescan: { type: boolean }
+                folder:
+                  type: boolean
+                  description: Create a folder domain (a container for other domains) rather than a data domain.
+                owner:
+                  type: string
+                  description: Domain owner. Setting this to a user other than the requester requires admin privileges.
+                linked_domain:
+                  type: string
+                  description: Existing domain whose root group this new domain should link to (creates an alias domain). Mutually exclusive with `folder`.
+                linked_bucket:
+                  type: string
+                  description: Storage bucket for `linked_domain`, if different from the request's bucket.
+                root_id:
+                  type: string
+                  description: Client-supplied root group id (schema2 uuid) for the new domain.
+                group:
+                  type: object
+                  description: Options for the new domain's root group.
+                  properties:
+                    creationProperties:
+                      type: object
+                      description: Creation properties copied onto the new root group.
+      responses:
+        '201':
+          description: Domain created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DomainResponse' }
+        '204':
+          description: Flush or rescan completed with nothing further to report (or `getdnids` requested a body with just `dn_ids`, in which case 200 is returned instead - see description).
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+    delete:
+      operationId: DeleteDomain
+      tags: [Domains]
+      summary: Delete a domain
+      description: |
+        Deletes the domain and (unless `keep_root` is set) its root group and
+        all reachable objects/chunks. Deleting a non-empty folder domain
+        (one that still has sub-domains/folders) returns 409.
+
+        If `meta_only` is set, only the server's in-memory domain cache entry
+        is cleared - no authentication or ACL check is performed in this case
+        and no actual storage delete happens.
+
+        If a JSON body is supplied, its `meta_only`/`keep_root` keys take
+        priority over the query parameters of the same name (the two are not
+        merged).
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+        - name: meta_only
+          in: query
+          schema: { type: boolean, default: false }
+          description: Only clear the cached domain entry; skip auth and the real delete.
+        - name: keep_root
+          in: query
+          schema: { type: boolean, default: false }
+          description: Don't delete the root group object when deleting the domain.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                meta_only: { type: boolean }
+                keep_root: { type: boolean }
+      responses:
+        '200':
+          description: Domain deleted (or meta-cache cleared).
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { $ref: '#/components/responses/Gone' }
+
+    post:
+      operationId: PostDomain
+      tags: [Domains]
+      summary: Resolve multiple h5paths within a domain in one request
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+        - name: parent_id
+          in: query
+          schema: { type: string }
+          description: Base group id to resolve each h5path under. Defaults to the domain root.
+        - name: include_links
+          in: query
+          schema: { type: boolean, default: false }
+        - name: include_attrs
+          in: query
+          schema: { type: boolean, default: false }
+        - name: follow_soft_links
+          in: query
+          schema: { type: boolean, default: false }
+        - name: follow_external_links
+          in: query
+          schema: { type: boolean, default: false }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [h5paths]
+              properties:
+                h5paths:
+                  type: array
+                  items: { type: string }
+                  description: List of h5paths to resolve.
+      responses:
+        '200':
+          description: Map of each requested h5path to its resolved object JSON.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  h5paths:
+                    type: object
+                    additionalProperties:
+                      $ref: '#/components/schemas/ObjectResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+
+  /domains:
+    get:
+      operationId: GetDomains
+      tags: [Domains]
+      summary: List domains under a folder
+      description: |
+        Lists domains directly under the folder given by `domain`/`X-Hdf-domain`
+        (default `/`, i.e. top-level domains). Supports glob-pattern filtering,
+        a query filter over root-group attributes, and S3-style pagination.
+
+        ### Query syntax (`query`)
+        Same engine and grammar as `GET /datasets/{id}/value`'s `query`
+        param (`h5json.query_util.arrayQuery`): `"temperature > 20"`,
+        `"city IN ('seattle', 'portland')"`, combined with
+        `AND`/`OR`/`NOT`/`XOR`. Each candidate domain's root-group scalar
+        primitive attributes (integer/float/string) are used as the query
+        variables - unlike a dataset (one fixed schema for every row),
+        each domain can have a completely different set of attributes,
+        so:
+        - A domain missing an attribute the query references (or having
+          it as a non-scalar or non-primitive type) simply doesn't match
+          - this is not an error, even if *no* domain anywhere has that
+            attribute.
+        - Folder domains (no root group) never match a query.
+        - Genuine syntax errors (unlike a missing attribute) still 400.
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+        - name: pattern
+          in: query
+          description: Glob pattern matched against each candidate domain's basename.
+          schema: { type: string }
+        - name: query
+          in: query
+          description: Query-filter string over root-group scalar attributes (see syntax above).
+          schema: { type: string }
+        - name: verbose
+          in: query
+          schema: { type: boolean, default: false }
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/MarkerParam'
+      responses:
+        '200':
+          description: List of domains.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DomainList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /acls/{username}:
+    parameters:
+      - name: username
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/DomainParam'
+      - $ref: '#/components/parameters/DomainHeader'
+      - $ref: '#/components/parameters/BucketParam'
+    get:
+      operationId: GetAcl
+      tags: [ACLs]
+      summary: Get the ACL entry for a user on a domain
+      description: |
+        Users may always read their own ACL entry (or the `default` entry)
+        with just "read" permission on the domain; reading another user's
+        entry requires "readACL" permission.
+
+        Note: with no `domain` given, this raises an unhandled server-side
+        error rather than a clean 400 (unlike most domain-scoped GETs,
+        which explicitly check for a missing domain and 400).
+      responses:
+        '200':
+          description: ACL entry.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  acl: { $ref: '#/components/schemas/ACL' }
+                  hrefs:
+                    type: array
+                    items: { $ref: '#/components/schemas/Href' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+    put:
+      operationId: PutAcl
+      tags: [ACLs]
+      summary: Create or update the ACL entry for a user on a domain
+      description: |
+        Requires "updateACL" permission on the domain (checked the same
+        way as every other ACL/domain-mutating operation).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Any subset of the 6 ACL action keys, each a boolean.
+              properties:
+                create: { type: boolean }
+                read: { type: boolean }
+                update: { type: boolean }
+                delete: { type: boolean }
+                readACL: { type: boolean }
+                updateACL: { type: boolean }
+      responses:
+        '201':
+          description: ACL entry created/updated.
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /acls:
+    get:
+      operationId: GetAcls
+      tags: [ACLs]
+      summary: List all ACL entries on a domain
+      description: |
+        Unlike `GET /acls/{username}`, listing all ACL entries always
+        requires "readACL" permission (no self-record exception).
+
+        Note: with no `domain` given, this raises an unhandled server-side
+        error rather than a clean 400 (see the same note on
+        `GET /acls/{username}`).
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+      responses:
+        '200':
+          description: List of ACL entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  acls:
+                    type: array
+                    items: { $ref: '#/components/schemas/ACL' }
+                  hrefs:
+                    type: array
+                    items: { $ref: '#/components/schemas/Href' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+
+  /groups:
+    get:
+      operationId: GetGroups
+      tags: [Groups]
+      summary: List all group ids in a domain
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/MarkerParam'
+      responses:
+        '200':
+          description: List of group ids.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groups:
+                    type: array
+                    items: { type: string }
+                  hrefs:
+                    type: array
+                    items: { $ref: '#/components/schemas/Href' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: PostGroup
+      tags: [Groups]
+      summary: Create one or more groups
+      description: |
+        Accepts a single group-creation object, or a JSON list to batch-create
+        multiple groups in one request. `type` is not permitted in the body
+        (groups have no datatype).
+
+        **Bug:** `implicit` is only forwarded to argument construction for
+        single-object creates. For a batch create (a JSON list with more
+        than one item), it is not passed through and always behaves as
+        `implicit=0` regardless of the query param - missing intermediate
+        groups will cause the create to fail rather than being created
+        implicitly.
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+        - name: implicit
+          in: query
+          schema: { type: boolean, default: false }
+          description: Allow implicit creation of missing intermediate parent groups when `h5path` is used.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/CreateObjectRequest'
+                - type: array
+                  items: { $ref: '#/components/schemas/CreateObjectRequest' }
+      responses:
+        '201':
+          description: Group(s) created.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/GroupObject'
+                  - type: object
+                    properties:
+                      objects:
+                        type: array
+                        items: { $ref: '#/components/schemas/GroupObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /groups/:
+    get:
+      operationId: GetRootOrGroupByPath
+      tags: [Groups]
+      summary: Resolve a group by h5path
+      description: |
+        Registered separately from `GET /groups/{id}` (note the trailing
+        slash, no id segment) for the case where the caller doesn't yet
+        know any group id.
+
+        **`h5path` is effectively required here, and must be absolute**
+        (start with `/`): the handler 400s with "Missing group id" if
+        there is neither a path `id` nor an `h5path`, so calling this route
+        with no `h5path` does NOT return the domain's root group as might
+        be expected - there is no way to fetch the root group without
+        already knowing its id (e.g. from the domain response's `root`
+        field). A relative `h5path` (not starting with `/`) also 400s on
+        this route, since there is no group id to resolve it against.
+
+        There is no supported way to resolve a *relative* `h5path` without
+        an id: a `grpid` parameter for this purpose is mentioned in older
+        references, but it is never actually read anywhere in the
+        group-handling code, so it has no effect.
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+        - name: h5path
+          in: query
+          required: true
+          schema: { type: string }
+          description: Absolute path to resolve. Must start with "/".
+        - name: getalias
+          in: query
+          schema: { type: boolean, default: false }
+        - name: include_links
+          in: query
+          schema: { type: boolean, default: false }
+        - name: include_attrs
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Group JSON.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/DomainParam'
+      - $ref: '#/components/parameters/DomainHeader'
+      - $ref: '#/components/parameters/BucketParam'
+    get:
+      operationId: GetGroup
+      tags: [Groups]
+      summary: Get a group
+      description: |
+        A group can also be located by an absolute path via the `h5path`
+        query parameter, resolved relative to `id`. See `GET /groups/` for
+        resolving an absolute `h5path` with no known group id (there is no
+        way to fetch the root group itself without already knowing its id).
+      parameters:
+        - name: h5path
+          in: query
+          schema: { type: string }
+          description: Resolve this path (relative to `id`) to a group instead of using the path id directly.
+        - name: getalias
+          in: query
+          schema: { type: boolean, default: false }
+          description: |
+            Include an `alias` list of h5paths that resolve to this group.
+            Note: parsed with a raw truthiness check rather than real
+            boolean parsing, so `?getalias=0` is truthy and turns this on.
+        - name: include_links
+          in: query
+          schema: { type: boolean, default: false }
+        - name: include_attrs
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Group JSON.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: DeleteGroup
+      tags: [Groups]
+      summary: Delete a group
+      description: Deleting a domain's root group is not allowed (403) - delete the domain instead.
+      responses:
+        '200':
+          description: Group deleted.
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /groups/{id}/links:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/DomainParam'
+      - $ref: '#/components/parameters/DomainHeader'
+      - $ref: '#/components/parameters/BucketParam'
+    get:
+      operationId: GetLinks
+      tags: [Links]
+      summary: List links in a group
+      parameters:
+        - name: follow_links
+          in: query
+          schema: { type: boolean, default: false }
+          description: |
+            Recursively follow links into sub-groups. Response shape
+            changes to a map of group id to link list. Note: when set,
+            `CreateOrder` and `Marker` are silently ignored (only `Limit`
+            is honored) - the crawler used for this mode doesn't forward
+            them.
+        - name: pattern
+          in: query
+          schema: { type: string }
+          description: Glob pattern filter on link title.
+        - name: CreateOrder
+          in: query
+          schema: { type: boolean, default: false }
+          description: Return links in creation order instead of name order. Ignored when `follow_links` is set.
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/MarkerParam'
+      responses:
+        '200':
+          description: |
+            List of links (or, with `follow_links`, a map of group id to
+            link list). Note: the two response shapes also differ in
+            per-link content, not just array-vs-map - the non-crawler
+            (default) path decorates each hard link with extra
+            `collection`/`target`/`href` keys not present in the `Link`
+            schema; these decorations are absent when `follow_links` is used.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  links:
+                    oneOf:
+                      - type: array
+                        items: { $ref: '#/components/schemas/Link' }
+                      - type: object
+                        additionalProperties:
+                          type: array
+                          items: { $ref: '#/components/schemas/Link' }
+                  hrefs:
+                    type: array
+                    items: { $ref: '#/components/schemas/Href' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      operationId: PostLinks
+      tags: [Links]
+      summary: Batch-fetch links across one or more groups
+      description: |
+        Despite the POST verb this is a read operation. Provide `titles`
+        to fetch specific link names for the path group, or `grp_ids` to
+        fetch links from multiple groups in one call.
+
+        `titles` is mutually exclusive with `follow_links`, `Limit`, and
+        `CreateOrder` - combining `titles` with any of those three 400s.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                titles:
+                  type: array
+                  items: { type: string }
+                  description: Specific link titles to fetch. Cannot be combined with a `grp_ids` object (dict) form.
+                grp_ids:
+                  description: Either a list of group ids (fetch all/`titles` links from each), or a map of group id to a list of titles for that group.
+                  oneOf:
+                    - type: array
+                      items: { type: string }
+                    - type: object
+                      additionalProperties:
+                        type: array
+                        items: { type: string }
+      parameters:
+        - name: follow_links
+          in: query
+          schema: { type: boolean, default: false }
+        - name: CreateOrder
+          in: query
+          schema: { type: boolean, default: false }
+        - $ref: '#/components/parameters/LimitParam'
+        - name: pattern
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Links for the requested group(s).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  links:
+                    oneOf:
+                      - type: array
+                        items: { $ref: '#/components/schemas/Link' }
+                      - type: object
+                        additionalProperties:
+                          type: array
+                          items: { $ref: '#/components/schemas/Link' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      operationId: PutLinks
+      tags: [Links]
+      summary: Batch-create links across one or more groups
+      description: |
+        When `grp_ids` targets multiple groups, the overall response status
+        comes from a crawler that returns the highest status code seen
+        across all the individual per-group writes - so in practice this
+        operation can also surface status codes beyond 200/201/400/403
+        (e.g. 404, 500) if an individual target group turns out to be
+        invalid or a per-group write fails.
+      parameters:
+        - name: replace
+          in: query
+          schema: { type: boolean, default: false }
+          description: Allow overwriting existing links with the same title.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                links:
+                  type: object
+                  additionalProperties: { $ref: '#/components/schemas/LinkCreate' }
+                  description: Map of link title to link definition, written to the path group (or to every group in `grp_ids` if that's a list).
+                grp_ids:
+                  description: "Either a list of target group ids (the single top-level `links` map is written to each), or a map of group id to `{\"links\": {...}}` for per-group distinct link sets."
+                  oneOf:
+                    - type: array
+                      items: { type: string }
+                    - type: object
+                      additionalProperties:
+                        type: object
+                        properties:
+                          links:
+                            type: object
+                            additionalProperties: { $ref: '#/components/schemas/LinkCreate' }
+      responses:
+        '200':
+          description: All submitted links were duplicates of existing links.
+          content:
+            application/json:
+              schema: { type: object }
+        '201':
+          description: At least one new link was created.
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      operationId: DeleteLinks
+      tags: [Links]
+      summary: Delete one or more links from a group by title
+      parameters:
+        - name: titles
+          in: query
+          required: true
+          schema: { type: string }
+          description: Link titles to delete, joined by `separator`.
+        - name: separator
+          in: query
+          schema: { type: string, default: "/" }
+          description: Delimiter used to split `titles` into individual link names.
+      responses:
+        '200':
+          description: Links deleted (deleting a nonexistent link name is not an error).
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /groups/{id}/links/{title}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+      - name: title
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/DomainParam'
+      - $ref: '#/components/parameters/DomainHeader'
+      - $ref: '#/components/parameters/BucketParam'
+    get:
+      operationId: GetLink
+      tags: [Links]
+      summary: Get a single link
+      responses:
+        '200':
+          description: Link.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  link: { $ref: '#/components/schemas/Link' }
+                  created: { type: number }
+                  lastModified:
+                    type: number
+                    description: Links are immutable once created, so this always equals `created`.
+                  hrefs:
+                    type: array
+                    items: { $ref: '#/components/schemas/Href' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    put:
+      operationId: PutLink
+      tags: [Links]
+      summary: Create a single link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LinkCreate' }
+      responses:
+        '200':
+          description: The link duplicated an existing identical link.
+          content:
+            application/json:
+              schema: { type: object }
+        '201':
+          description: Link created.
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      operationId: DeleteLink
+      tags: [Links]
+      summary: Delete a single link
+      description: |
+        Note: unlike `GET`/`PUT` on this same resource, this handler
+        validates `title` with no exception handling around it - an
+        invalid link name raises an uncaught `ValueError` here rather than
+        a clean 400 (see the `500` response).
+      responses:
+        '200':
+          description: Link deleted.
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /datatypes:
+    get:
+      operationId: GetDatatypes
+      tags: [Datatypes]
+      summary: List all committed datatype ids in a domain
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/MarkerParam'
+      responses:
+        '200':
+          description: List of datatype ids.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  datatypes:
+                    type: array
+                    items: { type: string }
+                  hrefs:
+                    type: array
+                    items: { $ref: '#/components/schemas/Href' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: PostDatatype
+      tags: [Datatypes]
+      summary: Create one or more committed datatypes
+      description: |
+        Note: `creationProperties` (from the shared `CreateObjectRequest`
+        schema) is accepted and forwarded by the SN but silently discarded
+        by the DN for datatypes - it is never persisted and never returned
+        by a subsequent GET. It has no actual effect for this operation
+        (unlike for dataset creation, where it is meaningful).
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+        - name: implicit
+          in: query
+          schema: { type: boolean, default: false }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - allOf:
+                    - $ref: '#/components/schemas/CreateObjectRequest'
+                    - type: object
+                      required: [type]
+                - type: array
+                  items:
+                    allOf:
+                      - $ref: '#/components/schemas/CreateObjectRequest'
+                      - type: object
+                        required: [type]
+                        description: Multi-create items may not include a `shape` key.
+      responses:
+        '201':
+          description: Datatype(s) created.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/DatatypeObject'
+                  - type: object
+                    properties:
+                      objects:
+                        type: array
+                        items: { $ref: '#/components/schemas/DatatypeObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /datatypes/:
+    get:
+      operationId: GetDatatypeByPath
+      tags: [Datatypes]
+      summary: Resolve a committed datatype by h5path
+      description: Registered separately from `GET /datatypes/{id}` (trailing slash, no id segment) for locating a datatype purely by `h5path`/`grpid` without already knowing its id. Otherwise identical to `GET /datatypes/{id}`.
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+        - name: h5path
+          in: query
+          required: true
+          schema: { type: string }
+        - name: grpid
+          in: query
+          schema: { type: string }
+          description: Parent group id used as the base for `h5path` resolution. Defaults to the domain root.
+        - name: getalias
+          in: query
+          schema: { type: boolean, default: false }
+        - name: include_attrs
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Datatype JSON.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DatatypeObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /datatypes/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/DomainParam'
+      - $ref: '#/components/parameters/DomainHeader'
+      - $ref: '#/components/parameters/BucketParam'
+    get:
+      operationId: GetDatatype
+      tags: [Datatypes]
+      summary: Get a committed datatype
+      description: |
+        A datatype can also be located by path via `h5path`/`grpid`
+        instead of a path id, using the separate `GET /datatypes/` route -
+        `h5path`/`grpid` are read only by that route's handler branch and
+        have no effect if sent to this `{id}`-based route.
+      parameters:
+        - name: getalias
+          in: query
+          schema: { type: boolean, default: false }
+          description: |
+            Include an `alias` list of h5paths that resolve to this
+            datatype. Note: parsed with a raw truthiness check, so
+            `?getalias=0` is truthy and turns this on.
+        - name: include_attrs
+          in: query
+          schema: { type: boolean, default: false }
+          description: Same raw-truthiness caveat as `getalias` applies here too.
+      responses:
+        '200':
+          description: Datatype JSON.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DatatypeObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+    delete:
+      operationId: DeleteDatatype
+      tags: [Datatypes]
+      summary: Delete a committed datatype
+      responses:
+        '200':
+          description: Datatype deleted.
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+
+  /datasets:
+    get:
+      operationId: GetDatasets
+      tags: [Datasets]
+      summary: List all dataset ids in a domain
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/MarkerParam'
+      responses:
+        '200':
+          description: List of dataset ids.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  datasets:
+                    type: array
+                    items: { type: string }
+                  hrefs:
+                    type: array
+                    items: { $ref: '#/components/schemas/Href' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: PostDataset
+      tags: [Datasets]
+      summary: Create one or more datasets
+      description: |
+        `type` is required. `shape` defaults to scalar if omitted. If
+        `creationProperties.layout` is not given, HSDS auto-generates a
+        chunk layout from the shape/type/config chunk-size settings.
+        `creationProperties.filters` is restricted to HSDS's supported
+        filter set. An initial `value` may be supplied for creates whose
+        data maps to exactly one chunk - this constraint applies per
+        object and works the same for a single create or a batch
+        (multi-item list) create; it is not restricted to non-batch
+        creates.
+
+        **Bug:** for a batch create (list with more than one item),
+        `implicit` is not forwarded to argument construction and always
+        behaves as `implicit=0` regardless of the query param, same as for
+        `POST /groups`.
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+        - name: implicit
+          in: query
+          schema: { type: boolean, default: false }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/CreateDatasetRequest'
+                - type: array
+                  items: { $ref: '#/components/schemas/CreateDatasetRequest' }
+      responses:
+        '201':
+          description: Dataset(s) created.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/DatasetObject'
+                  - type: object
+                    properties:
+                      objects:
+                        type: array
+                        items: { $ref: '#/components/schemas/DatasetObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /datasets/:
+    get:
+      operationId: GetDatasetByPath
+      tags: [Datasets]
+      summary: Resolve a dataset by h5path
+      description: Registered separately from `GET /datasets/{id}` (trailing slash, no id segment) for locating a dataset purely by `h5path`/`grpid` without already knowing its id. Otherwise identical to `GET /datasets/{id}`.
+      parameters:
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+        - name: h5path
+          in: query
+          required: true
+          schema: { type: string }
+        - name: grpid
+          in: query
+          schema: { type: string }
+          description: Parent group id used as the base for `h5path` resolution. Defaults to the domain root.
+        - name: getalias
+          in: query
+          schema: { type: boolean, default: false }
+          description: |
+            Include an `alias` list of h5paths that resolve to this
+            dataset. Bug: on this specific route, the flag that gates
+            adding `alias` to the response is only ever set on the
+            path-`id`-based branch of the shared handler, which never
+            executes for this h5path-resolution route - so `getalias` has
+            no effect here (unlike on `GET /datasets/{id}`, where it works).
+        - name: include_attrs
+          in: query
+          schema: { type: boolean, default: false }
+        - name: verbose
+          in: query
+          schema: { type: boolean, default: false }
+        - name: ignore_nan
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Dataset JSON.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DatasetObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /datasets/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/DomainParam'
+      - $ref: '#/components/parameters/DomainHeader'
+      - $ref: '#/components/parameters/BucketParam'
+    get:
+      operationId: GetDataset
+      tags: [Datasets]
+      summary: Get dataset metadata
+      description: |
+        A dataset can also be located by path via `h5path`/`grpid` using
+        the separate `GET /datasets/` route - `h5path`/`grpid` have no
+        effect if sent to this `{id}`-based route (the path `id` is
+        always present here, so the h5path-resolution branch never runs).
+      parameters:
+        - name: getalias
+          in: query
+          schema: { type: boolean, default: false }
+          description: |
+            Include an `alias` list of h5paths that resolve to this
+            dataset. Note: parsed with a raw truthiness check, so
+            `?getalias=0` is truthy and turns this on.
+        - name: include_attrs
+          in: query
+          schema: { type: boolean, default: false }
+        - name: verbose
+          in: query
+          schema: { type: boolean, default: false }
+          description: Include num_chunks/allocated_size (schema2 domains only).
+        - name: ignore_nan
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Dataset JSON.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DatasetObject' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: DeleteDataset
+      tags: [Datasets]
+      summary: Delete a dataset and all its allocated chunks
+      responses:
+        '200':
+          description: Dataset deleted.
+          content:
+            application/json:
+              schema: { type: object }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /datasets/{id}/shape:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/DomainParam'
+      - $ref: '#/components/parameters/DomainHeader'
+      - $ref: '#/components/parameters/BucketParam'
+    get:
+      operationId: GetDatasetShape
+      tags: [Datasets]
+      summary: Get a dataset's shape
+      responses:
+        '200':
+          description: Dataset shape.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  shape: { $ref: '#/components/schemas/ShapeSpec' }
+                  created: { type: number }
+                  lastModified: { type: number }
+                  hrefs:
+                    type: array
+                    items: { $ref: '#/components/schemas/Href' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: PutDatasetShape
+      tags: [Datasets]
+      summary: Resize (extend or shrink) an extensible dataset
+      description: |
+        Provide exactly one of `shape` (new absolute dims) or `extend`
+        (grow by this amount along `extend_dim`, default axis 0). The
+        dataset must have simple, extensible shape (a `maxdims` key).
+        Growing past a finite `maxdims` bound returns 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                shape:
+                  description: New absolute dimensions (same rank as the current shape).
+                  oneOf:
+                    - type: integer
+                    - type: array
+                      items: { type: integer }
+                extend:
+                  type: integer
+                  description: Amount to grow the dataset by along extend_dim. Mutually exclusive with `shape`. Must be strictly positive - `extend<=0` 400s.
+                extend_dim:
+                  type: integer
+                  default: 0
+                  description: Axis to extend when using `extend`.
+      responses:
+        '201':
+          description: Shape updated. Body may include a `selection` describing the newly added region.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  selection:
+                    type: string
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /datasets/{id}/type:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/DomainParam'
+      - $ref: '#/components/parameters/DomainHeader'
+      - $ref: '#/components/parameters/BucketParam'
+    get:
+      operationId: GetDatasetType
+      tags: [Datasets]
+      summary: Get a dataset's datatype
+      responses:
+        '200':
+          description: Dataset type.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  type: { $ref: '#/components/schemas/TypeSpec' }
+                  hrefs:
+                    type: array
+                    items: { $ref: '#/components/schemas/Href' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /datasets/{id}/value:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/DomainParam'
+      - $ref: '#/components/parameters/DomainHeader'
+      - $ref: '#/components/parameters/BucketParam'
+    get:
+      operationId: GetValue
+      tags: [Value]
+      summary: Read dataset data
+      description: |
+        Returns either a JSON `value` array, or (if `Accept: application/octet-stream`
+        is sent) raw binary data, laid out in row-major order for the
+        selected region. Large binary responses may be transparently
+        streamed/paginated by the server; this does not change the response
+        semantics from the client's point of view.
+
+        ### Selection syntax (`select`)
+        `select=[<dim1>,<dim2>,...]`. Each dimension may be `:` (full
+        extent), `n` (single index), `n:m` or `n:m:s` (start[:stop[:step]]),
+        or a bracketed coordinate list `[c1,c2,...]`.
+
+        **The enclosing brackets are NOT actually optional for a 1-D
+        select, despite older docs suggesting otherwise.** The parser
+        unconditionally strips the first and last character of the
+        `select` string as if they were `[`/`]`. A bracket-less multi-char
+        1-D select like `select=0:5` is silently corrupted into `:` (i.e.
+        treated as the full extent) rather than rejected or honored as
+        `0:5`; a bracket-less single index like `select=3` does at least
+        fail with an error (the stripped string is empty). Always wrap
+        `select` in `[...]`, even for 1-D.
+
+        ### Query syntax (`query`)
+        A SQL-like filter string, evaluated per-element (or per-row for
+        compound types):
+        `"_ > 1.0"`, `"symbol == b'AAPL'"`,
+        `"symbol IN ('AAPL','EBAY') AND date > 20170102"`. Operators:
+        `==`, `!=`, `<`, `>`, `<=`, `>=`, `IN`, combined with
+        `AND`/`OR`/`NOT`/`XOR`. For a simple (non-compound) dtype the only
+        allowed variable name is `_`; for compound types, any field name.
+        Supported on datasets of any rank (not just rank-1).
+
+        ### Region reference selection (`regionref`)
+        Instead of spelling out `select`, a selection can be taken from a
+        previously stored HDF5 region reference (type `H5T_REFERENCE` /
+        base `H5T_STD_REF_DSETREG`). `regionref` names where that reference
+        is stored, as one of exactly these three forms (note: these use a
+        leading `/` and a plural `attributes` segment - unlike the bare
+        `"groups/<id>"`/`"datasets/<id>"` form used internally for
+        object-reference *values* elsewhere in the API):
+        - `/groups/<id>/attributes/<attr_name>`
+        - `/datasets/<id>/attributes/<attr_name>`
+        - `/datasets/<id>`
+
+        When `regionref` is given, `select` (if present) applies to *that
+        source*, not to this dataset - it picks out one element from an
+        array of region references (e.g. `select=[4]` for the 5th element).
+        If `select` is omitted, the source itself must resolve to exactly
+        one element (a scalar attribute, or a single-element array/dataset),
+        otherwise the request is rejected with 400.
+
+        The resolved region reference's own selection is then applied
+        against *this* dataset (the `{id}` in the URL) - the dataset id
+        embedded in the reference itself is ignored. The reference's
+        selection rank must match this dataset's rank (400 otherwise), and
+        it must not select outside this dataset's actual extent (400
+        otherwise) - but the shapes themselves don't otherwise need to
+        match, since a region reference's reconstructed shape is only a
+        synthetic bounding box, not the original dataset's true shape.
+
+        If the resolved region reference is null/unbound, the response is
+        `204 No Content`. `regionref` cannot be combined with `query`.
+      parameters:
+        - name: select
+          in: query
+          schema: { type: string }
+          description: |
+            Hyperslab/coordinate selection string (see syntax above).
+            Defaults to the entire dataset. When `regionref` is given,
+            applies to the regionref source instead (see `regionref`
+            description).
+        - name: fields
+          in: query
+          schema: { type: string }
+          description: Colon-separated list of compound-type field names to include.
+        - name: query
+          in: query
+          schema: { type: string }
+          description: Query-filter string (see syntax above).
+        - name: Limit
+          in: query
+          schema: { type: integer }
+          description: Maximum number of rows to return when `query` is used.
+        - name: reduce_dim
+          in: query
+          schema: { type: boolean, default: false }
+          description: Drop length-1 dimensions from the returned JSON value.
+        - name: ignore_nan
+          in: query
+          schema: { type: boolean, default: false }
+        - name: regionref
+          in: query
+          schema: { type: string }
+          description: |
+            Take the selection from a stored region reference instead of
+            `select` (see syntax above). One of
+            `/groups/<id>/attributes/<attr_name>`,
+            `/datasets/<id>/attributes/<attr_name>`, or `/datasets/<id>`.
+      responses:
+        '200':
+          description: Dataset data.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value: {}
+                  hrefs:
+                    type: array
+                    items: { $ref: '#/components/schemas/Href' }
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '204':
+          description: |
+            No Content. Returned only when `regionref` resolves to a
+            null/unbound region reference.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: |
+            Not Found. Returned when `regionref` names an attribute that
+            doesn't exist.
+          content:
+            text/plain:
+              schema: { type: string, example: "404: Not Found" }
+        '413':
+          description: |
+            Payload Too Large. Note: for a JSON response, this check is
+            based on the size of the *unfiltered* `select` region, not the
+            size of the actual (potentially much smaller) query-matched
+            result - so a `query` over a large `select` region can 413
+            even when the matched data itself would have been small. The
+            check is skipped only for binary (`application/octet-stream`)
+            responses with streaming enabled.
+          content:
+            text/plain:
+              schema: { type: string, example: "413: Request too large" }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+    put:
+      operationId: PutValue
+      tags: [Value]
+      summary: Write dataset data
+      description: |
+        Accepts either a JSON body (`Content-Type: application/json`) or raw
+        binary data (`Content-Type: application/octet-stream`). The JSON body
+        supports several mutually-exclusive write modes: whole/selected-region
+        write via `value`/`value_base64` (with `select`/`start`/`stop`/`step`
+        for the target region), point-selection write via `points`, or
+        append-mode write via `append`/`append_dim` (only for extensible
+        datasets, and not combinable with `select` or `points`).
+
+        Binary writes larger than the server's `max_request_size` are
+        transparently paginated by the server (variable-length-typed data
+        cannot be paginated and returns 413 if oversized).
+
+        ### Query-based update (`query`)
+        Instead of `value`/`points`/`append`, pass `query` (same filter
+        syntax as `GET`'s `query` param, see above) plus a JSON body
+        representing a single element's worth of data - that one value is
+        broadcast across every element that matches the query. Works on
+        datasets of any rank.
+
+        - For a **compound** dtype, the body is a JSON object mapping field
+          name(s) to value(s), e.g. `{"open": 999}` - only the given
+          field(s) are updated on each matching row; fields not mentioned
+          are left unchanged.
+        - For a **simple** (non-compound) dtype, the body is just the bare
+          value to write (or `{"value": <value>}`).
+
+        The response is the list of **global dataset indices** that
+        matched (and were updated) - see the `200` response below - not
+        the row/element data itself.
+
+        **Known bug:** when `Limit` is set and the matching rows span more
+        than one chunk, the limit is applied independently within each
+        chunk rather than coordinated across chunks - so more than `Limit`
+        rows total can end up updated. This is a known, deliberately
+        deferred issue.
+
+        ### Region reference selection (`regionref`)
+        As with `GET`'s `regionref` param (see that operation's
+        description for the exact accepted path forms and the
+        `select`-repurposing semantics), the write selection can be taken
+        from a stored region reference instead of `select`/`start`/`stop`/
+        `step`. Not combinable with `points`, `append`, or `query`. If the
+        resolved region reference's selection shape doesn't match the shape
+        of the data being written, or if it resolves to a null/unbound
+        region reference, the request is rejected with 400.
+      parameters:
+        - name: select
+          in: query
+          schema: { type: string }
+        - name: regionref
+          in: query
+          schema: { type: string }
+          description: |
+            Take the write selection from a stored region reference
+            instead of `select` (see this operation's description, and
+            `GET`'s `regionref` param, for the exact syntax).
+        - name: fields
+          in: query
+          schema: { type: string }
+        - name: append
+          in: query
+          schema: { type: integer }
+          description: Number of rows to append (append mode).
+        - name: append_dim
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: query
+          in: query
+          schema: { type: string }
+          description: |
+            Query-based update filter (see this operation's description).
+            Cannot be combined with `append`.
+        - name: Limit
+          in: query
+          schema: { type: integer }
+          description: |
+            Maximum number of matching rows to update, when `query` is
+            used. Known bug: not correctly coordinated across chunks when
+            matches span more than one chunk - see this operation's
+            description.
+        - name: element_count
+          in: query
+          schema: { type: integer }
+          description: Number of elements represented by the request body, for broadcast writes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: |
+                This shape applies to the regular write modes
+                (value/value_base64/points/append). When `query` is used
+                (either as a query param, or as the `query` property here),
+                the body is NOT this envelope - it is instead a single
+                element's worth of update data: a JSON object of field
+                name to value for a compound dtype, or the bare value (or
+                `{"value": <value>}`) for a simple dtype. See this
+                operation's description.
+              properties:
+                value: {}
+                value_base64:
+                  type: string
+                  description: Base64-encoded data, alternative to `value` for binary-safe JSON transport.
+                start:
+                  oneOf: [{ type: integer }, { type: array, items: { type: integer } }]
+                stop:
+                  oneOf: [{ type: integer }, { type: array, items: { type: integer } }]
+                step:
+                  oneOf: [{ type: integer }, { type: array, items: { type: integer } }]
+                select:
+                  type: string
+                points:
+                  type: array
+                  description: List of point indices (rank 1) or coordinate tuples (rank > 1) to write.
+                  items: {}
+                query:
+                  type: string
+                  description: Alternative to the `query` query-parameter - specifies the filter string via the body instead.
+                append:
+                  type: integer
+                append_dim:
+                  type: integer
+                element_count:
+                  type: integer
+                fields:
+                  type: string
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: |
+            Write successful (empty body), or - in query-update mode - the
+            list of global dataset indices that matched and were updated
+            (see the `indices` property below).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  indices:
+                    type: array
+                    description: |
+                      Only present in query-update mode. List of global
+                      dataset index coordinate tuples that matched (and
+                      were updated) - e.g. `[[1], [4], [7], [10]]` for a
+                      rank-1 dataset, or `[[2, 3], [5, 1]]` for rank-2.
+                    items:
+                      type: array
+                      items: { type: integer }
+                  hrefs:
+                    type: array
+                    items: { $ref: '#/components/schemas/Href' }
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+                description: "Query-update mode with `Accept: application/octet-stream` - the same indices, as raw little-endian int64 coordinate tuples."
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+    post:
+      operationId: PostValue
+      tags: [Value]
+      summary: Read dataset data via point selection (or a selection given in the body)
+      description: |
+        Accepts a JSON body with either a `points` array (point selection -
+        a flat list of indices for rank-1 datasets, or a list of coordinate
+        tuples for higher rank), or `select`/`start`/`stop`/`step` keys
+        (equivalent to GET's `select` query param, but supplied in the body).
+        Exactly one of these forms must be present. A binary body
+        (`Content-Type: application/octet-stream`) is also accepted for
+        point selection only, as a flat array of unsigned 64-bit point
+        indices/coordinates.
+
+        Not supported for null-space or scalar-space datasets. Unlike GET,
+        POST has no pagination fallback: a response whose size would exceed
+        `max_request_size` fails with 413 rather than streaming.
+      parameters:
+        - name: select
+          in: query
+          schema: { type: string }
+        - name: fields
+          in: query
+          schema: { type: string }
+        - name: ignore_nan
+          in: query
+          schema: { type: boolean, default: false }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                points:
+                  type: array
+                  items: {}
+                  description: Flat list of indices (rank 1) or list of coordinate tuples (rank > 1).
+                select:
+                  type: string
+                start: { oneOf: [{ type: integer }, { type: array, items: { type: integer } }] }
+                stop: { oneOf: [{ type: integer }, { type: array, items: { type: integer } }] }
+                step: { oneOf: [{ type: integer }, { type: array, items: { type: integer } }] }
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+              description: Flat array of unsigned 64-bit point indices/coordinates.
+      responses:
+        '200':
+          description: Selected dataset data.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value: {}
+                  hrefs:
+                    type: array
+                    items: { $ref: '#/components/schemas/Href' }
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+
+  /datasets/{id}/query:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+      - $ref: '#/components/parameters/DomainParam'
+      - $ref: '#/components/parameters/DomainHeader'
+      - $ref: '#/components/parameters/BucketParam'
+    get:
+      operationId: GetQuery
+      tags: [Value]
+      summary: Get the indices of dataset elements matching a query
+      description: |
+        Works like `GET /datasets/{id}/value` with a `query` parameter,
+        except `query` is required here (400 if omitted), and the response
+        is the **global dataset indices** of the matching elements, not
+        their values - the same `indices` response format used by
+        `PUT /datasets/{id}/value`'s query-based update mode. Supported on
+        datasets of any rank. Nothing is modified by this operation.
+
+        **Known bug:** when `Limit` is set and the matching rows span more
+        than one chunk, the limit is applied independently within each
+        chunk rather than coordinated across chunks - so more than `Limit`
+        indices total can be returned. This is a known, deliberately
+        deferred issue (same as `PUT /datasets/{id}/value`'s query mode).
+      parameters:
+        - name: select
+          in: query
+          schema: { type: string }
+          description: Hyperslab/coordinate selection string, restricting which elements are considered. Defaults to the entire dataset.
+        - name: fields
+          in: query
+          schema: { type: string }
+          description: Colon-separated list of compound-type field names to restrict the query to.
+        - name: query
+          in: query
+          required: true
+          schema: { type: string }
+          description: Query-filter string (same syntax as `GET /datasets/{id}/value`'s `query` param).
+        - name: Limit
+          in: query
+          schema: { type: integer }
+          description: Maximum number of matching indices to return. See the known bug noted above for multi-chunk datasets.
+      responses:
+        '200':
+          description: Matching indices.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  indices:
+                    type: array
+                    description: |
+                      List of global dataset index coordinate tuples that
+                      matched - e.g. `[[1], [4], [7], [10]]` for a rank-1
+                      dataset, or `[[2, 3], [5, 1]]` for rank-2.
+                    items:
+                      type: array
+                      items: { type: integer }
+                  hrefs:
+                    type: array
+                    items: { $ref: '#/components/schemas/Href' }
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+                description: The same indices, as raw little-endian int64 coordinate tuples.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413':
+          description: |
+            Payload Too Large. Based on the size of the *unfiltered*
+            `select` region, not the size of the actual (potentially much
+            smaller) query-matched index list - same caveat as
+            `GET /datasets/{id}/value`'s query mode.
+          content:
+            text/plain:
+              schema: { type: string, example: "413: Request too large" }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # Attribute endpoints are identical (modulo the owning collection name)
+  # across groups, datasets, and datatypes, so they are factored into
+  # reusable Path Item Objects under components.pathItems and referenced
+  # here via $ref (OpenAPI 3.1 Paths Object entries may be References).
+  /groups/{id}/attributes:
+    $ref: '#/components/pathItems/AttributesCollection'
+  /datasets/{id}/attributes:
+    $ref: '#/components/pathItems/AttributesCollection'
+  /datatypes/{id}/attributes:
+    $ref: '#/components/pathItems/AttributesCollection'
+
+  /groups/{id}/attributes/{name}:
+    $ref: '#/components/pathItems/AttributeItem'
+  /datasets/{id}/attributes/{name}:
+    $ref: '#/components/pathItems/AttributeItem'
+  /datatypes/{id}/attributes/{name}:
+    $ref: '#/components/pathItems/AttributeItem'
+
+  /groups/{id}/attributes/{name}/value:
+    $ref: '#/components/pathItems/AttributeValue'
+  /datasets/{id}/attributes/{name}/value:
+    $ref: '#/components/pathItems/AttributeValue'
+  /datatypes/{id}/attributes/{name}/value:
+    $ref: '#/components/pathItems/AttributeValue'
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: |
+        Username/password Basic auth. May be omitted entirely on read (GET)
+        requests if the server is configured with `allow_noauth: true`, in
+        which case the request is treated as user `default`.
+
+  parameters:
+    DomainParam:
+      name: domain
+      in: query
+      description: Domain to operate on. Alternative to the `X-Hdf-domain` header; one of the two is required for every operation except `GET /domains`.
+      schema: { type: string }
+    DomainHeader:
+      name: X-Hdf-domain
+      in: header
+      description: Domain to operate on. Alternative to the `domain` query parameter.
+      schema: { type: string }
+    BucketParam:
+      name: bucket
+      in: query
+      description: Storage bucket to use, if not the server's configured default bucket.
+      schema: { type: string }
+    LimitParam:
+      name: Limit
+      in: query
+      description: Maximum number of items to return in one page.
+      schema: { type: integer }
+    MarkerParam:
+      name: Marker
+      in: query
+      description: Item id (or, for domain listings, name) to start the next page after, for pagination.
+      schema: { type: string }
+
+  responses:
+    BadRequest:
+      description: |
+        Bad Request - malformed request syntax, invalid parameter value,
+        invalid JSON body, or a request that is otherwise semantically
+        invalid (e.g. an unrecognized query filter).
+      content:
+        text/plain:
+          schema: { type: string, example: "400: Invalid domain name" }
+    Unauthorized:
+      description: Unauthorized - authentication is required and was not supplied or was invalid.
+      content:
+        text/plain:
+          schema: { type: string, example: "401: Unauthorized" }
+    Forbidden:
+      description: Forbidden - the authenticated (or anonymous) user does not have the required ACL permission for this operation.
+      content:
+        text/plain:
+          schema: { type: string, example: "403: Forbidden" }
+    NotFound:
+      description: Not Found - the domain, object, link, or attribute does not exist.
+      content:
+        text/plain:
+          schema: { type: string, example: "404: Not Found" }
+    Conflict:
+      description: Conflict - the object/link/domain already exists, or the request conflicts with the current state (e.g. resizing past maxdims, deleting a non-empty folder).
+      content:
+        text/plain:
+          schema: { type: string, example: "409: Conflict" }
+    Gone:
+      description: Gone - the domain/object existed previously but has been deleted.
+      content:
+        text/plain:
+          schema: { type: string, example: "410: Gone" }
+    TooLarge:
+      description: Payload Too Large - the request or response body would exceed the server's configured `max_request_size`.
+      content:
+        text/plain:
+          schema: { type: string, example: "413: Request too large" }
+    InternalError:
+      description: Internal Server Error.
+      content:
+        text/plain:
+          schema: { type: string, example: "500: Internal Server Error" }
+    ServiceUnavailable:
+      description: Service Unavailable - the server is too busy (task queue full) or a required back-end node is not responding.
+      content:
+        text/plain:
+          schema: { type: string, example: "503: Service Unavailable" }
+
+  schemas:
+    Href:
+      type: object
+      properties:
+        rel: { type: string, example: self }
+        href: { type: string, format: uri }
+
+    HrefList:
+      type: array
+      items: { $ref: '#/components/schemas/Href' }
+
+    ACL:
+      type: object
+      description: Permission bits for one user (or the special `default` user) on a domain.
+      properties:
+        userName: { type: string }
+        create: { type: boolean }
+        read: { type: boolean }
+        update: { type: boolean }
+        delete: { type: boolean }
+        readACL: { type: boolean }
+        updateACL: { type: boolean }
+
+    DomainResponse:
+      type: object
+      description: |
+        Note: despite `GET /acls`/`GET /acls/{username}` existing as
+        separate endpoints, this object never actually includes an `acls`
+        map of its own - the domain's ACLs are only obtainable through
+        those dedicated endpoints.
+      properties:
+        root: { type: string, description: Id of the domain's root group. }
+        owner: { type: string }
+        class:
+          type: string
+          enum: [domain, folder]
+          description: Not populated in the `201` response body returned by `PUT /` (a known gap) - only present when subsequently fetched via `GET /`.
+        created: { type: number }
+        lastModified: { type: number }
+        num_groups: { type: integer }
+        num_datasets: { type: integer }
+        num_datatypes: { type: integer }
+        num_objects: { type: integer }
+        num_chunks: { type: integer }
+        num_linked_chunks: { type: integer }
+        total_size: { type: integer }
+        allocated_bytes: { type: integer }
+        metadata_bytes: { type: integer }
+        linked_bytes: { type: integer }
+        md5_sum: { type: string }
+        scan_info:
+          type: object
+          description: Details of the most recent background rescan of the domain's root group.
+        limits:
+          type: object
+          description: Server-configured limits relevant to this domain (e.g. max_request_size, max_chunks_per_request).
+        compressors:
+          type: array
+          items: { type: string }
+          description: Compression filters available on this server.
+        version: { type: string }
+        domain_objs:
+          type: object
+          description: Present only when `getobjs=1` was requested. Map of object id to that object's JSON.
+        dn_ids:
+          type: array
+          description: Present only when `getdnids=1` was requested.
+          items: { type: string }
+        hrefs: { $ref: '#/components/schemas/HrefList' }
+
+    DomainList:
+      type: object
+      properties:
+        domains:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              owner: { type: string }
+              class: { type: string, enum: [domain, folder] }
+              created: { type: number }
+              lastModified: { type: number }
+        hrefs: { $ref: '#/components/schemas/HrefList' }
+
+    ObjectResponse:
+      description: Group, Dataset, or Datatype JSON, as resolved from an h5path.
+      oneOf:
+        - $ref: '#/components/schemas/GroupObject'
+        - $ref: '#/components/schemas/DatasetObject'
+        - $ref: '#/components/schemas/DatatypeObject'
+
+    Link:
+      type: object
+      properties:
+        title: { type: string }
+        class:
+          type: string
+          enum: [H5L_TYPE_HARD, H5L_TYPE_SOFT, H5L_TYPE_EXTERNAL, H5L_TYPE_ERROR]
+        collection:
+          type: string
+          enum: [groups, datasets, datatypes]
+          description: Present for hard links - the collection the target object belongs to.
+        id:
+          type: string
+          description: Present for hard links - the target object's id.
+        h5path:
+          type: string
+          description: Present for soft/external links - the path the link resolves to.
+        file:
+          type: string
+          description: |
+            Present for external links - the domain the link points into.
+            Note: the wire/response key is `file`, not `h5domain` - `h5domain`
+            is only accepted as a deprecated fallback name by the underlying
+            h5json link-path helper and is never what a real response contains.
+        created: { type: number }
+
+    LinkCreate:
+      type: object
+      description: Exactly one of `id`, `h5path` (soft link), or `h5path`+`file` (external link) must be given.
+      properties:
+        id:
+          type: string
+          description: Target object id, for a hard link.
+        h5path:
+          type: string
+          description: Target path, for a soft link (or, combined with `file`, an external link).
+        file:
+          type: string
+          description: Target domain, for an external link.
+
+    TypeSpec:
+      description: |
+        HDF5 datatype, expressed as either a predefined type string, a
+        committed-type reference (an object id beginning with `t-`), or a
+        full type-description object.
+      oneOf:
+        - type: string
+          description: Predefined type string, e.g. H5T_STD_I32LE, H5T_IEEE_F64LE, H5T_STD_U8LE.
+          example: H5T_STD_I32LE
+        - type: string
+          description: Reference to an existing committed datatype, by object id.
+          example: t-c9648b48-13e2-11e7-9beb-0242ac110008
+        - type: object
+          required: [class]
+          properties:
+            class:
+              type: string
+              enum:
+                - H5T_INTEGER
+                - H5T_FLOAT
+                - H5T_STRING
+                - H5T_VLEN
+                - H5T_OPAQUE
+                - H5T_ARRAY
+                - H5T_REFERENCE
+                - H5T_ENUM
+                - H5T_COMPOUND
+            base:
+              description: Base type for H5T_VLEN, H5T_ARRAY, and H5T_ENUM classes.
+              $ref: '#/components/schemas/TypeSpec'
+            dims:
+              description: Array dimensions, for H5T_ARRAY.
+              oneOf:
+                - type: integer
+                - type: array
+                  items: { type: integer }
+            length:
+              description: Fixed length in bytes (H5T_STRING, H5T_OPAQUE), or the string "H5T_VARIABLE" for variable-length strings/vlen.
+              oneOf:
+                - type: integer
+                - type: string
+            charSet:
+              type: string
+              enum: [H5T_CSET_ASCII, H5T_CSET_UTF8]
+            strPad:
+              type: string
+              enum: [H5T_STR_NULLTERM, H5T_STR_NULLPAD, H5T_STR_SPACEPAD]
+            size:
+              description: Element size in bytes, for H5T_REFERENCE.
+              type: integer
+            fields:
+              description: Member fields, for H5T_COMPOUND (order is significant).
+              type: array
+              items:
+                type: object
+                required: [name, type]
+                properties:
+                  name: { type: string }
+                  type: { $ref: '#/components/schemas/TypeSpec' }
+            mapping:
+              description: Name-to-value map, for H5T_ENUM.
+              type: object
+              additionalProperties: { type: integer }
+
+    ShapeSpec:
+      type: object
+      properties:
+        class:
+          type: string
+          enum: [H5S_NULL, H5S_SCALAR, H5S_SIMPLE]
+        dims:
+          description: Current extent per dimension. Omitted for H5S_NULL/H5S_SCALAR.
+          oneOf:
+            - type: integer
+            - type: array
+              items: { type: integer }
+        maxdims:
+          description: Maximum extent per dimension (a dim value of 0 means unlimited). Only present if the dataset is extensible.
+          oneOf:
+            - type: integer
+            - type: array
+              items: { type: integer }
+
+    CreationProperties:
+      type: object
+      description: HDF5 dataset creation properties.
+      properties:
+        layout:
+          type: object
+          properties:
+            class:
+              type: string
+              enum: [H5D_CHUNKED, H5D_CONTIGUOUS, H5D_COMPACT]
+            dims:
+              type: array
+              items: { type: integer }
+              description: Chunk dimensions, for H5D_CHUNKED.
+        fillValue: {}
+        allocTime:
+          type: string
+          enum: [H5D_ALLOC_TIME_DEFAULT, H5D_ALLOC_TIME_EARLY, H5D_ALLOC_TIME_INCR, H5D_ALLOC_TIME_LATE]
+        filters:
+          type: array
+          description: Chunk compression/transform filters, restricted to HSDS's supported filter set (e.g. gzip/deflate, shuffle, szip, bitshuffle, blosc-family filters).
+          items:
+            type: object
+            properties:
+              class: { type: string }
+              id: { type: integer }
+              name: { type: string }
+              level: { type: integer }
+
+    CreateObjectRequest:
+      type: object
+      description: Body for creating a group or committed datatype (and the common fields shared with dataset creation).
+      properties:
+        h5path:
+          type: string
+          description: Path (relative to parent_id, or the domain root) at which to link the new object. Missing intermediate groups require `implicit=1`.
+        parent_id:
+          type: string
+          description: Base group id that h5path is resolved relative to. Defaults to the domain root.
+        id:
+          type: string
+          description: Client-supplied object id (schema2 uuid) to use for the new object, instead of a server-generated one.
+        link:
+          type: object
+          description: Alternative to `h5path`/`parent_id` for placing a hard link to the new object at creation time.
+          properties:
+            id:
+              type: string
+              description: Group id to link the new object into.
+            name:
+              type: string
+              description: Link title to use.
+        attributes:
+          type: object
+          description: Attributes to create on the new object in the same request, keyed by name.
+          additionalProperties: { $ref: '#/components/schemas/Attribute' }
+        links:
+          type: object
+          description: Links to create on the new object (if it's a group) in the same request, keyed by title.
+          additionalProperties: { $ref: '#/components/schemas/LinkCreate' }
+        type:
+          description: Required for datatype creation; omitted for groups.
+          $ref: '#/components/schemas/TypeSpec'
+        creationProperties: { $ref: '#/components/schemas/CreationProperties' }
+
+    CreateDatasetRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreateObjectRequest'
+        - type: object
+          required: [type]
+          properties:
+            shape:
+              description: Defaults to scalar (H5S_SCALAR) if omitted.
+              $ref: '#/components/schemas/ShapeSpec'
+            value:
+              description: Initial data. The object's extent must map to exactly one chunk; this applies per-object and works the same whether this is a single create or one item of a batch (list) create.
+
+    Attribute:
+      type: object
+      required: [type]
+      description: |
+        Used both as the create request body (only `type`/`shape`/`value`
+        are meaningful there) and as a response shape, which varies by
+        context: attribute-listing responses (`GET`/`POST` on the
+        collection) include a single `href` string per item; the
+        single-attribute `GET .../attributes/{name}` response instead
+        includes `lastModified` (always equal to `created` - attributes
+        aren't otherwise versioned) and an `hrefs` array, and may include
+        `encoding` if the value was base64-encoded.
+      properties:
+        name: { type: string }
+        type: { $ref: '#/components/schemas/TypeSpec' }
+        shape: { $ref: '#/components/schemas/ShapeSpec' }
+        value: {}
+        created: { type: number }
+        lastModified:
+          type: number
+          description: Only present on the single-attribute GET response. Always equal to `created`.
+        encoding:
+          type: string
+          enum: [base64]
+          description: Only present if the value was returned base64-encoded.
+        href:
+          type: string
+          description: Only present as a list item within collection-level attribute responses.
+        hrefs:
+          description: Only present on the single-attribute GET response (in place of `href`).
+          $ref: '#/components/schemas/HrefList'
+
+    GroupObject:
+      type: object
+      properties:
+        id: { type: string }
+        root: { type: string }
+        domain: { type: string }
+        created: { type: number }
+        lastModified: { type: number }
+        linkCount: { type: integer }
+        attributeCount: { type: integer }
+        alias:
+          type: array
+          items: { type: string }
+          description: Present only when `getalias=1` was requested.
+        links:
+          type: array
+          description: Present only when `include_links=1` was requested.
+          items: { $ref: '#/components/schemas/Link' }
+        attributes:
+          type: array
+          description: Present only when `include_attrs=1` was requested.
+          items: { $ref: '#/components/schemas/Attribute' }
+        hrefs: { $ref: '#/components/schemas/HrefList' }
+
+    DatatypeObject:
+      type: object
+      properties:
+        id: { type: string }
+        root: { type: string }
+        domain: { type: string }
+        type: { $ref: '#/components/schemas/TypeSpec' }
+        created: { type: number }
+        lastModified: { type: number }
+        attributeCount: { type: integer }
+        alias:
+          type: array
+          items: { type: string }
+        attributes:
+          type: array
+          items: { $ref: '#/components/schemas/Attribute' }
+        hrefs: { $ref: '#/components/schemas/HrefList' }
+
+    DatasetObject:
+      type: object
+      properties:
+        id: { type: string }
+        root: { type: string }
+        domain: { type: string }
+        type: { $ref: '#/components/schemas/TypeSpec' }
+        shape: { $ref: '#/components/schemas/ShapeSpec' }
+        creationProperties: { $ref: '#/components/schemas/CreationProperties' }
+        layout:
+          type: object
+          description: Normally folded into `creationProperties.layout` instead. Can appear as a separate top-level key in deployments without a DN tier, where the raw stored object is returned as-is.
+        created: { type: number }
+        lastModified: { type: number }
+        attributeCount: { type: integer }
+        num_chunks:
+          type: integer
+          description: Present only when `verbose=1` is requested on a schema2 domain.
+        allocated_size:
+          type: integer
+          description: Present only when `verbose=1` is requested on a schema2 domain.
+        alias:
+          type: array
+          items: { type: string }
+        attributes:
+          type: array
+          items: { $ref: '#/components/schemas/Attribute' }
+        hrefs: { $ref: '#/components/schemas/HrefList' }
+
+  pathItems:
+    AttributesCollection:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+      get:
+        tags: [Attributes]
+        summary: List attributes on a group/dataset/datatype
+        parameters:
+          - name: IncludeData
+            in: query
+            schema: { type: boolean, default: false }
+            description: Include each attribute's `value` in the listing (by default only metadata is returned).
+          - name: pattern
+            in: query
+            schema: { type: string }
+            description: Glob pattern filter on attribute name.
+          - name: encoding
+            in: query
+            schema: { type: string, enum: [base64] }
+            description: Encode binary attribute values as base64 in the JSON response.
+          - name: ignore_nan
+            in: query
+            schema: { type: boolean, default: false }
+          - name: follow_links
+            in: query
+            schema: { type: boolean, default: false }
+            description: |
+              Recursively list attributes of sub-groups too. Changes the
+              response shape: `attributes` becomes a map of object id to
+              either that object's attribute list, or `{"status": <code>}`
+              if that particular object couldn't be crawled.
+          - name: max_data_size
+            in: query
+            schema: { type: integer }
+            description: Cap on the size of attribute data included with `IncludeData`.
+          - name: CreateOrder
+            in: query
+            schema: { type: boolean, default: false }
+            description: Return attributes in creation order instead of name order.
+          - $ref: '#/components/parameters/LimitParam'
+          - $ref: '#/components/parameters/MarkerParam'
+        responses:
+          '200':
+            description: |
+              List of attributes (or, with `follow_links`, a map of object
+              id to attribute list/status - see the `follow_links`
+              parameter).
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    attributes:
+                      oneOf:
+                        - type: array
+                          items: { $ref: '#/components/schemas/Attribute' }
+                        - type: object
+                          additionalProperties: {}
+                    hrefs: { $ref: '#/components/schemas/HrefList' }
+          '400': { $ref: '#/components/responses/BadRequest' }
+          '403': { $ref: '#/components/responses/Forbidden' }
+          '404': { $ref: '#/components/responses/NotFound' }
+      post:
+        tags: [Attributes]
+        summary: Batch-fetch specific named attributes
+        description: |
+          Despite the POST verb this is a read operation, analogous to
+          `POST .../links` - it lets a client fetch a specific set of
+          attributes by name in one round trip instead of listing all of
+          them, optionally across multiple objects via `obj_ids`.
+        parameters:
+          - name: IncludeData
+            in: query
+            schema: { type: boolean, default: true }
+          - name: encoding
+            in: query
+            schema: { type: string, enum: [base64] }
+          - name: max_data_size
+            in: query
+            schema: { type: integer }
+          - name: ignore_nan
+            in: query
+            schema: { type: boolean, default: false }
+            description: Passed as a query parameter, not a body property (despite the `ignore_nan` body key some older references show).
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [attr_names]
+                properties:
+                  attr_names:
+                    type: array
+                    items: { type: string }
+                    description: Attribute names to fetch. Note the body key is `attr_names`, not `attributes`.
+                  obj_ids:
+                    description: Fetch from multiple objects in one call - either a list of object ids (same `attr_names` for each), or a map of object id to a list of names for that object.
+                    oneOf:
+                      - type: array
+                        items: { type: string }
+                      - type: object
+                        additionalProperties:
+                          type: array
+                          items: { type: string }
+        responses:
+          '200':
+            description: |
+              The requested attributes (names not present on the object are
+              simply omitted). When `obj_ids` targets more than one object,
+              `attributes` is instead a map of object id to that object's
+              attribute list.
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    attributes:
+                      oneOf:
+                        - type: array
+                          items: { $ref: '#/components/schemas/Attribute' }
+                        - type: object
+                          additionalProperties:
+                            type: array
+                            items: { $ref: '#/components/schemas/Attribute' }
+                    hrefs: { $ref: '#/components/schemas/HrefList' }
+          '400': { $ref: '#/components/responses/BadRequest' }
+          '403': { $ref: '#/components/responses/Forbidden' }
+      put:
+        tags: [Attributes]
+        summary: Batch-create attributes
+        parameters:
+          - name: replace
+            in: query
+            schema: { type: boolean, default: false }
+            description: Allow overwriting attributes that already exist under the same name (see the `200`-vs-`201`/`409` note below).
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [attributes]
+                properties:
+                  attributes:
+                    type: object
+                    additionalProperties: { $ref: '#/components/schemas/Attribute' }
+                    description: Map of attribute name to its type/shape/value definition.
+                  obj_ids:
+                    description: Create the same `attributes` map on multiple objects in one call - either a list of object ids, or a map of object id to a per-object attributes map.
+                    oneOf:
+                      - type: array
+                        items: { type: string }
+                      - type: object
+                        additionalProperties:
+                          type: object
+                          properties:
+                            attributes:
+                              type: object
+                              additionalProperties: { $ref: '#/components/schemas/Attribute' }
+        responses:
+          '200':
+            description: Every submitted attribute was byte-for-byte identical to an attribute that already existed under that name, so nothing was written.
+            content:
+              application/json:
+                schema: { type: object }
+          '201':
+            description: At least one attribute was newly created (or, with `replace=1`, overwritten).
+            content:
+              application/json:
+                schema: { type: object }
+          '400': { $ref: '#/components/responses/BadRequest' }
+          '403': { $ref: '#/components/responses/Forbidden' }
+          '409':
+            description: An attribute name already exists with different content and `replace` was not set.
+            content:
+              text/plain:
+                schema: { type: string, example: "409: Conflict" }
+      delete:
+        tags: [Attributes]
+        summary: Batch-delete attributes by name
+        parameters:
+          - name: attr_names
+            in: query
+            required: true
+            schema: { type: string }
+            description: Attribute names to delete, joined by `separator`.
+          - name: separator
+            in: query
+            schema: { type: string, default: "/" }
+            description: Delimiter used to split `attr_names` into individual attribute names.
+          - name: encoding
+            in: query
+            schema: { type: string, enum: [base64] }
+            description: Decode `attr_names` as base64 first, for names containing characters that can't otherwise be encoded in the delimited string.
+        responses:
+          '200':
+            description: Attribute(s) deleted.
+            content:
+              application/json:
+                schema: { type: object }
+          '400': { $ref: '#/components/responses/BadRequest' }
+          '403': { $ref: '#/components/responses/Forbidden' }
+          '404':
+            description: |
+              At least one requested name does not currently exist on the
+              object. Unlike some other batch-delete operations in this
+              API, deleting a name that was never present is NOT a no-op
+              here - it 404s. (Re-deleting a name already deleted earlier
+              in the same server session is a no-op, since the DN tracks
+              recently-deleted names in memory - but a name that was
+              simply never created 404s.)
+            content:
+              text/plain:
+                schema: { type: string, example: "404: Not Found" }
+
+    AttributeItem:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+      get:
+        tags: [Attributes]
+        summary: Get a single attribute (metadata and value)
+        parameters:
+          - name: IncludeData
+            in: query
+            schema: { type: boolean, default: true }
+            description: Include the attribute's `value`. Defaults to true here (unlike the collection GET, which defaults it to false) - set to false to fetch only metadata.
+          - name: encoding
+            in: query
+            schema: { type: string, enum: [base64] }
+          - name: ignore_nan
+            in: query
+            schema: { type: boolean, default: false }
+        responses:
+          '200':
+            description: Attribute.
+            content:
+              application/json:
+                schema: { $ref: '#/components/schemas/Attribute' }
+          '400': { $ref: '#/components/responses/BadRequest' }
+          '403': { $ref: '#/components/responses/Forbidden' }
+          '404': { $ref: '#/components/responses/NotFound' }
+      put:
+        tags: [Attributes]
+        summary: Create (or, with `replace=1`, overwrite) a single attribute
+        description: |
+          By default this only creates a new attribute (409 if the name
+          already exists with different content). Passing `?replace=1`
+          allows overwriting an existing attribute of the same name -
+          attributes are not strictly immutable, contrary to older
+          documentation of this endpoint.
+        parameters:
+          - name: replace
+            in: query
+            schema: { type: boolean, default: false }
+            description: Allow overwriting an existing attribute of this name.
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Attribute' }
+        responses:
+          '200':
+            description: The submitted attribute was byte-for-byte identical to the attribute that already existed under this name, so nothing was written.
+            content:
+              application/json:
+                schema: { type: object }
+          '201':
+            description: Attribute created (or, with `replace=1`, overwritten with different content).
+            content:
+              application/json:
+                schema: { type: object }
+          '400': { $ref: '#/components/responses/BadRequest' }
+          '403': { $ref: '#/components/responses/Forbidden' }
+          '409': { $ref: '#/components/responses/Conflict' }
+      delete:
+        tags: [Attributes]
+        summary: Delete a single attribute
+        responses:
+          '200':
+            description: Attribute deleted.
+            content:
+              application/json:
+                schema: { type: object }
+          '400': { $ref: '#/components/responses/BadRequest' }
+          '403': { $ref: '#/components/responses/Forbidden' }
+          '404': { $ref: '#/components/responses/NotFound' }
+
+    AttributeValue:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/DomainParam'
+        - $ref: '#/components/parameters/DomainHeader'
+        - $ref: '#/components/parameters/BucketParam'
+      get:
+        tags: [Attributes]
+        summary: Get just the value of an attribute
+        description: |
+          Content negotiation is supported: send `Accept: application/octet-stream`
+          to get the raw value as binary instead of the default JSON envelope.
+        parameters:
+          - name: encoding
+            in: query
+            schema: { type: string, enum: [base64] }
+          - name: ignore_nan
+            in: query
+            schema: { type: boolean, default: false }
+        responses:
+          '200':
+            description: Attribute value.
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    value: {}
+                    hrefs: { $ref: '#/components/schemas/HrefList' }
+              application/octet-stream:
+                schema: { type: string, format: binary }
+          '400': { $ref: '#/components/responses/BadRequest' }
+          '403': { $ref: '#/components/responses/Forbidden' }
+          '404': { $ref: '#/components/responses/NotFound' }
+      put:
+        tags: [Attributes]
+        summary: Update the value of an existing attribute
+        description: |
+          **This is the opposite of create** despite the resource's PUT
+          verb elsewhere in this API usually meaning "create": the
+          attribute must already exist - this 404s if it does not - and
+          the value is always overwritten in place (unconditionally, no
+          `replace` param needed or accepted).
+
+          The `type`/`shape` fields are NOT accepted from the request body
+          even though they may appear in older references - the existing
+          attribute's stored type/shape are reused, and anything sent for
+          `type`/`shape` here is silently ignored. Only `value` (or
+          `value`+`encoding: base64`) has any effect.
+
+          Accepts either a JSON body or, with
+          `Content-Type: application/octet-stream`, a raw binary value.
+
+          The response status is always `200`, even when the DN's
+          underlying write actually changed the stored value (which would
+          otherwise be `201`) - the real status is computed but discarded
+          before the SN's response is sent, so callers cannot distinguish
+          "value changed" from "value was already identical" via status
+          code here.
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [value]
+                properties:
+                  value: {}
+                  encoding:
+                    type: string
+                    enum: [base64]
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        responses:
+          '200':
+            description: Value updated (this status is returned unconditionally on success - see description).
+            content:
+              application/json:
+                schema: { type: object }
+          '400': { $ref: '#/components/responses/BadRequest' }
+          '403': { $ref: '#/components/responses/Forbidden' }
+          '404':
+            description: The attribute does not already exist. Unlike `PUT .../attributes/{name}`, this endpoint never creates a new attribute.
+            content:
+              text/plain:
+                schema: { type: string, example: "404: Not Found" }

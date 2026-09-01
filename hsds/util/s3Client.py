@@ -105,7 +105,7 @@ class S3Client:
                 log.debug(f"AWS_WEB_IDENTITY_TOKEN_FILE is: {token_file}")
         if "AWS_SESSION_TOKEN" in os.environ:
             self._aws_session_token = os.environ["AWS_SESSION_TOKEN"]
-            log.debug(f"got AWS_SESSION_TOKEN: {self._aws_session_token}")
+            log.debug("got AWS_SESSION_TOKEN")
 
         try:
             self._aws_no_sign_request = config.get("aws_s3_no_sign_request", False)

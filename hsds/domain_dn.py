@@ -16,10 +16,11 @@
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 from aiohttp.web import json_response
 
+from h5json.time_util import getNow
+
 from .util.authUtil import getAclKeys
 from .util.domainUtil import isValidDomain, getBucketForDomain
-from .util.idUtil import validateInPartition
-from .util.timeUtil import getNow
+from .util.nodeUtil import validateInPartition
 from .datanode_lib import get_metadata_obj, save_metadata_obj
 from .datanode_lib import delete_metadata_obj, check_metadata_obj
 from . import hsds_logger as log
@@ -134,8 +135,6 @@ async def PUT_Domain(request):
     now = getNow(app)
     domain_json["created"] = now
     domain_json["lastModified"] = now
-    # if "class" in body_json:
-    #    domain_json["class"] = body_json["class"]
 
     # write the domain json to S3 immediately so it will show up in a get
     # domains S3 scan

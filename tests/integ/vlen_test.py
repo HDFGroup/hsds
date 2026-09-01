@@ -13,18 +13,15 @@ import unittest
 import json
 import helper
 import numpy as np
-import sys
 
-sys.path.append("../..")
-from hsds.util.arrayUtil import arrayToBytes, bytesToArray
-from hsds.util.hdf5dtype import createDataType
+from h5json.hdf5dtype import createDataType
+from h5json.array_util import arrayToBytes, bytesToArray
 
 
 class VlenTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(VlenTest, self).__init__(*args, **kwargs)
         self.base_domain = helper.getTestDomainName(self.__class__.__name__)
-        print(self.base_domain)
         helper.setupDomain(self.base_domain)
         self.endpoint = helper.getEndpoint()
 
@@ -38,7 +35,7 @@ class VlenTest(unittest.TestCase):
         # main
 
     def testPutVLenInt(self):
-        # Test PUT value for 1d attribute with variable length int types
+        # Test PUT value for 1d dataset with variable length int types
         print("testPutVLenInt", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -123,7 +120,7 @@ class VlenTest(unittest.TestCase):
         self.assertEqual(value[1], [1, 2, 3, 4])
 
     def testPutVLenIntBinary(self):
-        # Test PUT value for 1d attribute with variable length int types using binary transfer
+        # Test PUT value for 1d dataset with variable length int types using binary transfer
         print("testPutVLenIntBinary", self.base_domain)
 
         count = 4
@@ -220,7 +217,7 @@ class VlenTest(unittest.TestCase):
         self.assertEqual(value[0], [1, 2, 3])
 
     def testPutVLen2DInt(self):
-        # Test PUT value for 1d attribute with variable length int types
+        # Test PUT value for 1d dataset with variable length int types
         print("testPutVLen2DInt", self.base_domain)
         nrow = 2
         ncol = 2
@@ -297,7 +294,7 @@ class VlenTest(unittest.TestCase):
         self.assertEqual(value[0][1], [1, 2])
 
     def testPutVLenString(self):
-        # Test PUT value for 1d attribute with variable length string types
+        # Test PUT value for 1d dataset with variable length string types
         print("testPutVLenString", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -367,7 +364,7 @@ class VlenTest(unittest.TestCase):
         self.assertEqual(value[1], data[3])
 
     def testPutVLenStringBinary(self):
-        # Test PUT value for 1d attribute with variable length string types
+        # Test PUT value for 1d dataset with variable length string types
         print("testPutVLenStringBinary", self.base_domain)
 
         headers = helper.getRequestHeaders(domain=self.base_domain)

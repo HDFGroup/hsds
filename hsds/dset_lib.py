@@ -11,22 +11,31 @@
 ##############################################################################
 
 import asyncio
+from asyncio import IncompleteReadError
+
 import math
 import numpy as np
 
 from aiohttp.client_exceptions import ClientError
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPInternalServerError
-from .util.arrayUtil import getNumpyValue
-from .util.boolparser import BooleanParser
-from .util.dsetUtil import isNullSpace, getDatasetLayout, getDatasetLayoutClass, get_slices
-from .util.dsetUtil import getChunkLayout, getSelectionShape, getShapeDims
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict
+from aiohttp.web_exceptions import HTTPInternalServerError, HTTPRequestEntityTooLarge
+
+from h5json.hdf5dtype import createDataType, getItemSize, getDtypeItemSize
+from h5json.array_util import getNumpyValue, bytesToArray
+from h5json.objid import isSchema2Id, getS3Key, getObjId
+from h5json.shape_util import isNullSpace, getShapeDims, getRank, getMaxDims
+from h5json.shape_util import isExtensible, getShapeClass
+from h5json.dset_util import getChunkDims, getDatasetLayout, getDatasetLayoutClass
+from h5json.query_util import arrayQuery
+from h5json import selections
+
+from .util.nodeUtil import getDataNodeUrl
+from .util.dsetUtil import get_slices
 from .util.chunkUtil import getChunkCoordinate, getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
-from .util.chunkUtil import getQueryDtype, get_chunktable_dims
-from .util.hdf5dtype import createDataType, getItemSize
-from .util.httpUtil import http_delete, http_put
-from .util.idUtil import getDataNodeUrl, isSchema2Id, getS3Key, getObjId
+from .util.chunkUtil import get_chunktable_dims
+from .util.httpUtil import http_delete, http_put, request_read
 from .util.rangegetUtil import getHyperChunkFactors
 from .util.storUtil import getStorKeys
 
@@ -115,26 +124,19 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         log.debug(msg)
         return
 
-    chunk_dims = None
-    if "layout" in dset_json:
-        dset_layout = dset_json["layout"]
-        log.debug(f"dset_json layout: {dset_layout}")
-        if "dims" in dset_layout:
-            chunk_dims = dset_layout["dims"]
+    chunk_dims = getChunkDims(dset_json)
     if chunk_dims is None:
         msg = "no chunk dimensions set in dataset layout"
         log.error(msg)
         raise HTTPInternalServerError()
 
-    datashape = dset_json["shape"]
     datatype = dset_json["type"]
     if isNullSpace(dset_json):
         log.error("H5S_NULL shape class used with reference chunk layout")
         raise HTTPInternalServerError()
-    dims = getShapeDims(datashape)
-    rank = len(dims)
-    # chunk_ids = list(chunkinfo_map.keys())
-    # chunk_ids.sort()
+    dims = getShapeDims(dset_json)
+    rank = getRank(dset_json)
+
     num_chunks = len(chunk_ids)
     msg = f"getChunkLocations for dset: {dset_id} bucket: {bucket} "
     msg += f"rank: {rank} num chunk_ids: {num_chunks}"
@@ -227,16 +229,16 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         # get  state for dataset from DN.
         chunktable_json = await getDsetJson(app, chunktable_id, bucket=bucket)
         # log.debug(f"chunktable_json: {chunktable_json}")
-        chunktable_dims = getShapeDims(chunktable_json["shape"])
-        chunktable_layout = chunktable_json["layout"]
-        if chunktable_layout.get("class") == "H5D_CHUNKED_REF_INDIRECT":
-            # We don't support recursive chunked_ref_indirect classes
-            msg = "chunktable layout: H5D_CHUNKED_REF_INDIRECT is invalid"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
+        chunktable_dims = getShapeDims(chunktable_json)
 
         if len(chunktable_dims) != rank:
             msg = "Rank of chunktable should be same as the dataset"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+        if getDatasetLayoutClass(chunktable_json) == "H5D_CHUNKED_REF_INDIRECT":
+            # We don't support recursive chunked_ref_indirect classes
+            msg = "chunktable layout: H5D_CHUNKED_REF_INDIRECT is invalid"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
@@ -364,7 +366,7 @@ def get_chunk_selections(chunk_map, chunk_ids, slices, dset_json):
         log.debug("no slices set, returning")
         return  # nothing to do
     log.debug(f"slices: {slices}")
-    layout = getChunkLayout(dset_json)
+    layout = getChunkDims(dset_json)
     for chunk_id in chunk_ids:
         if chunk_id in chunk_map:
             item = chunk_map[chunk_id]
@@ -381,47 +383,19 @@ def get_chunk_selections(chunk_map, chunk_ids, slices, dset_json):
         item["data_sel"] = data_sel
 
 
-def getParser(query, dtype):
-    """ get query BooleanParser.  If query contains variables that
-       arent' part of the data type, throw a HTTPBadRequest exception. """
-
-    # separate out the where clause if any
-    if query.startswith("where"):
-        where_in = query
-        expr = None
-    else:
-        n = query.find(" where ")
-        if n > 0:
-            where_in = query[(n + 1):]
-            expr = query[:n]
-        else:
-            where_in = None
-            expr = query
-
-    if where_in:
-        log.debug(f"got where in clause: {where_in}")
-        # TBD: do full syntax check on this
-
-    if not expr:
-        # just a where clause
-        return None
-
+def validateQuery(query, dtype):
+    """ Validate that the given query string is syntactically valid and
+    only references fields present in dtype, by running it against a
+    trivial array with h5json.query_util.arrayQuery (the same engine
+    used to actually execute the query at the DN). Raises HTTPBadRequest
+    if the query is malformed or references an invalid field. """
+    dummy_arr = np.zeros((1,), dtype=dtype)
     try:
-        parser = BooleanParser(expr)
-    except Exception:
-        msg = f"query: {expr} is not valid"
+        arrayQuery(query, dummy_arr)
+    except (TypeError, ValueError) as e:
+        msg = f"query: {query} is not valid: {e}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-
-    field_names = set(dtype.names)
-    variables = parser.getVariables()
-    for variable in variables:
-        if variable not in field_names:
-            msg = f"query variable {variable} not valid"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-
-    return parser
 
 
 async def getSelectionData(
@@ -433,8 +407,10 @@ async def getSelectionData(
     points=None,
     query=None,
     query_update=None,
+    query_indices=False,
     bucket=None,
-    limit=0
+    limit=0,
+    only_chunk_ids=None,
 ):
     """Read selected slices and return numpy array"""
     log.debug("getSelectionData")
@@ -442,20 +418,25 @@ async def getSelectionData(
         log.error("getSelectionData - expected either slices or points to be set")
         raise HTTPInternalServerError()
 
-    layout = getChunkLayout(dset_json)
+    layout = getChunkDims(dset_json)
 
     chunkinfo = {}
 
     if slices is not None:
-        num_chunks = getNumChunks(slices, layout)
-        log.debug(f"num_chunks: {num_chunks}")
+        if only_chunk_ids is not None:
+            # caller already knows exactly which chunk(s) to target -
+            # used by doQueryUpdate to process one chunk at a time
+            chunk_ids = only_chunk_ids
+        else:
+            num_chunks = getNumChunks(slices, layout)
+            log.debug(f"num_chunks: {num_chunks}")
 
-        max_chunks = int(config.get("max_chunks_per_request", default=1000))
-        if num_chunks > max_chunks:
-            msg = f"num_chunks over {max_chunks} limit, but will attempt to fetch with crawler"
-            log.warn(msg)
+            max_chunks = int(config.get("max_chunks_per_request", default=1000))
+            if num_chunks > max_chunks:
+                msg = f"num_chunks over {max_chunks} limit, but will attempt to fetch with crawler"
+                log.warn(msg)
 
-        chunk_ids = getChunkIds(dset_id, slices, layout)
+            chunk_ids = getChunkIds(dset_id, slices, layout)
     else:
         # points - already checked it is not None
         num_points = len(points)
@@ -505,12 +486,115 @@ async def getSelectionData(
         points=points,
         query=query,
         query_update=query_update,
+        query_indices=query_indices,
         limit=limit,
         chunk_map=chunkinfo,
         bucket=bucket,
     )
 
     return arr
+
+
+def _globalIndexToChunkId(dset_id, coord, layout):
+    """ convert a (rank,) global index coordinate array into the id of
+    the chunk that contains it """
+    rank = len(layout)
+    if rank == 1:
+        point = int(coord[0])
+    else:
+        point = tuple(int(c) for c in coord)
+    return getChunkId(dset_id, point, layout)
+
+
+async def doQueryUpdate(
+    app,
+    dset_id,
+    dset_json,
+    slices=None,
+    query=None,
+    query_update=None,
+    bucket=None,
+    limit=0,
+):
+    """ Perform a query-based conditional update (PUT .../value with a
+    query param), correctly handling `limit` when the matching elements
+    span more than one chunk.
+
+    Each chunk's own query-update is only aware of its own matches, so
+    naively sending the same `limit` to every relevant chunk (as a plain
+    getSelectionData call would) can update more than `limit` elements in
+    total. Instead:
+      1. Find the (up to `limit`) global indices that would be updated,
+         without modifying anything yet (a read-only query_indices pass).
+      2. If there turn out to be fewer matches than `limit` (the limit
+         isn't actually binding), or no limit was given at all, process
+         every relevant chunk in the normal (parallel, unlimited) way.
+      3. Otherwise, process chunks one at a time, in dataset order,
+         decrementing the remaining budget by the number of elements
+         *actually* updated in each chunk (not the number predicted in
+         step 1) - the data may have changed between the read-only pass
+         and the update, so this stays correct under concurrent writes.
+         Stops as soon as the budget is exhausted (often just the first
+         chunk).
+
+    Returns the array of global indices that were actually updated. """
+    if not limit or limit <= 0:
+        # no limit - nothing to coordinate, process all chunks at once
+        return await getSelectionData(
+            app, dset_id, dset_json, slices=slices, query=query,
+            query_update=query_update, bucket=bucket, limit=0,
+        )
+
+    target_indices = await getSelectionData(
+        app, dset_id, dset_json, slices=slices, query=query,
+        query_indices=True, bucket=bucket, limit=limit,
+    )
+
+    if len(target_indices) == 0:
+        # no matches at all
+        return target_indices
+
+    if len(target_indices) < limit:
+        # fewer matches than the limit overall - limit isn't actually
+        # binding, so there's no over-application risk in processing
+        # every relevant chunk in one (parallel) pass
+        return await getSelectionData(
+            app, dset_id, dset_json, slices=slices, query=query,
+            query_update=query_update, bucket=bucket, limit=0,
+        )
+
+    # limit may be binding and could span multiple chunks - process
+    # chunks one at a time, in order, so `limit` is respected globally
+    layout = getChunkDims(dset_json)
+    ordered_chunk_ids = []
+    seen_chunk_ids = set()
+    for coord in target_indices:
+        chunk_id = _globalIndexToChunkId(dset_id, coord, layout)
+        if chunk_id not in seen_chunk_ids:
+            seen_chunk_ids.add(chunk_id)
+            ordered_chunk_ids.append(chunk_id)
+
+    remaining = limit
+    results = []
+    for chunk_id in ordered_chunk_ids:
+        if remaining <= 0:
+            break
+        chunk_result = await getSelectionData(
+            app, dset_id, dset_json, slices=slices, query=query,
+            query_update=query_update, bucket=bucket, limit=remaining,
+            only_chunk_ids=[chunk_id],
+        )
+        if len(chunk_result) > 0:
+            results.append(chunk_result)
+        # use the actual count returned (not the step-1 prediction),
+        # since the data may have been modified concurrently
+        remaining -= len(chunk_result)
+
+    if not results:
+        return target_indices[:0]
+    if len(results) == 1:
+        return results[0]
+    return np.concatenate(results, axis=0)
 
 
 async def doReadSelection(
@@ -522,6 +606,7 @@ async def doReadSelection(
     points=None,
     query=None,
     query_update=None,
+    query_indices=False,
     chunk_map=None,
     bucket=None,
     limit=0,
@@ -546,14 +631,18 @@ async def doReadSelection(
         select_dtype = dset_dtype
     if query is None:
         query_dtype = None
+    elif query_update is not None or query_indices:
+        # PUT_Chunk's query-update handling, and GET_Chunk's query_indices
+        # mode, both return the global dataset indices of matching
+        # elements, as (n, rank) coordinate tuples
+        log.debug(f"query: {query} limit: {limit} query_update: {query_update}")
+        query_dtype = np.dtype("i8")
+        query_rank = getRank(dset_json)
     else:
+        # GET_Chunk's query handling (h5json.query_util.arrayQuery) returns
+        # the matching values themselves, typed as select_dtype
         log.debug(f"query: {query} limit: {limit}")
-        query_dtype = getQueryDtype(select_dtype)
-        if query_dtype:
-            if len(query_dtype) < 10:
-                log.debug(f"query_dtype: {query_dtype}")
-            else:
-                log.debug(f"query_dtype {len(query_dtype)}")
+        query_dtype = select_dtype
 
     # create array to hold response data
     arr = None
@@ -566,7 +655,7 @@ async def doReadSelection(
         np_shape = None
     elif slices is not None:
         log.debug(f"get np_shape for slices: {slices}")
-        np_shape = getSelectionShape(slices)
+        np_shape = slices.mshape
     else:
         log.error("doReadSelection - expected points or slices to be set")
         raise HTTPInternalServerError()
@@ -605,6 +694,7 @@ async def doReadSelection(
         slices=slices,
         query=query,
         query_update=query_update,
+        query_indices=query_indices,
         limit=limit,
         arr=arr,
         select_dtype=select_dtype,
@@ -629,7 +719,10 @@ async def doReadSelection(
             nrows = limit
         else:
             nrows = crawler._hits
-        arr = np.empty((nrows,), dtype=query_dtype)
+        if query_update is not None or query_indices:
+            arr = np.empty((nrows, query_rank), dtype=query_dtype)
+        else:
+            arr = np.empty((nrows,), dtype=query_dtype)
         start = 0
         for chunkid in chunk_ids:
             if chunkid not in chunk_map:
@@ -762,9 +855,8 @@ async def getAllocatedChunkIds(app, dset_id, bucket=None):
 async def extendShape(app, dset_json, nelements, axis=0, bucket=None):
     """ extend the shape of the dataset by nelements along given axis """
     dset_id = dset_json["id"]
-    datashape = dset_json["shape"]
-    dims = getShapeDims(datashape)
-    rank = len(dims)
+    dims = getShapeDims(dset_json)
+    rank = getRank(dset_json)
     log.info(f"extendShape of {dset_id} dims: {dims} by {nelements} on axis: {axis}")
     # do some sanity checks here
     if rank == 0:
@@ -782,16 +874,22 @@ async def extendShape(app, dset_json, nelements, axis=0, bucket=None):
     if bucket:
         params["bucket"] = bucket
     selection = None
+    new_dims = None
     try:
         shape_rsp = await http_put(app, req, data=body, params=params)
         log.info(f"got shape put rsp: {shape_rsp}")
         if "selection" in shape_rsp:
             selection = shape_rsp["selection"]
+        if "dims" in shape_rsp:
+            new_dims = tuple(shape_rsp["dims"])
     except HTTPConflict:
         log.warn("got 409 extending dataspace for PUT value")
         raise
-    if not selection:
+    if selection is None:
         log.error("expected to get selection in PUT shape response")
+        raise HTTPInternalServerError()
+    if new_dims is None:
+        log.error("expected dims in PUT shape response")
         raise HTTPInternalServerError()
 
     # selection should be in the format [:,n:m,:].
@@ -827,7 +925,9 @@ async def extendShape(app, dset_json, nelements, axis=0, bucket=None):
         slices.append(s)
 
     log.debug(f"extendShape returning slices: {slices}")
-    return slices
+    sel = selections.select(new_dims, tuple(slices))
+    log.debug(f"returning selection: {sel}")
+    return sel
 
 
 async def reduceShape(app, dset_json, shape_update, bucket=None):
@@ -839,11 +939,10 @@ async def reduceShape(app, dset_json, shape_update, bucket=None):
     log.info(f"reduceShape for {dset_id} to {shape_update}")
 
     # get the current shape dims
-    shape_orig = dset_json["shape"]
-    if shape_orig["class"] != "H5S_SIMPLE":
+    if getShapeClass(dset_json) != "H5S_SIMPLE":
         raise ValueError("reduceShape can only be called on simple datasets")
-    dims = shape_orig["dims"]
-    rank = len(dims)
+    dims = getShapeDims(dset_json)
+    rank = getRank(dset_json)
 
     # get the fill value
     arr = getFillValue(dset_json)
@@ -855,7 +954,12 @@ async def reduceShape(app, dset_json, shape_update, bucket=None):
         arr = np.zeros([1], dtype=dt, order="C")
 
     # and the chunk layout
-    layout = tuple(getChunkLayout(dset_json))
+    layout = getChunkDims(dset_json)
+
+    if not layout:
+        msg = f"no layout found for {dset_id}"
+        log.error(msg)
+        raise HTTPInternalServerError()
     log.debug(f"got layout: {layout}")
 
     # get all chunk ids for chunks that have been allocated
@@ -917,12 +1021,14 @@ async def reduceShape(app, dset_json, shape_update, bucket=None):
 
             log.debug(f"update {update_element_count} elements for dim {n}")
 
+            selection = selections.select(tuple(dims), tuple(slices))
+
             crawler = ChunkCrawler(
                 app,
                 update_ids,
                 dset_json=dset_json,
                 bucket=bucket,
-                slices=slices,
+                slices=selection,
                 arr=arr,
                 action="write_chunk_hyperslab",
             )
@@ -954,23 +1060,17 @@ async def updateShape(app, dset_json, shape_update, bucket=None):
     """ Update the current dataset shape """
 
     dset_id = dset_json["id"]
-    shape_orig = dset_json["shape"]
-    log.info(f"updateShape dset: {dset_id}: {shape_update}")
+    log.info(f"updateShape dset: {dset_id}")
 
     # verify that the extend request is valid
-    if shape_orig["class"] != "H5S_SIMPLE":
-        msg = "Unable to extend shape of datasets who are not H5S_SIMPLE"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-
-    if "maxdims" not in shape_orig:
+    if not isExtensible(dset_json):
         msg = "Dataset is not extensible"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    dims = shape_orig["dims"]
-    rank = len(dims)
-    maxdims = shape_orig["maxdims"]
+    dims = getShapeDims(dset_json)
+    rank = getRank(dset_json)
+    maxdims = getMaxDims(dset_json)
     log.debug(f"dims: {dims}, maxdims: {maxdims}")
     if shape_update and len(shape_update) != rank:
         msg = "Extent of update shape request does not match dataset sahpe"
@@ -992,7 +1092,7 @@ async def updateShape(app, dset_json, shape_update, bucket=None):
                 raise HTTPBadRequest(reason=msg)
             decreasing_dims.append(i)
         elif shape_update[i] > dims[i]:
-            if maxdims[i] != 0 and shape_update[i] > maxdims[i]:
+            if maxdims[i] not in (0, "H5S_UNLIMITED") and shape_update[i] > maxdims[i]:
                 msg = "Extension dimension can not be extended past max extent"
                 log.warn(msg)
                 raise HTTPConflict()
@@ -1053,3 +1153,184 @@ async def deleteAllChunks(app, dset_id, bucket=None):
         await removeChunks(app, chunk_ids, bucket=bucket)
     else:
         log.info(f"deleteAllChunks for {dset_id} - no chunks need deletion")
+
+
+async def doPointWrite(app,
+                       request,
+                       points=None,
+                       data=None,
+                       dset_json=None,
+                       bucket=None
+                       ):
+    """ write the given points to the dataset """
+
+    num_points = len(points)
+    log.debug(f"doPointWrite - num_points: {num_points}")
+    dset_id = dset_json["id"]
+    layout = getChunkDims(dset_json)
+    dims = getShapeDims(dset_json)
+    rank = getRank(dset_json)
+
+    chunk_dict = {}  # chunk ids to list of points in chunk
+
+    for pt_indx in range(num_points):
+        if rank == 1:
+            point = int(points[pt_indx])
+        else:
+            point_tuple = points[pt_indx]
+            point = []
+            for i in range(len(point_tuple)):
+                point.append(int(point_tuple[i]))
+        if rank == 1:
+            if point < 0 or point >= dims[0]:
+                msg = f"PUT Value point: {point} is not within the "
+                msg += "bounds of the dataset"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+        else:
+            if len(point) != rank:
+                msg = "PUT Value point value did not match dataset rank"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            for i in range(rank):
+                if point[i] < 0 or point[i] >= dims[i]:
+                    msg = f"PUT Value point: {point} is not within the "
+                    msg += "bounds of the dataset"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+        chunk_id = getChunkId(dset_id, point, layout)
+        # get the pt_indx element from the input data
+        value = data[pt_indx]
+        if chunk_id not in chunk_dict:
+            point_list = [point, ]
+            point_data = [value, ]
+            chunk_dict[chunk_id] = {"indices": point_list, "points": point_data}
+        else:
+            item = chunk_dict[chunk_id]
+            point_list = item["indices"]
+            point_list.append(point)
+            point_data = item["points"]
+            point_data.append(value)
+
+    num_chunks = len(chunk_dict)
+    log.debug(f"num_chunks: {num_chunks}")
+    max_chunks = int(config.get("max_chunks_per_request", default=1000))
+    if num_chunks > max_chunks:
+        msg = f"PUT value request with more than {max_chunks} chunks"
+        log.warn(msg)
+
+    chunk_ids = list(chunk_dict.keys())
+    chunk_ids.sort()
+
+    crawler = ChunkCrawler(
+        app,
+        chunk_ids,
+        dset_json=dset_json,
+        bucket=bucket,
+        points=chunk_dict,
+        action="write_point_sel",
+    )
+    await crawler.crawl()
+
+    crawler_status = crawler.get_status()
+
+    if crawler_status not in (200, 201):
+        msg = f"doPointWrite raising HTTPInternalServerError for status: {crawler_status}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+    else:
+        log.info("doPointWrite success")
+
+
+async def doHyperslabWrite(app,
+                           request,
+                           page_number=0,
+                           page=None,
+                           data=None,
+                           dset_json=None,
+                           select_dtype=None,
+                           bucket=None
+                           ):
+    """ write the given page selection to the dataset """
+    dset_id = dset_json["id"]
+    log.info(f"doHyperslabWrite on {dset_id} - page: {page_number} dset_json: {dset_json}")
+    type_json = dset_json["type"]
+
+    if select_dtype is not None:
+        item_size = getDtypeItemSize(select_dtype)
+    else:
+        item_size = getItemSize(type_json)
+    if item_size == "H5T_VARIABLE" and data is None:
+        msg = "unexpected call to doHyperslabWrite for variable length data"
+        log.error(msg)
+        raise HTTPInternalServerError()
+
+    layout = getChunkDims(dset_json)
+    log.debug(f"getNumChunks(page={page}, layout={layout})")
+    num_chunks = getNumChunks(page, layout)
+    log.debug(f"num_chunks: {num_chunks}")
+    max_chunks = int(config.get("max_chunks_per_request", default=1000))
+    if num_chunks > max_chunks:
+        msg = f"PUT value chunk count: {num_chunks} exceeds max_chunks: {max_chunks}"
+        log.warn(msg)
+    select_shape = page.mshape
+    log.debug(f"got select_shape: {select_shape} for page: {page_number}")
+
+    if data is None:
+        num_bytes = math.prod(select_shape) * item_size
+        log.debug(f"reading {num_bytes} from request stream")
+        # read page of data from input stream
+        try:
+            page_bytes = await request_read(request, count=num_bytes)
+        except HTTPRequestEntityTooLarge as tle:
+            msg = "Got HTTPRequestEntityTooLarge exception during "
+            msg += f"binary read: {tle}) for page: {page_number}"
+            log.warn(msg)
+            raise  # re-throw
+        except IncompleteReadError as ire:
+            msg = "Got asyncio.IncompleteReadError during binary "
+            msg += f"read: {ire} for page: {page_number}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"read {len(page_bytes)} for page: {page_number}")
+        try:
+            arr = bytesToArray(page_bytes, select_dtype, select_shape)
+        except ValueError as ve:
+            msg = f"bytesToArray value error for page: {page_number}: {ve}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        arr = data  # use array provided to function
+
+    try:
+        chunk_ids = getChunkIds(dset_id, page, layout)
+    except ValueError:
+        log.warn("getChunkIds failed")
+        raise HTTPInternalServerError()
+    if len(chunk_ids) < 10:
+        log.debug(f"chunk_ids: {chunk_ids}")
+    else:
+        log.debug(f"chunk_ids: {chunk_ids[:10]} ...")
+    if len(chunk_ids) > max_chunks:
+        msg = f"got {len(chunk_ids)} for page: {page_number}.  max_chunks: {max_chunks}"
+        log.warn(msg)
+
+    crawler = ChunkCrawler(
+        app,
+        chunk_ids,
+        dset_json=dset_json,
+        bucket=bucket,
+        slices=page,
+        arr=arr,
+        action="write_chunk_hyperslab",
+    )
+    await crawler.crawl()
+
+    crawler_status = crawler.get_status()
+
+    if crawler_status not in (200, 201):
+        msg = f"crawler failed for page: {page_number} with status: {crawler_status}"
+        log.error(msg)
+        raise HTTPInternalServerError()
+    else:
+        log.info("crawler write_chunk_hyperslab successful")

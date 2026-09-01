@@ -10,428 +10,74 @@
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
 
-from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPBadRequest
 import math
+import re
+
+from h5json.shape_util import getShapeDims
+from h5json.objid import isValidUuid
+from h5json.array_util import jsonToArray, bytesArrayToList
+from h5json import selections
 
 from .. import hsds_logger as log
-
-"""
-Filters that are known to HSDS.
-Format is:
-  FILTER_CODE, FILTER_ID, Name
-
-  H5Z_FILTER_FLETCHER32, H5Z_FILTER_SZIP, H5Z_FILTER_NBIT,
-  and H5Z_FILTER_SCALEOFFSET, are not currently supported.
-
-  Non-supported filters metadata will be stored, but are
-  not (currently) used for compression/decompression.
-"""
-
-FILTER_DEFS = (
-    ("H5Z_FILTER_NONE", 0, "none"),
-    ("H5Z_FILTER_DEFLATE", 1, "gzip"),  # aka as "zlib" for blosc
-    ("H5Z_FILTER_SHUFFLE", 2, "shuffle"),
-    ("H5Z_FILTER_FLETCHER32", 3, "fletcher32"),
-    ("H5Z_FILTER_SZIP", 4, "szip"),
-    ("H5Z_FILTER_NBIT", 5, "nbit"),
-    ("H5Z_FILTER_SCALEOFFSET", 6, "scaleoffset"),
-    ("H5Z_FILTER_LZF", 32000, "lzf"),
-    ("H5Z_FILTER_BLOSC", 32001, "blosclz"),
-    ("H5Z_FILTER_SNAPPY", 32003, "snappy"),
-    ("H5Z_FILTER_LZ4", 32004, "lz4"),
-    ("H5Z_FILTER_LZ4HC", 32005, "lz4hc"),
-    ("H5Z_FILTER_BITSHUFFLE", 32008, "bitshuffle"),
-    ("H5Z_FILTER_ZSTD", 32015, "zstd"),
-)
-
-COMPRESSION_FILTER_IDS = (
-    "H5Z_FILTER_DEFLATE",
-    "H5Z_FILTER_SZIP",
-    "H5Z_FILTER_SCALEOFFSET",
-    "H5Z_FILTER_LZF",
-    "H5Z_FILTER_BLOSC",
-    "H5Z_FILTER_SNAPPY",
-    "H5Z_FILTER_LZ4",
-    "H5Z_FILTER_LZ4HC",
-    "H5Z_FILTER_ZSTD",
-)
-
-COMPRESSION_FILTER_NAMES = (
-    "gzip",
-    "szip",
-    "lzf",
-    "blosclz",
-    "snappy",
-    "lz4",
-    "lz4hc",
-    "zstd",
-)
-
-CHUNK_LAYOUT_CLASSES = (
-    "H5D_CHUNKED",
-    "H5D_CHUNKED_REF",
-    "H5D_CHUNKED_REF_INDIRECT",
-    "H5D_CONTIGUOUS_REF",
-)
+from .chunkUtil import _toArraySlice, slice_stop, toNumpyIndex
 
 
-# copied from arrayUtil.py
-def isVlen(dt):
-    """
-    Return True if the type contains variable length elements
-    """
-    is_vlen = False
-    if len(dt) > 1:
-        names = dt.names
-        for name in names:
-            if isVlen(dt[name]):
-                is_vlen = True
-                break
-    else:
-        if dt.metadata and "vlen" in dt.metadata:
-            is_vlen = True
-    return is_vlen
-
-
-def getFilterItem(key):
-    """
-    Return filter code, id, and name, based on an id, a name or a code.
-    """
-
-    if key == "deflate":
-        key = "gzip"  # use gzip as equivalent
-    for item in FILTER_DEFS:
-        for i in range(3):
-            if key == item[i]:
-                return {"class": item[0], "id": item[1], "name": item[2]}
-    return None  # not found
-
-
-def getFilters(dset_json):
-    """Return list of filters, or empty list"""
-    if "creationProperties" not in dset_json:
-        return []
-    creationProperties = dset_json["creationProperties"]
-    if "filters" not in creationProperties:
-        return []
-    filters = creationProperties["filters"]
-    return filters
-
-
-def getCompressionFilter(filters):
-    """Return compression filter from filters, or None"""
-    for filter in filters:
-        if "class" not in filter:
-            msg = f"filter option: {filter} with no class key"
-            log.warn(msg)
-            continue
-        filter_class = filter["class"]
-        if filter_class in COMPRESSION_FILTER_IDS:
-            return filter
-        if all(
-            (
-                filter_class == "H5Z_FILTER_USER",
-                "name" in filter,
-                filter["name"] in COMPRESSION_FILTER_NAMES,
-            )
-        ):
-            return filter
-    return None
-
-
-def getShuffleFilter(filters):
-    """Return shuffle filter, or None"""
-    FILTER_CLASSES = ("H5Z_FILTER_SHUFFLE", "H5Z_FILTER_BITSHUFFLE")
-    for filter in filters:
-        log.debug(f"filter: {filter}")
-        if "class" not in filter:
-            log.warn(f"filter option: {filter} with no class key")
-            continue
-        filter_class = filter["class"]
-        if filter_class in FILTER_CLASSES:
-            log.debug(f"found filter: {filter}")
-            return filter
-
-    log.debug("Shuffle filter not used")
-    return None
-
-
-def getFilterOps(app, dset_id, filters, dtype=None, chunk_shape=None):
-    """Get list of filter operations to be used for this dataset"""
-    filter_map = app["filter_map"]
-
-    try:
-        if dset_id in filter_map:
-            log.debug(f"returning filter from filter_map for dset: {dset_id}")
-            return filter_map[dset_id]
-    except TypeError:
-        log.error(f"getFilterOps TypeError - dset_id: {dset_id} filter_map: {filter_map}")
-        raise
-
-    compressionFilter = getCompressionFilter(filters)
-    log.debug(f"got compressionFilter: {compressionFilter}")
-
-    filter_ops = {}
-
-    shuffleFilter = getShuffleFilter(filters)
-
-    if shuffleFilter and not isVlen(dtype):
-        shuffle_name = shuffleFilter["name"]
-        if shuffle_name == "shuffle":
-            filter_ops["shuffle"] = 1  # use regular shuffle
-        elif shuffle_name == "bitshuffle":
-            filter_ops["shuffle"] = 2  # use bitshuffle
-        else:
-            log.warn(f"unexpected shuffleFilter: {shuffle_name}")
-            filter_ops["shuffle"] = 0  # no shuffle
-    else:
-        filter_ops["shuffle"] = 0  # no shuffle
-
-    if compressionFilter:
-        if compressionFilter["class"] == "H5Z_FILTER_DEFLATE":
-            filter_ops["compressor"] = "zlib"  # blosc compressor
-        else:
-            if "name" in compressionFilter:
-                filter_ops["compressor"] = compressionFilter["name"]
-            else:
-                filter_ops["compressor"] = "lz4"  # default to lz4
-        if "level" not in compressionFilter:
-            filter_ops["level"] = 5  # medium level
-        else:
-            filter_ops["level"] = int(compressionFilter["level"])
-
-    if filter_ops:
-        # save the chunk shape and dtype
-        filter_ops["chunk_shape"] = chunk_shape
-        filter_ops["dtype"] = dtype
-        log.debug(f"save filter ops for {dset_id}")
-        filter_map[dset_id] = filter_ops  # save
-
-        return filter_ops
-    else:
-        return None
-
-
-def getDsetRank(dset_json):
-    """Get rank returning 0 for sclar or NULL datashapes"""
-    datashape = dset_json["shape"]
-    if datashape["class"] == "H5S_NULL":
-        return 0
-    if datashape["class"] == "H5S_SCALAR":
-        return 0
-    if "dims" not in datashape:
-        log.warn(f"expected to find dims key in shape_json: {datashape}")
-        return 0
-    dims = datashape["dims"]
-    rank = len(dims)
-    return rank
-
-
-def isNullSpace(dset_json):
-    """Return true if this dataset is a null dataspace"""
-    datashape = dset_json["shape"]
-    if datashape["class"] == "H5S_NULL":
-        return True
-    else:
-        return False
-
-
-def isScalarSpace(dset_json):
-    """ return true if this is a scalar dataset """
-    datashape = dset_json["shape"]
-    is_scalar = False
-    if datashape["class"] == "H5S_NULL":
-        is_scalar = False
-    elif datashape["class"] == "H5S_SCALAR":
-        is_scalar = True
-    else:
-        if "dims" not in datashape:
-            log.warn(f"expected to find dims key in shape_json: {datashape}")
-            is_scalar = False
-        else:
-            dims = datashape["dims"]
-            if len(dims) == 0:
-                # guess this properly be a H5S_SCALAR class
-                # but treat this as equivalent
-                is_scalar = True
-    return is_scalar
-
-
-def getHyperslabSelection(dsetshape, start=None, stop=None, step=None):
-    """
-    Get slices given lists of start, stop, step values
-
-    TBD: for step>1, adjust the slice to not extend beyond last
-        data point returned
-    """
-    rank = len(dsetshape)
-    if start:
-        if not isinstance(start, (list, tuple)):
-            start = [start]
-        if len(start) != rank:
-            msg = "Bad Request: start array length not equal to dataset rank"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        for dim in range(rank):
-            if start[dim] < 0 or start[dim] >= dsetshape[dim]:
-                msg = "Bad Request: start index invalid for dim: " + str(dim)
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-    else:
-        start = []
-        for dim in range(rank):
-            start.append(0)
-
-    if stop:
-        if not isinstance(stop, (list, tuple)):
-            stop = [stop]
-        if len(stop) != rank:
-            msg = "Bad Request: stop array length not equal to dataset rank"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        for dim in range(rank):
-            if stop[dim] <= start[dim] or stop[dim] > dsetshape[dim]:
-                msg = "Bad Request: stop index invalid for dim: " + str(dim)
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-    else:
-        stop = []
-        for dim in range(rank):
-            stop.append(dsetshape[dim])
-
-    if step:
-        if not isinstance(step, (list, tuple)):
-            step = [step]
-        if len(step) != rank:
-            msg = "Bad Request: step array length not equal to dataset rank"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        for dim in range(rank):
-            if step[dim] <= 0 or step[dim] > dsetshape[dim]:
-                msg = "Bad Request: step index invalid for dim: " + str(dim)
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-    else:
-        step = []
-        for dim in range(rank):
-            step.append(1)
-
-    slices = []
-
-    for dim in range(rank):
-
-        try:
-            s = slice(int(start[dim]), int(stop[dim]), int(step[dim]))
-        except ValueError:
-            msg = "Bad Request: invalid start/stop/step value"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-        slices.append(s)
-    return tuple(slices)
-
-
-def getSelectionShape(selection):
-    """Return the shape of the given selection.
-    Examples (selection -> returned shape):
-    [(3,7,1)] -> [4]
-    [(3, 7, 3)] -> [1]
-    [(44, 52, 1), (48,52,1)] -> [8, 4]
-    [[1,2,7]] ->
-    """
-    shape = []
-    rank = len(selection)
-    coordinate_extent = None
-    for i in range(rank):
-        s = selection[i]
-        if isinstance(s, slice):
-            extent = 0
-            if s.step and s.step > 1:
-                step = s.step
-            else:
-                step = 1
-            if s.stop > s.start:
-                extent = s.stop - s.start
-            if step > 1 and extent > 0:
-                extent = extent // step
-            if (s.stop - s.start) % step != 0:
-                extent += 1
-            shape.append(extent)
-        else:
-            # coordinate list
-            extent = len(s)
-            if coordinate_extent is None:
-                coordinate_extent = extent
-                shape.append(extent)
-            elif coordinate_extent != extent:
-                msg = "shape mismatch: indexing arrays could not be broadcast together "
-                msg += f"with shapes ({coordinate_extent},) ({extent},)"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-            else:
-                pass
-
-    return shape
-
-
-def getShapeDims(shape):
-    """
-    Get dims from a given shape json.  Return [1,] for Scalar datasets,
-    None for null dataspaces
-    """
-    dims = None
-    if isinstance(shape, int):
-        dims = [shape, ]
-    elif isinstance(shape, list) or isinstance(shape, tuple):
-        dims = shape  # can use as is
-    elif isinstance(shape, str):
-        # only valid string value is H5S_NULL
-        if shape != "H5S_NULL":
-            raise ValueError("Invalid value for shape")
-        dims = None
-    elif isinstance(shape, dict):
-        if "class" not in shape:
-            raise ValueError("'class' key not found in shape")
-        if shape["class"] == "H5S_NULL":
-            dims = None
-        elif shape["class"] == "H5S_SCALAR":
-            dims = [1,]
-        elif shape["class"] == "H5S_SIMPLE":
-            if "dims" not in shape:
-                raise ValueError("'dims' key expected for shape")
-            dims = shape["dims"]
-        else:
-            raise ValueError("Unknown shape class: {}".format(shape["class"]))
-    else:
-        raise ValueError(f"Unexpected shape class: {type(shape)}")
-
-    return dims
-
-
-def isSelectAll(slices, dims):
+def isSelectAll(selection, dims):
     """ return True if the selection covers the entire dataspace """
-    if len(slices) != len(dims):
+    if len(selection.shape) != len(dims):
         raise ValueError("isSelectAll - dimensions don't match")
-    is_all = True
-    for (s, dim) in zip(slices, dims):
-        if s.step is not None and s.step != 1:
-            is_all = False
-            break
-        if s.start != 0:
-            is_all = False
-            break
-        if s.stop != dim:
-            is_all = False
-            break
-    return is_all
+    if selection.select_type not in (selections.H5S_SEL_ALL, selections.H5S_SEL_HYPERSLABS):
+        return False
+    for dim in range(len(dims)):
+        if selection.step[dim] not in (None, 1):
+            return False
+        if selection.start[dim] != 0:
+            return False
+        if selection.count[dim] != dims[dim]:
+            return False
+    return True
+
+
+def isSelect(params, body=None):
+    """ return True if a select param is set in query params or in the
+    request body """
+    if "select" in params and params["select"]:
+        return True
+
+    if isinstance(body, dict):
+        if "select" in body and body["select"]:
+            return True
+        for key in ("start", "stop", "step"):
+            if key in body and body[key]:
+                return True
+    return False
+
+
+def getSelectParam(params, body=None):
+    """ return the select value (a query string or dict), if any, from
+    request query params or JSON body. Raises ValueError if select is
+    given in both. Returns None if no selection is specified. """
+    select = None
+    if body and isinstance(body, dict):
+        if "select" in body and body["select"]:
+            select = body.get("select")
+        elif "start" in body and "stop" in body:
+            select = body
+    if "select" in params and params["select"]:
+        if select is not None:
+            raise ValueError("select defined in both request body and query parameters")
+        select = params.get("select")
+    return select
 
 
 def getQueryParameter(request, query_name, body=None, default=None):
     """
-    Herlper function, get query parameter value from request.
+    Helper function, get query parameter value from request.
     If body is provided (as a JSON object) look in JSON and if not found
     look for query param.  Return default value (or None) if not found
     """
-    # as a convience, look up different capitilizations of query name
+    # as a convenience, look up different capitalizations of query name
     params = request.rel_url.query
     query_names = []
     query_names.append(query_name.lower())
@@ -566,11 +212,7 @@ def getSelectionList(select, dims):
 
     if select is None or len(select) == 0:
         """Return set of slices covering data space"""
-        slices = []
-        for extent in dims:
-            s = slice(0, extent, 1)
-            slices.append(s)
-        return tuple(slices)
+        return selections.select(tuple(dims), ...)
 
     # convert selection to list by dimension
     elements = _getSelectElements(select)
@@ -657,7 +299,16 @@ def getSelectionList(select, dims):
             select_list.append(s)
     # end dimension loop
     log.debug(f"select_list: {select_list}")
-    return tuple(select_list)
+    return selections.select(tuple(dims), tuple(select_list))
+
+
+def getSelect(params, dims, body=None):
+    """ return the requested selection region, if any, as a
+    selections.Selection, given the extents to select against.
+    If no selection is specified in query params or JSON body,
+    returns a selection covering the entire dims. """
+    select = getSelectParam(params, body=body)
+    return getSelectionList(select, dims)
 
 
 def get_slices(select, dset_json):
@@ -669,31 +320,36 @@ def get_slices(select, dset_json):
 
     dset_id = dset_json["id"]
     datashape = dset_json["shape"]
-    if datashape["class"] == "H5S_NULL":
+    shape_class = datashape["class"]
+    if shape_class == "H5S_NULL":
         msg = "Null space datasets can not be used as target for GET value"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
+    if shape_class == "H5S_SCALAR":
+        # treat as a synthetic rank-1, extent-1 space
+        slices = selections.select((1,), (slice(0, 1, 1),))
+    else:
+        dims = getShapeDims(datashape)  # throws 400 for HS_NULL dsets
 
-    try:
-        slices = getSelectionList(select, dims)
-    except ValueError:
-        msg = f"Invalid selection: {select} on dims: {dims} "
-        msg += f"for dataset: {dset_id}"
-        log.warn(msg)
-        raise
+        try:
+            slices = getSelectionList(select, dims)
+        except ValueError:
+            msg = f"Invalid selection: {select} on dims: {dims} "
+            msg += f"for dataset: {dset_id}"
+            log.warn(msg)
+            raise
     return slices
 
 
 def getSelectionPagination(select, dims, itemsize, max_request_size):
     """
-    Paginate a select tupe into multiple selects where each
-        select requires less than max_request_size bytes"""
+    Paginate a selections.Selection into multiple Selections where each
+        requires less than max_request_size bytes"""
     msg = f"getSelectionPagination - select: {select}, dims: {dims}, "
     msg += f"itemsize: {itemsize}, max_request_size: {max_request_size}"
     log.debug(msg)
-    select_shape = getSelectionShape(select)
+    select_shape = select.mshape
     log.debug(f"getSelectionPagination - select_shape: {select_shape}")
     select_size = math.prod(select_shape) * itemsize
     log.debug(f"getSelectionPagination - select_size: {select_size}")
@@ -702,18 +358,18 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
         log.debug("getSelectionPagination - not needed")
         return (select,)
 
+    slices = select.slices
+
     # get pagination dimension - first dimension with > 1 extent
     rank = len(dims)
     paginate_dim = None
     paginate_extent = None
     for i in range(rank):
-        s = select[i]
+        s = slices[i]
         if isinstance(s, slice):
+            s = _toArraySlice(s)
+            s = slice(s.start, slice_stop(s), s.step)
             paginate_extent = 0
-            if s.step and s.stop > 1:
-                step = s.step
-            else:
-                step = 1
             if s.stop > s.start:
                 paginate_extent = s.stop - s.start
         else:
@@ -735,11 +391,10 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
     page_size = select_size // page_count
     log.debug(f"getSelectionPagination - page_size: {page_size}")
 
-    s = select[paginate_dim]
-    # log.debug(f"pagination dim: {paginate_dim} select: {s} paginate_extent: {paginate_extent}")
-    # page_extent = -(-max_request_size // page_size)
-    # log.debug(f"getSelectionPagination - page_extent: {page_extent}")
-    # page_count = -(-paginate_extent // page_extent)
+    s = slices[paginate_dim]
+    if isinstance(s, slice):
+        s = _toArraySlice(s)
+        s = slice(s.start, slice_stop(s), s.step)
     if paginate_extent < page_count:
         msg = f"select pagination unable to paginate select dim: {paginate_dim} "
         msg += f"into {page_count} pages"
@@ -752,10 +407,7 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
     paginate_slices = []
     if isinstance(s, slice):
         start = s.start
-        if s.step and s.stop > 1:
-            step = s.step
-        else:
-            step = 1
+        step = s.step if s.step else 1
 
         while start < s.stop:
             stop = start + page_extent
@@ -778,7 +430,7 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
             log.debug(f"page_coord s[{start}:{stop}]")
             page_coord = s[start:stop]
             log.debug(f"page coords: {page_coord}")
-            paginate_slices.append(tuple(page_coord))
+            paginate_slices.append(list(page_coord))
             start = stop
     # adjust page count to number to actual pagination
     page_count = len(paginate_slices)
@@ -788,21 +440,125 @@ def getSelectionPagination(select, dims, itemsize, max_request_size):
     # dimension, original selection for each other dimension
     pagination = []
     for page in range(page_count):
-        s = []
+        page_args = []
         for i in range(rank):
             if i == paginate_dim:
-                s.append(paginate_slices[page])
+                page_args.append(paginate_slices[page])
             else:
-                s.append(select[i])
-        pagination.append(tuple(s))
+                page_args.append(slices[i])
+        pagination.append(selections.select(select.shape, tuple(page_args)))
     pagination = tuple(pagination)
     # log.debug(f"returning pagination: {pagination}")
     return pagination
 
 
+_REGIONREF_ATTR_RE = re.compile(r"^/(groups|datasets)/([^/]+)/attributes/([^/]+)$")
+_REGIONREF_DSET_RE = re.compile(r"^/datasets/([^/]+)$")
+
+
+def parseRegionRefParam(regionref):
+    """Parse a 'regionref' query param value into (collection, obj_id, attr_name).
+
+    Accepts exactly these forms:
+      /groups/<id>/attributes/<attr_name>
+      /datasets/<id>/attributes/<attr_name>
+      /datasets/<id>
+    attr_name is None for the bare dataset form.  Raises HTTPBadRequest for
+    any other form, or if the extracted id isn't a valid id for its
+    collection.
+    """
+    m = _REGIONREF_ATTR_RE.match(regionref)
+    if m:
+        collection, obj_id, attr_name = m.group(1), m.group(2), m.group(3)
+    else:
+        m = _REGIONREF_DSET_RE.match(regionref)
+        if not m:
+            msg = f"Invalid regionref path: {regionref}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        collection, obj_id, attr_name = "datasets", m.group(1), None
+
+    if not isValidUuid(obj_id, obj_class=collection):
+        msg = f"Invalid regionref object id: {obj_id}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    return collection, obj_id, attr_name
+
+
+def extractJsonArrayElement(shape, dtype, json_value, selection):
+    """Extract the single JSON-decoded element selected by selection (which
+    must select exactly one element) out of a JSON-encoded array value.
+
+    shape/dtype describe json_value as a whole (e.g. an attribute's own
+    shape/type); selection is a selections.Selection over that same shape.
+    Caller is responsible for having already verified selection.nselect == 1.
+    """
+    arr = jsonToArray(shape, dtype, json_value)
+    sub_arr = arr[toNumpyIndex(selection)]
+    return unwrapSingleElement(bytesArrayToList(sub_arr))
+
+
+def unwrapSingleElement(value):
+    """Peel away single-element list nesting down to the leaf value.
+    Used after extracting a selection known to select exactly one element,
+    where the surrounding shape may still be e.g. (1,) or (1, 1)."""
+    while isinstance(value, list):
+        if len(value) != 1:
+            raise ValueError("expected a single element")
+        value = value[0]
+    return value
+
+
+def regionRefSelectionToTargetSelection(ref_json, target_dims):
+    """Given a decoded region-reference JSON value ({"id": ...} optionally
+    with "select_type"/"selection" or "selection_dict"), reconstruct its
+    selection and re-apply it against target_dims (the shape of the dataset
+    the caller actually wants to read from).
+
+    Raises HTTPBadRequest if the region reference's selection rank doesn't
+    match len(target_dims), or if it selects outside target_dims' bounds.
+    A region reference with no selection info (just {"id": ...}) selects
+    the entire target dataset.
+    """
+    if "selection_dict" in ref_json:
+        ref_sel = selections.from_dict(ref_json["selection_dict"])
+    elif "select_type" in ref_json:
+        ref_sel = selections.from_region_json(ref_json)
+    else:
+        # no selection info - the whole (target) dataset is selected
+        return selections.select(tuple(target_dims), ...)
+
+    ref_rank = len(ref_sel.shape)
+    if ref_rank != len(target_dims):
+        msg = f"regionref selection rank ({ref_rank}) does not match "
+        msg += f"dataset rank ({len(target_dims)})"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    mins, maxs = ref_sel.bbox
+    if mins is None:
+        msg = "regionref selection is empty"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    for dim in range(ref_rank):
+        if maxs[dim] > target_dims[dim]:
+            msg = f"regionref selection for dim {dim} (extent {maxs[dim]}) "
+            msg += f"exceeds dataset extent ({target_dims[dim]})"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    try:
+        return selections.select(tuple(target_dims), ref_sel.slices)
+    except ValueError as ve:
+        msg = f"Invalid regionref selection: {ve}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+
 def getSliceQueryParam(sel):
     """
-    Helper method - set query parameter for given shape + selection
+    Helper method - set query parameter for given selections.Selection
 
     Query arg should be in the form: [<dim1>, <dim2>, ... , <dimn>]
         brackets are optional for one dimensional arrays.
@@ -812,12 +568,18 @@ def getSliceQueryParam(sel):
             start, end, and stride: n:m:s
     """
     # pass dimensions, and selection as query params
-    rank = len(sel)
+    slices = sel.slices
+    rank = len(slices)
     if rank > 0:
         sel_param = "["
         for i in range(rank):
-            s = sel[i]
+            s = slices[i]
             if isinstance(s, slice):
+                # sel.slices encodes stop as start + count, not a real
+                # coordinate for step > 1 dims; convert to a real coordinate
+                # stop before writing it out as a query param
+                s = _toArraySlice(s)
+                s = slice(s.start, slice_stop(s), s.step)
                 sel_param += str(s.start)
                 sel_param += ":"
                 sel_param += str(s.stop)
@@ -861,81 +623,8 @@ def setChunkDimQueryParam(params, dims):
             extent = dims[i]
             dim_param += str(extent)
         dim_param += "]"
-        log.debug("dim query param: {}".format(dim_param))
+        log.debug(f"dim query param: {dim_param}")
         params["dim"] = dim_param
-
-
-def getDsetMaxDims(dset_json):
-    """
-    Get maxdims from a given shape.  Return [1,] for Scalar datasets
-
-    Use with H5S_NULL datasets will throw a 400 error.
-    """
-    if "shape" not in dset_json:
-        log.error("No shape found in dset_json")
-        raise HTTPInternalServerError()
-    shape_json = dset_json["shape"]
-    maxdims = None
-    if shape_json["class"] == "H5S_NULL":
-        msg = "Expected shape class other than H5S_NULL"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    elif shape_json["class"] == "H5S_SCALAR":
-        maxdims = [
-            1,
-        ]
-    elif shape_json["class"] == "H5S_SIMPLE":
-        if "maxdims" in shape_json:
-            maxdims = shape_json["maxdims"]
-    else:
-        log.error("Unexpected shape class: {}".format(shape_json["class"]))
-        raise HTTPInternalServerError()
-    return maxdims
-
-
-def _getLayout(dset_json):
-    """Get layout for the given dataset json.  If layout is not found, try to
-    get it from creationProperties.
-    """
-    if "layout" in dset_json:
-        return dset_json["layout"]
-    elif "creationProperties" in dset_json and "layout" in dset_json["creationProperties"]:
-        return dset_json["creationProperties"]["layout"]
-    else:
-        return None
-
-
-def getLayoutClass(dset_json):
-    """Get layout class for the given dataset json.  Throw 500 if no layout found"""
-    layout_json = _getLayout(dset_json)
-    if layout_json is None:
-        log.error("No layout found in dset_json")
-        raise HTTPInternalServerError()
-    if "class" not in layout_json:
-        log.error(f"Expected class key for layout: {layout_json}")
-        raise HTTPInternalServerError()
-    return layout_json["class"]
-
-
-def getChunkLayout(dset_json):
-    """Get chunk layout.  Throw 500 if used with non-H5D_CHUNKED layout"""
-
-    layout_json = _getLayout(dset_json)
-    if layout_json is None:
-        log.error("No layout found in dset_json")
-        raise HTTPInternalServerError()
-    if "class" not in layout_json:
-        log.error(f"Expected class key for layout: {layout_json}")
-        raise HTTPInternalServerError()
-    layout_class = layout_json["class"]
-    if layout_class not in CHUNK_LAYOUT_CLASSES:
-        log.error(f"Unexpected shape layout: {layout_class}")
-        raise HTTPInternalServerError()
-    if "dims" not in layout_json:
-        log.error(f"Expected dims key in layout: {layout_json}")
-        raise HTTPInternalServerError()
-    layout = layout_json["dims"]
-    return layout
 
 
 def getChunkInitializer(dset_json):
@@ -987,102 +676,3 @@ def getPreviewQuery(dims):
             select += "0:1,"
     select += "]"
     return select
-
-
-def isExtensible(dims, maxdims):
-    """
-    Determine if the dataset can be extended
-    """
-    if maxdims is None or len(dims) == 0:
-        return False
-    rank = len(dims)
-    if len(maxdims) != rank:
-        raise ValueError("rank of maxdims does not match dataset")
-    for n in range(rank):
-        # TBD - shouldn't have H5S_UNLIMITED in any new files.
-        # Remove check once this is confirmed
-        if maxdims[n] in (0, "H5S_UNLIMITED") or maxdims[n] > dims[n]:
-            return True
-    return False
-
-
-def getDatasetLayout(dset_json):
-    """ Return layout json from creation property list or layout json """
-    layout = None
-
-    if "creationProperties" in dset_json:
-        cp = dset_json["creationProperties"]
-        if "layout" in cp:
-            layout = cp["layout"]
-    if not layout and "layout" in dset_json:
-        layout = dset_json["layout"]
-    if not layout:
-        log.warn(f"no layout for {dset_json}")
-    return layout
-
-
-def getDatasetLayoutClass(dset_json):
-    """ return layout class """
-    layout = getDatasetLayout(dset_json)
-    if layout and "class" in layout:
-        layout_class = layout["class"]
-    else:
-        layout_class = None
-    return layout_class
-
-
-def getChunkDims(dset_json):
-    """ get chunk shape for given dset_json """
-
-    layout = getDatasetLayout(dset_json)
-    if layout and "dims" in layout:
-        return layout["dims"]
-    else:
-        # H5D_COMPACT and H5D_CONTIGUOUS will not have a dims key
-        # Check the layout dict in dset_json to see if it's
-        # defined there
-        if "layout" in dset_json:
-            layout = dset_json["layout"]
-            if "dims" in layout:
-                return layout["dims"]
-    return None
-
-
-class ItemIterator:
-    """
-    Class to iterator through items in a selection
-    """
-
-    def __init__(self, selection):
-        self._selection = selection
-        self._rank = len(selection)
-        self._index = [0,] * self._rank
-        for i in range(self._rank):
-            s = self._selection[i]
-            self._index[i] = s.start
-
-    def __iter__(self):
-        return self
-
-    def next(self):
-        if self._index[0] >= self._selection[0].stop:
-            # ran past last item, end iteration
-            raise StopIteration()
-        dim = self._rank - 1
-
-        index = [0, ] * self._rank
-        for i in range(self._rank):
-            index[i] = self._index[i]
-        while dim >= 0:
-            s = self._selection[dim]
-            self._index[dim] += s.step
-            if self._index[dim] < s.stop:
-                if self._rank == 1:
-                    index = index[0]
-                return index
-            if dim > 0:
-                self._index[dim] = s.start
-            dim -= 1
-        if self._rank == 1:
-            index = index[0]  # return int, not list
-        return index

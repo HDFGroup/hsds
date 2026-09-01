@@ -20,19 +20,21 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPGone, HTTPC
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
-from .util.idUtil import isValidUuid
+from h5json.objid import isValidUuid
+from h5json.time_util import getNow
+from h5json.link_util import validateLinkName, getLinkClass, isEqualLink
+
 from .util.globparser import globmatch
-from .util.linkUtil import validateLinkName, getLinkClass, isEqualLink
 from .util.domainUtil import isValidBucketName
-from .util.timeUtil import getNow
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
+from . import config
 from . import hsds_logger as log
 
 
 def _index(items, marker, create_order=False):
     """Locate the leftmost value exactly equal to x"""
     if create_order:
-        # list is not ordered, juse search linearly
+        # list is not ordered, just search linearly
         for i in range(len(items)):
             if items[i] == marker:
                 return i
@@ -74,7 +76,7 @@ async def GET_Links(request):
     log.debug(f"GET_Links params: {params}")
     group_id = get_obj_id(request)
     log.info(f"GET links: {group_id}")
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
@@ -154,6 +156,10 @@ async def GET_Links(request):
         link = copy(link_dict[title])
         log.debug(f"link list[{i}: {link}")
         link["title"] = title
+        if link.get("h5domain"):
+            # deprecated key, replace with file
+            link["file"] = link["h5domain"]
+            del link["h5domain"]
         link_list.append(link)
 
     resp_json = {"links": link_list}
@@ -170,7 +176,7 @@ async def POST_Links(request):
     group_id = get_obj_id(request)
     log.info(f"POST_Links: {group_id}")
 
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
@@ -216,6 +222,7 @@ async def POST_Links(request):
             log.info(f"Link name {title} not found in group: {group_id}")
             continue
         link_json = links[title]
+        log.debug(f"POST Links got link_json: {link_json}")
         item = {}
         if "class" not in link_json:
             log.warn(f"expected to find class key for link: {title}")
@@ -243,15 +250,19 @@ async def POST_Links(request):
                 log.warn(f"expected to find h5path for external link: {title}")
                 continue
             item["h5path"] = link_json["h5path"]
-            if "h5domain" not in link_json:
-                log.warn(f"expted to find h5domain for external link: {title}")
+            if "h5domain" in link_json:
+                item["file"] = link_json["h5domain"]
+            elif "file" in link_json:
+                item["file"] = link_json["file"]
+            else:
+                log.warn(f"expected to find h5domain or file for external link: {title}")
                 continue
-            item["h5domain"] = link_json["h5domain"]
         else:
             log.warn(f"unexpected to link class {link_class} for link: {title}")
             continue
 
         item["title"] = title
+        log.debug(f"adding link item: {item}")
 
         link_list.append(item)
 
@@ -284,8 +295,10 @@ async def PUT_Links(request):
     params = request.rel_url.query
     group_id = get_obj_id(request)
     log.info(f"PUT links: {group_id}")
+    now = getNow(app)
+    max_timestamp_drift = int(config.get("max_timestamp_drift", default=300))
 
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         log.error(f"Unexpected group_id: {group_id}")
         raise HTTPInternalServerError()
 
@@ -364,11 +377,16 @@ async def PUT_Links(request):
         link_delete_set = deleted_links[group_id]
     else:
         link_delete_set = set()
-
-    create_time = getNow(app)
-
     for title in new_links:
         item = items[title]
+        if item.get("created"):
+            create_time = item["created"]
+            log.debug(f"link {title} has create time: {create_time}")
+            if abs(create_time - now) > max_timestamp_drift:
+                log.warn(f"link {title} create time stale, ignoring")
+                create_time = now
+        else:
+            create_time = now
         item["created"] = create_time
         links[title] = item
         log.debug(f"added link {title}: {item}")
@@ -377,8 +395,7 @@ async def PUT_Links(request):
 
     if new_links:
         # update the group lastModified
-        group_json["lastModified"] = create_time
-        log.debug(f"tbd: group_json: {group_json}")
+        group_json["lastModified"] = now
 
         # write back to S3, save to metadata cache
         await save_metadata_obj(app, group_id, group_json, bucket=bucket)
@@ -405,7 +422,7 @@ async def DELETE_Links(request):
     group_id = get_obj_id(request)
     log.info(f"DELETE links: {group_id}")
 
-    if not isValidUuid(group_id, obj_class="group"):
+    if not isValidUuid(group_id, obj_class="groups"):
         msg = f"Unexpected group_id: {group_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

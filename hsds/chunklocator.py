@@ -1,17 +1,20 @@
 import sys
-import time
 import h5py
 import s3fs
 import numpy as np
 from . import config
 from . import hsds_logger as log
-from .util.arrayUtil import bytesArrayToList, getNumElements
-from .util.dsetUtil import getSelectionList, getSelectionShape
+
+from h5json.time_util import getNow
+from h5json.array_util import bytesArrayToList, getNumElements
+
+from .util.dsetUtil import getSelectionList
 
 
 def get_cmd_options():
     """ read command line options and return as dict """
-    required = ("fileuri", "h5path", "select")
+    required = ("fileuri", "h5path")
+    optional = ("select",)
     cmd_options = {}
     for option in required:
         val = config.getCmdLineArg(option)
@@ -20,6 +23,8 @@ def get_cmd_options():
             log.error(msg)
             sys.exit(-1)
         cmd_options[option] = val
+    for option in optional:
+        cmd_options[option] = config.getCmdLineArg(option)
     return cmd_options
 
 
@@ -132,18 +137,20 @@ def get_storage_info(dset, select=None):
     log.debug(f"using chunktable_dims: {chunktable_dims}")
 
     if select:
-        slices = getSelectionList(select, chunktable_dims)
+        selection = getSelectionList(select, chunktable_dims)
+        arr_shape = selection.mshape
+        slices = selection.slices
     else:
         slices = []
         for i in range(rank):
             slices.append(slice(0, chunktable_dims[i]))
+        arr_shape = tuple(chunktable_dims[i] for i in range(rank))
 
     log.debug(f"got slices: {slices}")
-    arr_shape = getSelectionShape(slices)
     log.debug(f"arr_shape: {arr_shape}")
 
     dtype = get_chunktable_dtype()
-    # initilize chunk table array
+    # initialize chunk table array
     chunkinfo_arr = np.zeros(arr_shape, dtype=dtype)
 
     dsid = dset.id
@@ -191,8 +198,11 @@ def main():
     log_format = config.get("log_format", default="text")
     kwargs = {"prefix": prefix, "timestamps": log_timestamps, "log_format": log_format}
     log.setLogConfig(log_level, **kwargs)
-    start_time = time.time()
+    start_time = getNow()
     log.info(f"chunklocator start: {start_time:.2f}")
+
+    # expected usage example:
+    # hsds-chunklocator --h5path=/dset --fileuri=/hdf5/hdf5test/small1dchunk.h5  --select [0:200]
 
     cmd_options = get_cmd_options()
     h5path = cmd_options["h5path"]
@@ -231,6 +241,6 @@ def main():
         sys.exit(1)
 
     log.info('done')
-    stop_time = time.time()
+    stop_time = getNow()
     log.info(f"chunklocator stop: {stop_time:.2f}")
     log.info(f"chunklocator elapsed: {(stop_time - start_time):.2f}")

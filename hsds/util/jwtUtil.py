@@ -71,7 +71,7 @@ def verifyBearerToken(app, token):
     if provider not in ("azure", "google"):
         log.debug(f"Bearer authorization, using openid_url: {openid_url}")
 
-    log.debug(f"token: {token}")
+    log.debug(f"got bearer token, {len(token)} chars")
 
     try:
         token_header = jwt.get_unverified_header(token)
@@ -198,7 +198,7 @@ def verifyBearerToken(app, token):
             log.debug(f"claim: {name} not found in bearer token")
 
     if not username:
-        log.warn("unable to retreive username from bearer token")
+        log.warn("unable to retrieve username from bearer token")
         raise HTTPUnauthorized()
 
     exp = None

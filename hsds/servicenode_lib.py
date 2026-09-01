@@ -15,25 +15,37 @@
 
 import asyncio
 import json
+import numpy as np
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPGone, HTTPConflict
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
+
 from aiohttp.client_exceptions import ClientOSError, ClientError
 from aiohttp import ClientResponseError
 
+from h5json.array_util import encodeData, decodeData, bytesToArray, bytesArrayToList
+from h5json.array_util import jsonToArray
+from h5json.objid import getCollectionForId, createObjId, getRootObjId
+from h5json.objid import isSchema2Id, getS3Key, isValidUuid
+from h5json.hdf5dtype import getBaseTypeJson, validateTypeItem, createDataType, getItemSize
+from h5json.shape_util import getShapeDims, getShapeClass, getShapeJson
+from h5json.dset_util import getChunkSize, generateLayout
+from h5json.dset_util import getDataSize, validateDatasetCreationProps
+from h5json.link_util import h5Join, validateLinkName, getLinkClass, getLinkFilePath
+from h5json.time_util import getNow
+
+from .util.nodeUtil import getDataNodeUrl
 from .util.authUtil import getAclKeys
-from .util.arrayUtil import encodeData
-from .util.idUtil import getDataNodeUrl, getCollectionForId, createObjId, getRootObjId
-from .util.idUtil import isSchema2Id, getS3Key, isValidUuid
-from .util.linkUtil import h5Join, validateLinkName, getLinkClass
-from .util.storUtil import getStorJSONObj, isStorObj
+from .util.linkUtil import getRequestLinks
+from .util.storUtil import getStorJSONObj, isStorObj, getSupportedFilters
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
 from .util.domainUtil import getBucketForDomain, verifyRoot, getLimits
 from .util.storUtil import getCompressors
-from .basenode import getVersion
 
+from .basenode import getVersion
 from . import hsds_logger as log
+from . import config
 
 
 async def getDomainJson(app, domain, reload=False):
@@ -104,7 +116,7 @@ async def getDomainJson(app, domain, reload=False):
     return domain_json
 
 
-async def getDomainResponse(app, domain_json, bucket=None, verbose=False):
+async def getDomainResponse(app, domain_json, bucket=None, verbose=False, getobjs=False):
     """ construct JSON response for domain request """
     rsp_json = {}
     if "root" in domain_json:
@@ -176,6 +188,13 @@ async def getDomainResponse(app, domain_json, bucket=None, verbose=False):
         rsp_json["num_chunks"] = num_chunks
         rsp_json["num_linked_chunks"] = num_linked_chunks
         rsp_json["md5_sum"] = md5_sum
+
+    if getobjs and "root" in domain_json:
+        root_id = domain_json["root"]
+        domain_objs = await getDomainObjs(app, root_id, bucket=bucket)
+        if domain_objs:
+            log.debug(f"returning {len(domain_objs)} domain objects for root_id: {root_id}")
+            rsp_json["domain_objs"] = domain_objs
 
     # pass back config parameters the client may care about
 
@@ -436,7 +455,12 @@ async def getLink(app, group_id, title, bucket=None):
     return link_json
 
 
-async def putLink(app, group_id, title, tgt_id=None, h5path=None, h5domain=None, bucket=None):
+async def putLink(app, group_id, title,
+                  tgt_id=None,
+                  h5path=None,
+                  h5domain=None,
+                  bucket=None,
+                  created=None):
     """ create a new link.  Return 201 if this is a new link,
     or 200 if it's a duplicate of an existing link. """
 
@@ -456,7 +480,9 @@ async def putLink(app, group_id, title, tgt_id=None, h5path=None, h5domain=None,
     if h5path:
         link_json["h5path"] = h5path
     if h5domain:
-        link_json["h5domain"] = h5domain
+        link_json["file"] = h5domain
+    if created:
+        link_json["created"] = created
 
     try:
         link_class = getLinkClass(link_json)
@@ -526,8 +552,7 @@ async def putLinks(app, group_id, items, bucket=None):
     """ create a new links.  Return 201 if any item is a new link,
     or 200 if it's a duplicate of an existing link. """
 
-    isValidUuid(group_id, obj_class="group")
-    group_json = None
+    isValidUuid(group_id, obj_class="groups")
 
     # validate input
     for title in items:
@@ -540,25 +565,23 @@ async def putLinks(app, group_id, items, bucket=None):
             raise HTTPBadRequest(reason="invalid link")
 
         if link_class == "H5L_TYPE_HARD":
+            if "id" not in item:
+                msg = "expected id key for hard link class"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
             tgt_id = item["id"]
-            isValidUuid(tgt_id)
-            # for hard links, verify that the referenced id exists and is in
-            # this domain
-            ref_json = await getObjectJson(app, tgt_id, bucket=bucket)
-            if not group_json:
-                # just need to fetch this once
-                group_json = await getObjectJson(app, group_id, bucket=bucket)
-            if ref_json["root"] != group_json["root"]:
-                msg = "Hard link must reference an object in the same domain"
+            try:
+                isValidUuid(tgt_id)
+            except ValueError:
+                msg = f"invalid object id: {tgt_id}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
 
     # ready to add links now
     req = getDataNodeUrl(app, group_id)
     req += "/groups/" + group_id + "/links"
-    log.debug(f"PUT links - PUT request: {req}")
+    log.debug(f"PUT links {len(items)} items - PUT request: {req}")
     params = {"bucket": bucket}
-
     data = {"links": items}
 
     put_rsp = await http_put(app, req, data=data, params=params)
@@ -637,7 +660,7 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
                 raise HTTPBadRequest(reason=msg)
 
             # find domain object is stored under
-            domain = link_json["h5domain"]
+            domain = getLinkFilePath(link_json)
 
             if domain.startswith("hdf5:/"):
                 # strip off prefix
@@ -834,8 +857,32 @@ async def getRootInfo(app, root_id, bucket=None):
     return info_json
 
 
+async def getDomainObjs(app, root_id, bucket=None):
+    """ Return domain objects if available for this root id """
+    log.debug(f"getDomainObjs {root_id}")
+
+    s3_key = getS3Key(root_id)
+
+    parts = s3_key.split("/")
+    # dset_key is in the format  db/<root>/d/<dset>/.dataset.json
+    # get the key for the root info object as: db/<root>/.summary.json
+    if len(parts) != 3:
+        log.error(f"Unexpected s3key format: {s3_key}")
+        return None
+
+    summary_key = f"db/{parts[1]}/.summary.json"
+
+    try:
+        summary_json = await getStorJSONObj(app, summary_key, bucket=bucket)
+    except HTTPNotFound:
+        log.warn(f".summary.json not found for key: {summary_key}")
+        return None
+
+    return summary_json
+
+
 async def doFlush(app, root_id, bucket=None):
-    """return wnen all DN nodes have wrote any pending changes to S3"""
+    """return wnen all DN nodes have wrote any pending changes to S3 """
     log.info(f"doFlush {root_id}")
     params = {"flush": 1}
     if bucket:
@@ -885,6 +932,245 @@ async def doFlush(app, root_id, bucket=None):
     else:
         log.info("doFlush no fails, returning dn ids")
         return dn_ids
+
+
+async def getTypeFromRequest(app, body, obj_id=None, bucket=None):
+    """ return a type json from the request body """
+    if "type" not in body:
+        msg = "expected type in body"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    datatype = body["type"]
+
+    if isinstance(datatype, str) and datatype.startswith("t-"):
+        # Committed type - fetch type json from DN
+        ctype_id = datatype
+        log.debug(f"got ctypeid: {ctype_id}")
+        ctype_json = await getObjectJson(app, ctype_id, bucket=bucket)
+        log.debug(f"ctype {ctype_id}: {ctype_json}")
+        root_id = getRootObjId(obj_id)
+        if ctype_json["root"] != root_id:
+            msg = "Referenced committed datatype must belong in same domain"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        datatype = ctype_json["type"]
+        # add the ctype_id to the type
+        datatype["id"] = ctype_id
+    elif isinstance(datatype, str):
+        try:
+            # convert predefined type string (e.g. "H5T_STD_I32LE") to
+            # corresponding json representation
+            datatype = getBaseTypeJson(datatype)
+        except TypeError:
+            msg = "PUT attribute with invalid predefined type"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    try:
+        validateTypeItem(datatype)
+    except KeyError as ke:
+        msg = f"KeyError creating type: {ke}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    except TypeError as te:
+        msg = f"TypeError creating type: {te}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    except ValueError as ve:
+        msg = f"ValueError creating type: {ve}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    return datatype
+
+
+def getShapeFromRequest(body):
+    """ get shape json from request body """
+    shape_json = {}
+    if "shape" in body:
+        shape_body = body["shape"]
+        shape_class = None
+        if isinstance(shape_body, dict) and "class" in shape_body:
+            shape_class = shape_body["class"]
+        elif isinstance(shape_body, str):
+            shape_class = shape_body
+        if shape_class:
+            if shape_class == "H5S_NULL":
+                shape_json["class"] = "H5S_NULL"
+                if isinstance(shape_body, dict) and "dims" in shape_body:
+                    msg = "can't include dims with null shape"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+                if isinstance(shape_body, dict) and "value" in shape_body:
+                    if shape_body["value"] is not None:
+                        msg = "can't have H5S_NULL shape with value"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+            elif shape_class == "H5S_SCALAR":
+                shape_json["class"] = "H5S_SCALAR"
+                if "dims" in shape_body:
+                    msg = "dimensions aren't valid for scalar attribute"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+            elif shape_class == "H5S_SIMPLE":
+                shape_json["class"] = "H5S_SIMPLE"
+                dims = getShapeDims(shape_body)
+                shape_json["dims"] = dims
+            else:
+                msg = f"Unknown shape class: {shape_class}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+        else:
+            # no class, interpret shape value as dimensions and
+            # use H5S_SIMPLE as class
+            if isinstance(shape_body, list) and len(shape_body) == 0:
+                shape_json["class"] = "H5S_SCALAR"
+            else:
+                shape_json["class"] = "H5S_SIMPLE"
+                dims = getShapeDims(shape_body)
+                shape_json["dims"] = dims
+    else:
+        shape_json["class"] = "H5S_SCALAR"
+
+    return shape_json
+
+
+async def getAttributeFromRequest(app, req_json, obj_id=None, bucket=None):
+    """ return attribute from given request json """
+    attr_item = {}
+    log.debug(f"getAttributeFromRequest req_json: {req_json} obj_id: {obj_id}")
+    attr_type = await getTypeFromRequest(app, req_json, obj_id=obj_id, bucket=bucket)
+    attr_shape = getShapeFromRequest(req_json)
+    attr_item = {"type": attr_type, "shape": attr_shape}
+    attr_value = getValueFromRequest(req_json, attr_type, attr_shape)
+    if attr_value is not None:
+        if isinstance(attr_value, bytes):
+            attr_value = encodeData(attr_value)  # store as base64
+            attr_item["encoding"] = "base64"
+        else:
+            # just store the JSON dict or primitive value
+            attr_item["value"] = attr_value
+    else:
+        attr_item["value"] = None
+
+    now = getNow()
+    if "created" in req_json:
+        created = req_json["created"]
+        # allow "pre-dated" attributes if the timestamp is within the last 10 seconds
+        predate_max_time = config.get("predate_max_time", default=10.0)
+        if now - created < predate_max_time:
+            attr_item["created"] = created
+        else:
+            msg = "stale created timestamp for attribute, ignoring "
+            msg += f"predate config: {predate_max_time:6.2f} "
+            msg += f"age: {(now - created):6.2f}"
+            log.warn(msg)
+    if "created" not in attr_item:
+        attr_item["created"] = now
+
+    return attr_item
+
+
+async def getAttributesFromRequest(app, req_json, obj_id=None, bucket=None):
+    """ read the given JSON dictionary and return dict of attribute json """
+
+    attr_items = {}
+    kwargs = {"obj_id": obj_id}
+    if bucket:
+        kwargs["bucket"] = bucket
+    if "attributes" in req_json:
+        attributes = req_json["attributes"]
+        if not isinstance(attributes, dict):
+            msg = f"expected list for attributes but got: {type(attributes)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        # read each attr_item and canonicalize the shape, type, verify value
+        for attr_name in attributes:
+            attr_json = attributes[attr_name]
+            attr_item = await getAttributeFromRequest(app, attr_json, **kwargs)
+            attr_items[attr_name] = attr_item
+    else:
+        log.debug(f"getAttributesFromRequest - no attribute defined in {req_json}")
+
+    return attr_items
+
+
+def getValueFromRequest(body, data_type, data_shape):
+    """ Get attribute value from request json """
+    dims = getShapeDims(data_shape)
+    if "value" in body and body["value"] is not None:
+        if dims is None:
+            msg = "Bad Request: data can not be included with H5S_NULL space"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        value = body["value"]
+        # validate that the value agrees with type/shape
+        arr_dtype = createDataType(data_type)  # np datatype
+        if len(dims) == 0:
+            np_dims = [1, ]
+        else:
+            np_dims = dims
+
+        if "encoding" in body:
+            encoding = body["encoding"]
+            log.debug(f"using encoding: {encoding}")
+            item_size = getItemSize(data_type)
+            if item_size == "H5T_VARIABLE":
+                msg = "base64 encoding is not support for variable length attributes"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            try:
+                data = decodeData(value)
+            except ValueError:
+                msg = "unable to decode data"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+            expected_byte_count = arr_dtype.itemsize * np.prod(dims)
+            if len(data) != expected_byte_count:
+                msg = f"expected: {expected_byte_count} but got: {len(data)}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+            # check to see if this works with our shape and type
+            try:
+                arr = bytesToArray(data, arr_dtype, np_dims)
+            except ValueError as e:
+                log.debug(f"data: {data}")
+                log.debug(f"type: {arr_dtype}")
+                log.debug(f"np_dims: {np_dims}")
+                msg = f"Bad Request: encoded input data doesn't match shape and type: {e}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+            value_json = None
+            # now try converting to JSON
+            try:
+                value_json = bytesArrayToList(arr)
+            except ValueError as err:
+                msg = f"Cannot decode bytes to list: {err}, will store as encoded bytes"
+                log.warn(msg)
+            if value_json:
+                log.debug("will store base64 input as json")
+                if data_shape["class"] == "H5S_SCALAR":
+                    # just use the scalar value
+                    value = value_json[0]
+                else:
+                    value = value_json  # return this
+            else:
+                value = data  # return bytes to signal that this needs to be encoded
+        else:
+            # verify that the input data matches the array shape and type
+            try:
+                jsonToArray(np_dims, arr_dtype, value)
+            except ValueError as e:
+                msg = f"Bad Request: input data doesn't match selection: {e}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+    else:
+        value = None
+
+    return value
 
 
 async def getAttributes(app, obj_id,
@@ -974,7 +1260,7 @@ async def putAttributes(app,
     req = getDataNodeUrl(app, obj_id)
     collection = getCollectionForId(obj_id)
     req += f"/{collection}/{obj_id}/attributes"
-    log.info(f"putAttribute: {req}")
+    log.info(f"putAttributes: {req}")
 
     params = {}
     if replace:
@@ -1045,99 +1331,372 @@ async def deleteObject(app, obj_id, bucket=None):
         del meta_cache[obj_id]  # remove from cache
 
 
-async def createObject(app,
-                       root_id=None,
-                       obj_type=None,
-                       obj_shape=None,
-                       layout=None,
-                       creation_props=None,
-                       bucket=None):
-    """ create a group, ctype, or dataset object and return object json
-        Determination on whether a group, ctype, or dataset is created is based on:
-            1) if obj_type and obj_shape are set, a dataset object will be created
-            2) if obj_type is set but not obj_shape, a  datatype object will be created
-            3) otherwise (type and shape are both None), a group object will be created
-        The layout parameter only applies to dataset creation
-    """
-    if obj_type and obj_shape:
-        collection = "datasets"
-    elif obj_type:
-        collection = "datatypes"
+def getCreateArgs(body,
+                  root_id=None,
+                  bucket=None,
+                  type=None,
+                  implicit=False,
+                  chunk_table=None,
+                  ignore_link=False):
+    """ get args for createObject from request body """
+
+    log.debug(f"getCreateArgs with body keys: {list(body.keys())}")
+    if ignore_link:
+        log.debug("getCreateArgs, ignore_link is set")
+
+    kwargs = {"bucket": bucket}
+    predate_max_time = config.get("predate_max_time", default=10.0)
+
+    parent_id = None
+    obj_id = None
+    h5path = None
+
+    if "parent_id" not in body:
+        parent_id = root_id
     else:
-        collection = "groups"
-    log.info(f"createObject for {collection} collection, root: {root_id}, bucket: {bucket}")
-    if obj_type:
-        log.debug(f"    obj_type: {obj_type}")
-    if obj_shape:
-        log.debug(f"    obj_shape: {obj_shape}")
-    if layout:
-        log.debug(f"    layout: {layout}")
-    if creation_props:
-        log.debug(f"    cprops: {creation_props}")
+        parent_id = body["parent_id"]
 
-    obj_id = createObjId(collection, rootid=root_id)
-    log.info(f"new obj id: {obj_id}")
-    obj_json = {"id": obj_id, "root": root_id}
-    if obj_type:
-        obj_json["type"] = obj_type
-    if obj_shape:
-        obj_json["shape"] = obj_shape
-    if layout:
-        obj_json["layout"] = layout
-    if creation_props:
-        obj_json["creationProperties"] = creation_props
-    log.debug(f"create {collection} obj, body: {obj_json}")
-    dn_url = getDataNodeUrl(app, obj_id)
-    req = f"{dn_url}/{collection}"
-    params = {"bucket": bucket}
-    rsp_json = await http_post(app, req, data=obj_json, params=params)
+    if "h5path" in body:
+        h5path = body["h5path"]
+        # normalize the h5path
+        if h5path.startswith("/"):
+            if parent_id == root_id:
+                # just adjust the path to be relative
+                h5path = h5path[1:]
+            else:
+                msg = f"PostCrawler expecting relative h5path, but got: {h5path}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
 
-    return rsp_json
+        if h5path.endswith("/"):
+            h5path = h5path[:-1]  # makes iterating through the links a bit easier
 
+    if "link" in body:
+        if "h5path" in body:
+            msg = "'link' key in body can't be used with h5path"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        # if ignore_link is set, parent_links will be created post object creation
+        link_body = body["link"]
+        log.debug(f"link_body: {link_body}")
+        if "id" in link_body and not ignore_link:
+            parent_id = link_body["id"]
+        if "name" in link_body:
+            link_title = link_body["name"]
+            try:
+                # will throw exception if there's a slash in the name
+                validateLinkName(link_title)
+            except ValueError:
+                msg = f"invalid link title: {link_title}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
 
-async def createObjectByPath(app,
-                             parent_id=None,
-                             h5path=None,
-                             implicit=False,
-                             obj_type=None,
-                             obj_shape=None,
-                             layout=None,
-                             creation_props=None,
-                             bucket=None):
+        if parent_id and link_title:
+            log.debug(f"parent id: {parent_id}, link_title: {link_title}")
+            if not ignore_link:
+                h5path = link_title  # just use the link name as the h5path
+                log.debug(f"set h5path to {link_title}")
 
-    """ create an object at the designated path relative to the parent.
-    If implicit is True, make any intermediate groups needed in the h5path. """
+    if parent_id and h5path:
+        # these are used by createObjectByPath
+        kwargs["parent_id"] = parent_id
+        kwargs["implicit"] = implicit
+        kwargs["h5path"] = h5path
+    else:
+        kwargs["root_id"] = root_id
 
-    if not parent_id:
-        msg = "no parent_id given for createObjectByPath"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    if not h5path:
-        msg = "no h5path given for createObjectByPath"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    log.debug(f"createObjectByPath - parent_id: {parent_id}, h5path: {h5path}")
-
-    root_id = getRootObjId(parent_id)
-
-    if h5path.startswith("/"):
-        if parent_id == root_id:
-            # just adjust the path to be relative
-            h5path = h5path[1:]
-        else:
-            msg = f"createObjectByPath expecting relative h5path, but got: {h5path}"
+    if "id" in body:
+        obj_id = body["id"]
+        if not isValidUuid(obj_id):
+            msg = f"Invalid id: {obj_id}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
 
-    if h5path.endswith("/"):
-        h5path = h5path[:-1]  # makes iterating through the links a bit easier
+        kwargs["obj_id"] = obj_id
+        log.debug(f"createObject will use client id: {obj_id}")
 
-    if not h5path:
-        msg = "h5path for createObjectByPath invalid"
+    if "creationProperties" in body:
+        creation_props = body["creationProperties"]
+        # validate after we've checked for shape and type
+    else:
+        creation_props = {}
+    kwargs["creation_props"] = creation_props
+
+    if "attributes" in body:
+        attrs = body["attributes"]
+        if not isinstance(attrs, dict):
+            msg = f"expected dict for for attributes, but got: {type(attrs)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"createObject attributes: {attrs}")
+
+        # tbd: validate attributes
+        kwargs["attrs"] = attrs
+
+    if "links" in body:
+        body_links = body["links"]
+        log.debug(f"got links for new group: {body_links}")
+        try:
+            links = getRequestLinks(body["links"], predate_max_time=predate_max_time)
+        except ValueError:
+            msg = "invalid link item sent in request"
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"adding links to createObject request: {links}")
+        kwargs["links"] = links
+
+    if type:
+        kwargs["type"] = type
+        type_json = type
+    elif "type" in body:
+        type_json = body["type"]
+        if isinstance(type_json, str):
+            try:
+                # convert predefined type string (e.g. "H5T_STD_I32LE") to
+                # corresponding json representation
+                type_json = getBaseTypeJson(type_json)
+                log.debug(f"got type: {type_json}")
+            except TypeError:
+                msg = f"POST with invalid predefined type: {type_json}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+    else:
+        type_json = None
+
+    if type_json:
+        try:
+            validateTypeItem(type_json)
+        except KeyError as ke:
+            msg = f"KeyError creating type: {ke}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        except TypeError as te:
+            msg = f"TypeError creating type: {te}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        except ValueError as ve:
+            msg = f"ValueError creating type: {ve}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        kwargs["type"] = type_json
+    else:
+        pass  # no type
+    return kwargs
+
+
+def genLayout(shape_json, type_json, has_filters=False):
+    """ create a chunked or contiguous layout based on shape and itemsize """
+
+    min_chunk_size = int(config.get("min_chunk_size"))
+    max_chunk_size = int(config.get("max_chunk_size"))
+    max_chunks_per_folder = int(config.get("max_chunks_per_folder", default=0))
+    kwargs = {"chunk_min": min_chunk_size, "chunk_max": max_chunk_size}
+    max_chunks_per_folder = int(config.get("max_chunks_per_folder"))
+    if max_chunks_per_folder > 0:
+        kwargs["max_chunks_per_folder"] = max_chunks_per_folder
+    if has_filters:
+        kwargs["chunks"] = True  # force a chunked layout to support compression
+
+    layout_json = generateLayout(shape_json, type_json, **kwargs)
+    return layout_json
+
+
+def getDatasetCreateArgs(body,
+                         root_id=None,
+                         bucket=None,
+                         type=None,
+                         implicit=False,
+                         ignore_link=False):
+
+    """ get args for createDataset from request body """
+
+    # call getCreateArgs for group, datatype objects, then fill in for dataset specific options
+    kwargs = getCreateArgs(body,
+                           root_id=root_id,
+                           bucket=bucket,
+                           type=type,
+                           implicit=implicit,
+                           ignore_link=ignore_link)
+
+    if "type" not in kwargs:
+        msg = "no type specified for create dataset"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
-    obj_json = None
+    type_json = kwargs["type"]
+    #
+    # Validate shape if present
+    #
+
+    # will return scalar shape if no shape key in body
+    dims = ()  # default to scalar shape
+    maxdims = None
+    if "shape" in body:
+        body_shape = body["shape"]
+        if isinstance(body_shape, int):
+            dims = [body_shape, ]
+        elif isinstance(body_shape, str):
+            # only valid string value is H5S_NULL or H5S_SCALAR
+            if body_shape == "H5S_NULL":
+                dims = None  # use None for null space
+            elif body_shape == "H5S_SCALAR":
+                pass  # keep empty tuple for scalar dims
+            else:
+                msg = f"invalid value for 'shape' key: {body_shape}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+        elif isinstance(body_shape, (list, tuple)):
+            dims = body_shape
+        else:
+            msg = f"Unexpected type for 'shape' key: {body_shape}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+    if "maxdims" in body:
+        maxdims = body["maxdims"]
+        if isinstance(maxdims, int):
+            maxdims = [maxdims,]
+
+    try:
+        shape_json = getShapeJson(dims, maxdims=maxdims)
+    except (TypeError, ValueError) as e:
+        if maxdims is None:
+            msg = f"Invalid dimensions for dataset: {dims}"
+        else:
+            msg = f"Invalid dims: {dims}/maxdims: {maxdims} for dataset"
+        log.warn(f"Error in getShapeJson: {e}, msg: {msg}")
+        raise HTTPBadRequest(reason=msg)
+
+    shape_class = getShapeClass(shape_json)
+    shape_dims = getShapeDims(shape_json)
+    log.debug(f"shape_class: {shape_class}, shape_dims: {shape_dims}")
+
+    log.debug(f"got createArgs: {list(kwargs.keys())}")
+
+    kwargs["shape"] = shape_json
+
+    # get layout for dataset creation
+    log.debug("getting dataset creation settings")
+    min_chunk_size = int(config.get("min_chunk_size"))
+    max_chunk_size = int(config.get("max_chunk_size"))
+    type_json = kwargs["type"]
+
+    item_size = getItemSize(type_json)
+    if item_size == "H5T_VARIABLE":
+        item_size = config.get("default_vlen_type_size", default=128)
+    if shape_dims is None:
+        dset_size = 0
+    else:
+        dset_size = getDataSize(shape_dims, item_size)
+
+    if "creationProperties" in body:
+        creation_props = body["creationProperties"]
+    else:
+        creation_props = None
+    layout_json = None
+    chunk_dims = None
+    has_filters = False
+
+    if creation_props:
+        log.debug(f"POST_Dataset creation props: {creation_props}")
+        try:
+            validateDatasetCreationProps(creation_props, type_json=type_json, shape=shape_json)
+        except (KeyError, TypeError, ValueError) as e:
+            msg = f"Provided creation properties are invalid: {e}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"create_props after validation: {creation_props}")
+
+        if "filters" in creation_props:
+            # check that the given filters are supported by HSDS
+            filters = creation_props["filters"]
+            supported_filters = getSupportedFilters()
+            log.debug(f"supported filters: {supported_filters}")
+            for filter_item in filters:
+                if filter_item["name"] not in supported_filters:
+                    msg = f"Unsupported filter id: {filter_item['id']}"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+            if filters:
+                has_filters = True
+            creation_props["filters"] = filters
+        log.debug(f"post validate creation properties: {creation_props}")
+        if "layout" in creation_props:
+            layout_json = creation_props["layout"]
+    else:
+        creation_props = {}
+
+    if "layout" in creation_props:
+        layout_json = creation_props["layout"]
+        # layout_json was validated in validateDatasetCreationProps, but issue
+        # a warning if the chunk size is outside suggested range
+        if "dims" in layout_json:
+            chunk_dims = layout_json["dims"]
+            # log warning if the chunk shape if chunk size is too small or too big
+            chunk_size = getChunkSize(chunk_dims, item_size)
+            if chunk_size < min_chunk_size:
+                msg = f"chunk size: {chunk_size} less than recommended min size: {min_chunk_size}"
+                log.warn(msg)
+            elif chunk_size > max_chunk_size:
+                msg = f"chunk size: {chunk_size} greater than recommended "
+                msg += f"max size: {max_chunk_size}"
+                log.debug(msg)
+        else:
+            # log warning if contiguous layout used with too large datadset
+            if dset_size > max_chunk_size:
+                msg = f"dataset larger than recommended {max_chunk_size} for CONTIGUOUS storage"
+                log.warn(msg)
+    else:
+        # no layout, create one based on shape and itemsize
+        layout_json = genLayout(shape_json, type_json, has_filters=has_filters)
+        log.info(f"created chunk layout for new dset: {layout_json}")
+        creation_props["layout"] = layout_json
+
+    kwargs["creation_props"] = creation_props
+    log.debug(f"updated creation props: {creation_props}")
+
+    #
+    # get input data if present
+    #
+    if "value" in body and body["value"] and body["value"] is not None:
+        # data to initialize dataset included in request
+        if shape_json["class"] == "H5S_NULL":
+            msg = "null shape datasets can not have initial values"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+        input_data = body["value"]
+        msg = "input data doesn't match request type and shape"
+        dims = getShapeDims(shape_json)
+
+        arr_dtype = createDataType(type_json)
+
+        try:
+            input_arr = jsonToArray(dims, arr_dtype, input_data)
+        except ValueError:
+            log.warn(f"ValueError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        except TypeError:
+            log.warn(f"TypeError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        except IndexError:
+            log.warn(f"IndexError: {msg}")
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"got json arr: {input_arr.shape}")
+        kwargs["value"] = input_data
+
+    return kwargs
+
+
+async def createLinkFromParent(app, parent_id, h5path, tgt_id=None, bucket=None, implicit=False):
+    """ create link or links from parentId to tgt_id.
+        If implicit is True, create any intermediate group objects needed """
+
+    if not h5path:
+        log.warn("createLinkFromParent with null h5path")
+        return
+    log.info(f"createLinkFromParent, parent_id: {parent_id} h5path: {h5path} tgt_id={tgt_id}")
+    if implicit:
+        log.debug("createLinkFromParent - using implicit creation")
     link_titles = h5path.split("/")
     log.debug(f"link_titles: {link_titles}")
     for i in range(len(link_titles)):
@@ -1146,7 +1705,7 @@ async def createObjectByPath(app,
         else:
             last_link = False
         link_title = link_titles[i]
-        log.debug(f"createObjectByPath - processing link: {link_title}")
+        log.debug(f"createLinkFromParent - processing link: {link_title}")
         link_json = None
         try:
             link_json = await getLink(app, parent_id, link_title, bucket=bucket)
@@ -1162,7 +1721,7 @@ async def createObjectByPath(app,
                 raise HTTPConflict()
             # otherwise, verify that this is a hardlink
             if link_json.get("class") != "H5L_TYPE_HARD":
-                msg = "createObjectByPath - h5path must contain only hardlinks"
+                msg = "createLinkFromParent - h5path must contain only hard links"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
             parent_id = link_json["id"]
@@ -1175,31 +1734,236 @@ async def createObjectByPath(app,
                 log.debug(f"link: {link_title} to sub-group found")
         else:
             log.debug(f"link for link_title {link_title} not found")
-            if not last_link and not implicit:
+            if last_link:
+                # create a link to the new object
+                await putHardLink(app, parent_id, link_title, tgt_id=tgt_id, bucket=bucket)
+                parent_id = tgt_id  # new parent
+            elif implicit:
+                # create a new group object
+                log.info(f"creating intermediate group object for: {link_title}")
+                kwargs = {"parent_id": parent_id, "bucket": bucket}
+                grp_id = createObjId("groups", root_id=getRootObjId(parent_id))
+                kwargs["obj_id"] = grp_id
+                # createObject won't call back to this function since we haven't set the h5path
+                await createObject(app, **kwargs)
+                # create a link to the subgroup
+                await putHardLink(app, parent_id, link_title, tgt_id=grp_id, bucket=bucket)
+                parent_id = grp_id  # new parent
+            else:
                 if len(link_titles) > 1:
-                    msg = f"createObjectByPath failed: not all groups in {h5path} exist"
+                    msg = f"createLinkFromParent failed: not all groups in {h5path} exist"
                 else:
-                    msg = f"createObjectByPath failed: {h5path} does not exist"
+                    msg = f"createLinkFromParent failed: {h5path} does not exist"
                 log.warn(msg)
                 raise HTTPNotFound(reason=msg)
-            # create the group or group/datatype/dataset for the last
-            # item in the path (based on parameters passed in)
-            kwargs = {"bucket": bucket, "root_id": root_id}
 
-            if last_link:
-                if obj_type:
-                    kwargs["obj_type"] = obj_type
-                if obj_shape:
-                    kwargs["obj_shape"] = obj_shape
-                if layout:
-                    kwargs["layout"] = layout
-                if creation_props:
-                    kwargs["creation_props"] = creation_props
-            obj_json = await createObject(app, **kwargs)
-            obj_id = obj_json["id"]
-            # create a link to the new object
-            await putHardLink(app, parent_id, link_title, tgt_id=obj_id, bucket=bucket)
-            parent_id = obj_id  # new parent
-    log.info(f"createObjectByPath {h5path} done, returning obj_json")
 
-    return obj_json
+async def createObject(app,
+                       parent_id=None,
+                       root_id=None,
+                       h5path=None,
+                       obj_id=None,
+                       type=None,
+                       shape=None,
+                       creation_props=None,
+                       attrs=None,
+                       links=None,
+                       implicit=None,
+                       bucket=None):
+    """ create a group, ctype, or dataset object and return object json
+        Determination on whether a group, ctype, or dataset is created is based on:
+            1) if type and shape are set, a dataset object will be created
+            2) if type is set but not shape, a  datatype object will be created
+            3) otherwise (type and shape are both None), a group object will be created
+        The layout parameter only applies to dataset creation
+    """
+    if type and shape:
+        collection = "datasets"
+    elif type:
+        collection = "datatypes"
+    else:
+        collection = "groups"
+
+    if not root_id:
+        root_id = getRootObjId(parent_id)
+    log.info(f"createObject for {collection} collection, root_id: {root_id}, bucket: {bucket}")
+    if root_id != parent_id:
+        log.debug(f"    parent_id: {parent_id}")
+    if obj_id:
+        log.debug(f"    obj_id: {obj_id}")
+    if h5path:
+        log.debug(f"    h5path: {h5path}")
+    if type:
+        log.debug(f"    type: {type}")
+    if shape:
+        log.debug(f"    shape: {shape}")
+    if creation_props:
+        log.debug(f"    cprops: {creation_props}")
+    if attrs:
+        log.debug(f"    attrs: {attrs}")
+    if links:
+        log.debug(f"    links: {links}")
+
+    if h5path:
+        if h5path.startswith("/"):
+            if parent_id == root_id:
+                # just adjust the path to be relative
+                h5path = h5path[1:]
+            else:
+                msg = f"createObject expecting relative h5path, but got: {h5path}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
+        if h5path.endswith("/"):
+            h5path = h5path[:-1]  # makes iterating through the links a bit easier
+
+    if obj_id:
+        log.debug(f"using client supplied id: {obj_id}")
+        if not isValidUuid(obj_id, obj_class=collection):
+            msg = f"invalid id: {obj_id}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if getRootObjId(obj_id) != root_id:
+            msg = f"id: {obj_id} is not valid for root: {root_id}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+    else:
+        obj_id = createObjId(collection, root_id=root_id)
+        log.info(f"new obj id: {obj_id}")
+    obj_json = {"id": obj_id, "root": root_id}
+    if type:
+        obj_json["type"] = type
+    if shape:
+        obj_json["shape"] = shape
+    if creation_props:
+        obj_json["creationProperties"] = creation_props
+    else:
+        obj_json["creationProperties"] = {}
+    if attrs:
+        kwargs = {"obj_id": obj_id, "bucket": bucket}
+        attrs_json = {"attributes": attrs}
+        attr_items = await getAttributesFromRequest(app, attrs_json, **kwargs)
+        log.debug(f"got attr_items: {attr_items}")
+        obj_json["attributes"] = attr_items
+    if links:
+        if collection != "groups":
+            msg = "links can only be used with groups"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        obj_json["links"] = links
+    log.debug(f"create {collection} obj, body: {obj_json}")
+    dn_url = getDataNodeUrl(app, obj_id)
+    req = f"{dn_url}/{collection}"
+    params = {"bucket": bucket}
+    rsp_json = await http_post(app, req, data=obj_json, params=params)
+
+    log.debug(f"createObject: {req} got rsp_json: {rsp_json}")
+
+    # object creation successful, create link from parent if requested
+    if h5path:
+        kwargs = {"tgt_id": obj_id, "bucket": bucket, "implicit": implicit}
+        await createLinkFromParent(app, parent_id, h5path, **kwargs)
+
+    return rsp_json
+
+
+async def createGroup(app,
+                      parent_id=None,
+                      root_id=None,
+                      h5path=None,
+                      obj_id=None,
+                      creation_props=None,
+                      attrs=None,
+                      links=None,
+                      implicit=None,
+                      bucket=None):
+
+    """ create a new group object """
+
+    kwargs = {}
+    kwargs["parent_id"] = parent_id
+    kwargs["root_id"] = root_id
+    kwargs["h5path"] = h5path
+    kwargs["obj_id"] = obj_id
+    kwargs["creation_props"] = creation_props
+    kwargs["attrs"] = attrs
+    kwargs["links"] = links
+    kwargs["implicit"] = implicit
+    kwargs["bucket"] = bucket
+    rsp_json = await createObject(app, **kwargs)
+    return rsp_json
+
+
+async def createDatatypeObj(app,
+                            parent_id=None,
+                            root_id=None,
+                            type=None,
+                            h5path=None,
+                            obj_id=None,
+                            creation_props=None,
+                            attrs=None,
+                            links=None,
+                            implicit=None,
+                            bucket=None):
+
+    """ create a new committed type object"""
+
+    if not type:
+        msg = "type not set for committed type creation"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    kwargs = {}
+    kwargs["parent_id"] = parent_id
+    kwargs["root_id"] = root_id
+    kwargs["type"] = type
+    kwargs["h5path"] = h5path
+    kwargs["obj_id"] = obj_id
+    kwargs["creation_props"] = creation_props
+    kwargs["attrs"] = attrs
+    kwargs["links"] = links
+    kwargs["implicit"] = implicit
+    kwargs["bucket"] = bucket
+    rsp_json = await createObject(app, **kwargs)
+    return rsp_json
+
+
+async def createDataset(app,
+                        parent_id=None,
+                        root_id=None,
+                        type=None,
+                        shape=None,
+                        h5path=None,
+                        obj_id=None,
+                        creation_props=None,
+                        attrs=None,
+                        links=None,
+                        implicit=None,
+                        bucket=None):
+
+    """ create a new dataset object"""
+
+    if not type:
+        msg = "type not set for dataset creation"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+
+    if not shape:
+        # default to a scalar dataset
+        shape = {"class": "H5S_SCALAR"}
+
+    kwargs = {}
+    kwargs["parent_id"] = parent_id
+    kwargs["root_id"] = root_id
+    kwargs["type"] = type
+    kwargs["shape"] = shape
+    kwargs["h5path"] = h5path
+    kwargs["obj_id"] = obj_id
+    kwargs["creation_props"] = creation_props
+    kwargs["attrs"] = attrs
+    kwargs["links"] = links
+    kwargs["implicit"] = implicit
+    kwargs["bucket"] = bucket
+    dset_json = await createObject(app, **kwargs)
+
+    return dset_json

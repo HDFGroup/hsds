@@ -268,7 +268,6 @@ def validateDomainKey(domain_key):
 
 
 def getDomainFromRequest(request, validate=True):
-    # print(f"getDomainFromRequest: {request}, validate={validate}")
     app = request.app
     domain = None
     bucket = None
@@ -299,7 +298,7 @@ def getDomainFromRequest(request, validate=True):
     if bucket:
         if validate and not isValidBucketName(bucket):
             raise ValueError(f"bucket name: {bucket} is not valid")
-        if domain[0] == "/":
+        if len(domain) > 0 and domain[0] == "/":
             domain = bucket + domain
     return domain
 

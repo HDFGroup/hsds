@@ -16,18 +16,20 @@
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPGone
 from json import JSONDecodeError
+
+from h5json.objid import isValidUuid
+
 from .util.httpUtil import getHref, respJsonAssemble, getBooleanParam
 from .util.httpUtil import jsonResponse
-from .util.idUtil import isValidUuid
-from .util.linkUtil import validateLinkName
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain
 from .util.domainUtil import getBucketForDomain, verifyRoot
-from .util.hdf5dtype import validateTypeItem, getBaseTypeJson
 from .servicenode_lib import getDomainJson, getObjectJson, validateAction
-from .servicenode_lib import getObjectIdByPath, getPathForObjectId
-from .servicenode_lib import createObject, createObjectByPath, deleteObject
+from .servicenode_lib import getObjectIdByPath, getPathForObjectId, deleteObject
+from .servicenode_lib import getCreateArgs, createDatatypeObj
+from .post_crawl import createDatatypeObjs
+from .domain_crawl import DomainCrawler
 from . import hsds_logger as log
 
 
@@ -49,7 +51,7 @@ async def GET_Datatype(request):
         include_attrs = True
 
     if ctype_id:
-        if not isValidUuid(ctype_id, "Type"):
+        if not isValidUuid(ctype_id, obj_class="datatypes"):
             msg = f"Invalid type id: {ctype_id}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -60,7 +62,7 @@ async def GET_Datatype(request):
         group_id = None
         if "grpid" in params:
             group_id = params["grpid"]
-            if not isValidUuid(group_id, "Group"):
+            if not isValidUuid(group_id, obj_class="groups"):
                 msg = f"Invalid parent group id: {group_id}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
@@ -101,7 +103,7 @@ async def GET_Datatype(request):
         # throws 404 if not found
         kwargs = {"bucket": bucket, "domain": domain}
         ctype_id, domain, _ = await getObjectIdByPath(app, group_id, h5path, **kwargs)
-        if not isValidUuid(ctype_id, "Datatype"):
+        if not isValidUuid(ctype_id, obj_class="datatypes"):
             msg = f"No datatype exist with the path: {h5path}"
             log.warn(msg)
             raise HTTPGone()
@@ -153,7 +155,7 @@ async def POST_Datatype(request):
     await validateUserPassword(app, username, pswd)
 
     if not request.has_body:
-        msg = "POST Datatype with no body"
+        msg = "POST datatype with no body"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -161,35 +163,6 @@ async def POST_Datatype(request):
         body = await request.json()
     except JSONDecodeError:
         msg = "Unable to load JSON body"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    if "type" not in body:
-        msg = "POST Datatype has no type key in body"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    datatype = body["type"]
-    if isinstance(datatype, str):
-        try:
-            # convert predefined type string (e.g. "H5T_STD_I32LE") to
-            # corresponding json representation
-            datatype = getBaseTypeJson(datatype)
-            log.debug(f"got datatype: {datatype}")
-        except TypeError:
-            msg = "POST Dataset with invalid predefined type"
-            log.warn(msg)
-            raise HTTPBadRequest(reason=msg)
-    try:
-        validateTypeItem(datatype)
-    except KeyError as ke:
-        msg = f"KeyError creating type: {ke}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    except TypeError as te:
-        msg = f"TypeError creating type: {te}"
-        log.warn(msg)
-        raise HTTPBadRequest(reason=msg)
-    except ValueError as ve:
-        msg = f"ValueError creating type: {ve}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
 
@@ -207,56 +180,92 @@ async def POST_Datatype(request):
     verifyRoot(domain_json)
     root_id = domain_json["root"]
 
-    parent_id = None
-    link_title = None
-    h5path = None
-    if "link" in body:
-        if "h5path" in body:
-            msg = "link can't be used with h5path"
+    # allow parent group creation or not
+    implicit = getBooleanParam(params, "implicit")
+
+    post_rsp = None
+
+    if isinstance(body, list):
+        count = len(body)
+        log.debug(f"multiple ctype create: {count} items")
+        if count == 0:
+            # equivalent to no body
+            msg = "POST Datatype with no body"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        link_body = body["link"]
-        if "id" in link_body:
-            parent_id = link_body["id"]
-        if "name" in link_body:
-            link_title = link_body["name"]
-            try:
-                # will throw exception if there's a slash in the name
-                validateLinkName(link_title)
-            except ValueError:
-                msg = f"invalid link title: {link_title}"
-                log.warn(msg)
-                raise HTTPBadRequest(reason=msg)
-
-        if parent_id and link_title:
-            log.debug(f"parent id: {parent_id}, link_title: {link_title}")
-            h5path = link_title  # just use the link name as the h5path
-
-    if "h5path" in body:
-        h5path = body["h5path"]
-        if "parent_id" not in body:
-            parent_id = root_id
+        elif count == 1:
+            # just create one object in typical way
+            kwargs = getCreateArgs(body[0],
+                                   root_id=root_id,
+                                   bucket=bucket,
+                                   implicit=implicit)
         else:
-            parent_id = body["parent_id"]
+            # create multiple ctype objects
+            kwarg_list = []  # list of kwargs for each object
 
-    # setup args to createObject
-    kwargs = {"bucket": bucket, "obj_type": datatype}
-    # TBD: creation props for datatype obj?
-    if parent_id:
-        kwargs["parent_id"] = parent_id
-        kwargs["h5path"] = h5path
-        # allow parent group creation or not
-        implicit = getBooleanParam(params, "implicit")
-        if implicit:
-            kwargs["implicit"] = True
-        ctype_json = await createObjectByPath(app, **kwargs)
+            for item in body:
+                log.debug(f"item: {item}")
+                if not isinstance(item, dict):
+                    msg = f"Post_Datatype - invalid item type: {type(item)}"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+                kwargs = getCreateArgs(item, root_id=root_id, bucket=bucket)
+                kwargs["ignore_link"] = True  # will create parent links later
+                kwarg_list.append(kwargs)
+            kwargs = {"bucket": bucket, "root_id": root_id}
+            log.debug(f"createDatatypeObjects, items: {kwarg_list}")
+            post_rsp = await createDatatypeObjs(app, kwarg_list, **kwargs)
     else:
-        # create an anonymous datatype
-        kwargs["root_id"] = root_id
-        ctype_json = await createObject(app, **kwargs)
+        # single object create
+        kwargs = getCreateArgs(body, root_id=root_id, bucket=bucket, implicit=implicit)
+        log.debug(f"kwargs for datatype create: {kwargs}")
+
+    if post_rsp is None:
+        # Handle cases other than multi ctype create here
+        post_rsp = await createDatatypeObj(app, **kwargs)
+
+    log.debug(f"returning resp: {post_rsp}")
+
+    if "objects" in post_rsp:
+        # add any links in multi request
+        objects = post_rsp["objects"]
+        obj_count = len(objects)
+        log.debug(f"Post datatype multi create: {obj_count} objects")
+        if len(body) != obj_count:
+            msg = f"Expected {obj_count} objects but got {len(body)}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        parent_ids = {}
+        for index in range(obj_count):
+            item = body[index]
+            if "link" in item:
+                link_item = item["link"]
+                parent_id = link_item.get("id")
+                title = link_item.get("name")
+                if parent_id and title:
+                    # add a hard link
+                    object = objects[index]
+                    obj_id = object["id"]
+                    if parent_id not in parent_ids:
+                        parent_ids[parent_id] = {}
+                    links = parent_ids[parent_id]
+                    links[title] = {"id": obj_id}
+        if parent_ids:
+            log.debug(f"POST datatype multi - adding links: {parent_ids}")
+            kwargs = {"action": "put_link", "bucket": bucket}
+            kwargs["replace"] = True
+
+            crawler = DomainCrawler(app, parent_ids, **kwargs)
+
+            # will raise exception on not found, server busy, etc.
+            await crawler.crawl()
+
+            status = crawler.get_status()
+
+            log.info(f"DomainCrawler done for put_links action, status: {status}")
 
     # datatype creation successful
-    resp = await jsonResponse(request, ctype_json, status=201)
+    resp = await jsonResponse(request, post_rsp, status=201)
     log.response(request, resp=resp)
 
     return resp
@@ -271,7 +280,7 @@ async def DELETE_Datatype(request):
         msg = "Missing committed type id"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(ctype_id, "Type"):
+    if not isValidUuid(ctype_id, obj_class="datatypes"):
         msg = f"Invalid committed type id: {ctype_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

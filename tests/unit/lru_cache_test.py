@@ -14,9 +14,16 @@ import random
 import sys
 import numpy as np
 
+from h5json.objid import createObjId
+
 sys.path.append("../..")
 from hsds.util.lruCache import LruCache
-from hsds.util.idUtil import createObjId
+
+
+def _createId():
+    objid = createObjId("groups")
+    objid = 'c' + objid[1:]  # fake a chunk id
+    return objid
 
 
 class LruCacheTest(unittest.TestCase):
@@ -34,7 +41,7 @@ class LruCacheTest(unittest.TestCase):
 
         self.assertFalse("xyz" in cc)
 
-        id = createObjId("chunks")
+        id = _createId()
         try:
             # only dict objects can be added
             cc[id] = list(range(20))
@@ -42,7 +49,7 @@ class LruCacheTest(unittest.TestCase):
         except TypeError:
             pass  # expected
 
-        rand_id = createObjId("chunks")
+        rand_id = _createId()
         np_arr = np.random.random((500, 500))  # smaller than our chunk cache size
         cc[rand_id] = np_arr  # add to cache
         cc.consistencyCheck()
@@ -104,7 +111,7 @@ class LruCacheTest(unittest.TestCase):
         ids = []
         # add chunks to the cache
         for i in range(10):
-            id = createObjId("chunks")
+            id = _createId()
             ids.append(id)
             arr = np.empty((16, 16), dtype="i4")  # 1024 bytes
             arr[...] = i
@@ -165,7 +172,7 @@ class LruCacheTest(unittest.TestCase):
         ids = []
         # add chunks to the cache
         for i in range(10):
-            id = createObjId("chunks")
+            id = _createId()
             ids.append(id)
             arr = np.empty((16, 16), dtype="i4")  # 1024 bytes
             arr[...] = i
@@ -190,7 +197,7 @@ class LruCacheTest(unittest.TestCase):
         self.assertEqual(len(cc), 0)
         ids = set()
         for i in range(10):
-            id = createObjId("chunks")
+            id = _createId()
             ids.add(id)
             arr = np.empty((16, 16), dtype="i4")  # 1024 bytes
             arr[...] = i
@@ -208,7 +215,7 @@ class LruCacheTest(unittest.TestCase):
 
         # add 10 more chunks, but set dirty to true each time
         for i in range(10):
-            id = createObjId("chunks")
+            id = _createId()
             ids.add(id)
             arr = np.empty((16, 16), dtype="i4")  # 1024 bytes
             arr[...] = i
@@ -255,7 +262,7 @@ class LruCacheTest(unittest.TestCase):
 
         data = {"x": 123, "y": 456}
 
-        rand_id = createObjId("groups")
+        rand_id = _createId()
         data = {"foo": "bar"}
         cc[rand_id] = data  # add to cache
         cc.consistencyCheck()

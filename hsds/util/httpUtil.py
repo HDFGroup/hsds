@@ -25,7 +25,8 @@ from aiohttp.web_exceptions import HTTPGone, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPRequestEntityTooLarge
 from aiohttp.web_exceptions import HTTPServiceUnavailable, HTTPBadRequest
 from aiohttp.client_exceptions import ClientError
-from hsds.util.idUtil import isValidUuid
+
+from h5json.objid import isValidUuid
 
 from .. import hsds_logger as log
 from .. import metrics
@@ -711,17 +712,6 @@ def getAcceptType(request):
         else:
             accept_type = "binary"
     return accept_type
-
-
-def isAWSLambda(request):
-    """
-    Return true if this is a lambda request
-    """
-    is_lambda = False
-    if "User-Agent" in request.headers:
-        if request.headers["User-Agent"] == "AWSLambda":
-            is_lambda = True
-    return is_lambda
 
 
 def getContentType(request):

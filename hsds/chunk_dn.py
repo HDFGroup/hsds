@@ -11,31 +11,47 @@
 ##############################################################################
 #
 # value operations
-# handles regauests to read/write chunk data
+# handles requests to read/write chunk data
 #
 
+import json
 import numpy as np
 import traceback
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
 from aiohttp.web import json_response, StreamResponse
 
+from h5json.hdf5dtype import createDataType, getSubType
+from h5json.array_util import bytesToArray, arrayToBytes, getBroadcastShape
+from h5json.objid import getS3Key, isValidUuid
+from h5json.shape_util import getShapeDims
+from h5json.dset_util import getChunkDims
+from h5json.query_util import arrayQuery
+
 from .util.httpUtil import request_read, getContentType
-from .util.arrayUtil import bytesToArray, arrayToBytes, getBroadcastShape
-from .util.idUtil import getS3Key, validateInPartition, isValidUuid
 from .util.storUtil import isStorObj, deleteStorObj
-from .util.hdf5dtype import createDataType, getSubType
-from .util.dsetUtil import getSelectionList, getChunkLayout, getShapeDims
-from .util.dsetUtil import getSelectionShape, getChunkInitializer
-from .util.chunkUtil import getChunkIndex, getDatasetId, chunkQuery
+from .util.dsetUtil import getSelectionList, getChunkInitializer
+from .util.dsetUtil import getSelect
+from .util.chunkUtil import getChunkIndex, getDatasetId
 from .util.chunkUtil import chunkWriteSelection, chunkReadSelection
 from .util.chunkUtil import chunkWritePoints, chunkReadPoints
 from .util.domainUtil import isValidBucketName
-from .util.boolparser import BooleanParser
+from .util.nodeUtil import validateInPartition
 from .datanode_lib import get_metadata_obj, get_chunk, save_chunk
 
 from . import hsds_logger as log
 from . import config
+
+
+def _localToGlobalIndices(chunk_id, chunk_dims, local_indices):
+    """ convert chunk-local query match indices (from arrayQuery) into
+    global dataset index coordinates, using the chunk's grid position
+    (encoded in its id) and its per-dimension extent (chunk_dims) """
+    rank = local_indices.shape[1]
+    chunk_index = getChunkIndex(chunk_id)
+    offset_list = [chunk_index[i] * chunk_dims[i] for i in range(rank)]
+    offset = np.array(offset_list, dtype=local_indices.dtype)
+    return local_indices + offset
 
 
 async def PUT_Chunk(request):
@@ -46,24 +62,30 @@ async def PUT_Chunk(request):
     app = request.app
     params = request.rel_url.query
     query = None
-    query_update = None
-    limit = 0
     bucket = None
     input_arr = None
     element_count = None
+    limit = 0
 
     if "query" in params:
         query = params["query"]
         log.info(f"PUT_Chunk query: {query}")
     if "Limit" in params:
-        limit = int(params["Limit"])
+        param_limit = params["Limit"]
+        try:
+            limit = int(param_limit)
+        except ValueError:
+            msg = f"invalid Limit param: {param_limit}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"PUT_Chunk limit: {limit}")
     chunk_id = request.match_info.get("id")
     if not chunk_id:
         msg = "Missing chunk id"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
 
-    if not isValidUuid(chunk_id, "Chunk"):
+    if not isValidUuid(chunk_id, obj_class="chunks"):
         msg = f"Invalid chunk id: {chunk_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -129,8 +151,7 @@ async def PUT_Chunk(request):
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
 
     # TBD - does this work with linked datasets?
-    dims = getChunkLayout(dset_json)
-    rank = len(dims)
+    dims = getChunkDims(dset_json)
 
     type_json = dset_json["type"]
     dset_dt = createDataType(type_json)
@@ -147,19 +168,14 @@ async def PUT_Chunk(request):
     # TBD - cancel pending read if present?
 
     # get chunk selection from query params
-    if "select" in params:
-        select = params["select"]
-        log.debug(f"PUT_Chunk got select param: {select}")
-    else:
-        select = None  # put for entire dataspace
     try:
-        selection = getSelectionList(select, dims)
+        selection = getSelect(params, dims)
     except ValueError as ve:
-        log.error(f"ValueError for select: {select}: {ve}")
+        log.error(f"ValueError for select: {params.get('select')}: {ve}")
         raise HTTPInternalServerError()
     log.debug(f"PUT_Chunk slices: {selection}")
 
-    mshape = getSelectionShape(selection)
+    mshape = selection.mshape
     if element_count is not None:
         bcshape = getBroadcastShape(mshape, element_count)
         log.debug(f"using bcshape: {bcshape}")
@@ -190,60 +206,53 @@ async def PUT_Chunk(request):
             raise HTTPNotFound()
 
     if query:
-        if not dset_dt.fields:
-            log.error("expected compound dtype for PUT query")
-            raise HTTPInternalServerError()
-        if rank != 1:
-            log.error("expected one-dimensional array for PUT query")
-            raise HTTPInternalServerError()
-
         try:
-            parser = BooleanParser(query)
-        except Exception as e:
+            indices = arrayQuery(query, chunk_arr, selection=selection, limit=limit)
+        except (TypeError, ValueError) as e:
             msg = f"query: {query} is not valid, got exception: {e}"
-            log.error(msg)
-            raise HTTPInternalServerError()
-        try:
-            eval_str = parser.getEvalStr()
-        except Exception as e:
-            msg = f"query: {query} unable to get eval str, got exception: {e}"
-            log.error(msg)
-            raise HTTPInternalServerError()
-        log.debug(f"got eval str: {eval_str} for query: {query}")
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
-        query_update = await request.json()
-        if not query_update:
-            log.warn("PUT_Chunk with query but no query update")
-            raise HTTPBadRequest()
-        log.debug(f"query_update: {query_update}")
-        # TBD - send back binary response to SN node
+        log.debug(f"PUT_Chunk - query matched {len(indices)} elements")
+
         try:
-            kwargs = {
-                "chunk_id": chunk_id,
-                "chunk_layout": dims,
-                "chunk_arr": chunk_arr,
-                "slices": selection,
-                "query": eval_str,
-                "query_update": query_update,
-                "limit": limit,
-            }
-            rsp_arr = chunkQuery(**kwargs)
-            log.debug(f"query_update returned: {len(rsp_arr)} rows")
-        except TypeError as te:
-            log.warn(f"chunkQuery - TypeError: {te}")
-            raise HTTPBadRequest()
-        except ValueError as ve:
-            log.warn(f"chunkQuery - ValueError: {ve}")
-            raise HTTPBadRequest()
-        num_hits = rsp_arr.shape[0]
-        if num_hits > 0:
+            update_value = await request.json()
+        except json.JSONDecodeError:
+            msg = "Unable to load JSON body for query update"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+
+        rank = len(chunk_arr.shape)
+        fancy_index = tuple(indices[:, i] for i in range(rank))
+
+        if len(indices) > 0:
+            # query_update is only allowed when the value is one element -
+            # that element gets broadcast across all matching positions
+            if select_dt.names:
+                # compound type - value is a JSON object of field name to
+                # value; only the given fields are updated, others are
+                # left as-is
+                if not isinstance(update_value, dict):
+                    msg = "expected a JSON object for compound type query update"
+                    log.warn(msg)
+                    raise HTTPBadRequest(reason=msg)
+                for field_name, field_value in update_value.items():
+                    if field_name not in select_dt.names:
+                        msg = f"field: {field_name} not found in dataset type"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
+                    chunk_arr[field_name][fancy_index] = field_value
+            else:
+                # simple type - value is the (scalar) element itself
+                if isinstance(update_value, dict) and "value" in update_value:
+                    update_value = update_value["value"]
+                chunk_arr[fancy_index] = update_value
             is_dirty = True
-            # save chunk
-            save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=bucket)
-            status_code = 201
-        # stream back response array
-        read_resp = arrayToBytes(rsp_arr)
 
+        # return the global dataset indices of the matching elements
+        global_indices = _localToGlobalIndices(chunk_id, dims, indices)
+
+        read_resp = arrayToBytes(global_indices)
         try:
             resp = StreamResponse()
             resp.headers["Content-Type"] = "application/octet-stream"
@@ -255,7 +264,12 @@ async def PUT_Chunk(request):
             raise HTTPInternalServerError()
         finally:
             await resp.write_eof()
-        return
+
+        if is_dirty or config.get("write_zero_chunks", default=False):
+            save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=bucket)
+
+        log.response(request, resp=resp)
+        return resp
     else:
         # regular chunk update
         # check that the content_length is what we expect
@@ -289,16 +303,21 @@ async def PUT_Chunk(request):
 
             raise HTTPBadRequest(reason="unable to decode bytestring")
 
+        # bytesToArray() already absorbs an array/subarray dtype's own
+        # shape (select_dt.shape) into input_arr's shape via frombuffer, so
+        # it must be appended to bcshape/mshape too, or the reshape below
+        # would incorrectly try to drop those elements
+        subarray_shape = select_dt.shape if select_dt.shape else ()
         if bcshape:
-            input_arr = input_arr.reshape(bcshape)
+            input_arr = input_arr.reshape(tuple(bcshape) + subarray_shape)
             log.debug(f"broadcasting {bcshape} to mshape {mshape}")
             arr_tmp = np.zeros(mshape, dtype=select_dt)
             arr_tmp[...] = input_arr
             input_arr = arr_tmp
         else:
-            input_arr = input_arr.reshape(mshape)
+            input_arr = input_arr.reshape(tuple(mshape) + subarray_shape)
 
-        kwargs = {"chunk_arr": chunk_arr, "slices": selection, "data": input_arr}
+        kwargs = {"chunk_arr": chunk_arr, "selection": selection, "data": input_arr}
         is_dirty = chunkWriteSelection(**kwargs)
 
         # chunk update successful
@@ -328,6 +347,7 @@ async def GET_Chunk(request):
     dims = None
     query = None
     limit = 0
+    query_indices = False
 
     app = request.app
     params = request.rel_url.query
@@ -337,7 +357,7 @@ async def GET_Chunk(request):
         msg = "Missing chunk id"
         log.error(msg)
         raise HTTPBadRequest(reason=msg)
-    if not isValidUuid(chunk_id, "Chunk"):
+    if not isValidUuid(chunk_id, obj_class="chunks"):
         msg = f"Invalid chunk id: {chunk_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -369,7 +389,7 @@ async def GET_Chunk(request):
         param_s3offset = params["s3offset"]
         try:
             if param_s3offset.find(":") > 0:
-                # colon seperated index values, convert to list
+                # colon separated index values, convert to list
                 s3offset = list(map(int, param_s3offset.split(":")))
             else:
                 s3offset = int(param_s3offset)
@@ -406,6 +426,10 @@ async def GET_Chunk(request):
         query = params["query"]
         log.debug(f"got query: {query}")
 
+    if "query_indices" in params and params["query_indices"]:
+        query_indices = True
+        log.debug("GET_Chunk - returning query match indices, not values")
+
     if "Limit" in params:
         param_limit = params["Limit"]
         log.debug(f"limit: {limit}")
@@ -431,25 +455,16 @@ async def GET_Chunk(request):
     dset_id = getDatasetId(chunk_id)
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
-    shape_dims = getShapeDims(dset_json["shape"])
+    shape_dims = getShapeDims(dset_json)
     log.debug(f"shape_dims: {shape_dims}")
-    dims = getChunkLayout(dset_json)
+    dims = getChunkDims(dset_json)
     log.debug(f"GET_Chunk - got dims: {dims}")
 
     # get chunk selection from query params
-    if "select" in params:
-        select = params["select"]
-    else:
-        select = None  # get slices for entire datashape
-    if select is not None:
-        log.debug(f"GET_Chunk - using select string: {select}")
-    else:
-        log.debug("GET_Chunk - no selection string")
-
     try:
-        selection = getSelectionList(select, dims)
+        selection = getSelect(params, dims)
     except ValueError as ve:
-        log.error(f"ValueError for select: {select}: {ve}")
+        log.error(f"ValueError for select: {params.get('select')}: {ve}")
         raise HTTPInternalServerError()
     log.debug(f"GET_Chunk - got selection: {selection}")
 
@@ -497,59 +512,37 @@ async def GET_Chunk(request):
         select_dt = chunk_arr.dtype
 
     if query:
-        # if there's a where clause, just use the expression
-        # part with BooleanParser
-        # TBD: Remove when BooleanParser knows how to use where keyword
-        if query.startswith("where"):
-            query_expr = None
-        else:
-            n = query.find(" where ")
-            if n > 0:
-                query_expr = query[:n]
-            else:
-                query_expr = query
-        if query_expr:
-            try:
-                parser = BooleanParser(query_expr)
-            except Exception as e:
-                msg = f"query: {query} is not valid, got exception: {e}"
-                log.error(msg)
-                raise HTTPInternalServerError()
-            try:
-                eval_str = parser.getEvalStr()
-            except Exception as e:
-                msg = f"query: {query} unable to get eval str, got exception: {e}"
-                log.error(msg)
-                raise HTTPInternalServerError()
-            log.debug(f"got eval str: {eval_str} for query: {query}")
-
-        # run given query
         try:
-            kwargs = {
-                "chunk_id": chunk_id,
-                "chunk_layout": dims,
-                "chunk_arr": chunk_arr,
-                "slices": selection,
-                "query": query,
-                "limit": limit,
-                "select_dt": select_dt,
-            }
-            output_arr = chunkQuery(**kwargs)
-        except TypeError as te:
-            log.warn(f"chunkQuery - TypeError: {te}")
-            raise HTTPBadRequest()
-        except ValueError as ve:
-            log.warn(f"chunkQuery - ValueError: {ve}")
-            raise HTTPBadRequest()
-        if output_arr is None or output_arr.shape[0] == 0:
-            # no matches to query
-            msg = f"chunk {chunk_id} no results for query: {query}"
-            log.debug(msg)
-            raise HTTPNotFound()
-        log.debug(f"test - got output_arr: {output_arr}")
+            indices = arrayQuery(query, chunk_arr, selection=selection, limit=limit)
+        except (TypeError, ValueError) as e:
+            msg = f"query: {query} is not valid, got exception: {e}"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        log.debug(f"GET_Chunk - query matched {len(indices)} elements")
+
+        if query_indices:
+            # return the global dataset indices of the matching elements,
+            # rather than their values
+            output_arr = _localToGlobalIndices(chunk_id, dims, indices)
+        else:
+            # gather the matching values into a 1-d array
+            rank = len(chunk_arr.shape)
+            fancy_index = tuple(indices[:, i] for i in range(rank))
+            output_arr = chunk_arr[fancy_index]
+
+            if len(select_dt) < len(chunk_arr.dtype):
+                # do a field selection
+                arr = np.zeros(output_arr.shape, dtype=select_dt)
+                fields = select_dt.names
+                if len(fields) > 1:
+                    for field in fields:
+                        arr[field] = output_arr[field]
+                else:
+                    arr[...] = output_arr[fields[0]]
+                output_arr = arr
     else:
         # read selected data from chunk
-        output_arr = chunkReadSelection(chunk_arr, slices=selection, select_dt=select_dt)
+        output_arr = chunkReadSelection(chunk_arr, selection=selection, select_dt=select_dt)
 
     # write response
     if output_arr is not None:
@@ -653,7 +646,7 @@ async def POST_Chunk(request):
     chunk_index = getChunkIndex(chunk_id)
     log.debug(f"chunk_index: {chunk_index}")
 
-    if not isValidUuid(chunk_id, "Chunk"):
+    if not isValidUuid(chunk_id, obj_class="chunks"):
         msg = f"Invalid chunk id: {chunk_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)
@@ -680,7 +673,7 @@ async def POST_Chunk(request):
 
     dset_json = await get_metadata_obj(app, dset_id, bucket=bucket)
     log.debug(f"get_metadata_obj for {dset_id} returned {dset_json}")
-    dims = getChunkLayout(dset_json)
+    dims = getChunkDims(dset_json)
     rank = len(dims)
 
     type_json = dset_json["type"]
@@ -789,7 +782,7 @@ async def POST_Chunk(request):
             raise HTTPInternalServerError()
         log.debug(f"GET_Chunk - got selection: {selection}")
         # read selected data from chunk
-        output_arr = chunkReadSelection(chunk_arr, slices=selection, select_dt=select_dt)
+        output_arr = chunkReadSelection(chunk_arr, selection=selection, select_dt=select_dt)
 
     else:
         # read points
@@ -840,7 +833,7 @@ async def DELETE_Chunk(request):
         raise HTTPBadRequest(reason=msg)
     log.info(f"DELETE chunk: {chunk_id}")
 
-    if not isValidUuid(chunk_id, "Chunk"):
+    if not isValidUuid(chunk_id, obj_class="chunks"):
         msg = f"Invalid chunk id: {chunk_id}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

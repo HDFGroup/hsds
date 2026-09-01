@@ -239,6 +239,45 @@ class AclTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 403)  # Forbidden
 
+    def testPutAclPermissionCheck(self):
+        """
+        Regression test for a fixed security gap: PUT /acls/{username}
+        used to perform no ACL/permission check at all, so any
+        authenticated user - even one with no permissions whatsoever on
+        the domain - could grant or revoke any permission (including
+        updateACL, i.e. ownership-equivalent access) for any user on the
+        domain. PUT_ACL (hsds/domain_sn.py) now calls aclCheck with the
+        "updateACL" action before forwarding the write to the DN, same as
+        every other ACL/domain-mutating operation.
+        """
+        print("testPutAclPermissionCheck", self.base_domain)
+
+        user2name = config.get("user2_name")
+        if not user2name:
+            print("user2_name not set")
+            return
+
+        # test_user2 has no ACL entry at all on this domain (only the
+        # owner, test_user1, does by default) - so test_user2 should not
+        # be able to grant/revoke ANY permission for ANY user here,
+        # including a third, unrelated user ("joebob") who isn't even
+        # test_user2 themselves.
+        headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
+
+        req = helper.getEndpoint() + "/acls/joebob"
+        perm = {
+            "create": True,
+            "read": True,
+            "update": True,
+            "delete": True,
+            "readACL": True,
+            "updateACL": True,
+        }
+        rsp = self.session.put(req, headers=headers, data=json.dumps(perm))
+        # test_user2 lacks updateACL permission on this domain, so this
+        # must be rejected
+        self.assertEqual(rsp.status_code, 403)
+
     def testGroupAcl(self):
         print("testPutAcl", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
@@ -282,7 +321,7 @@ class AclTest(unittest.TestCase):
         req = helper.getEndpoint() + "/acls/" + user2name
         headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
         rsp = self.session.get(req, headers=headers)
-        self.assertTrue(rsp.status_code in (403, 404))  # forbiden or not found
+        self.assertTrue(rsp.status_code in (403, 404))  # forbidden or not found
 
         # The default ACL should be fetchable by test_user2 as well...
         if config.get("default_public"):
@@ -293,7 +332,7 @@ class AclTest(unittest.TestCase):
             rsp = self.session.get(req, headers=headers)
             self.assertEqual(rsp.status_code, 200)  # ok
         else:
-            self.assertTrue(rsp.status_code in (403, 404))  # forbiden or not found
+            self.assertTrue(rsp.status_code in (403, 404))  # forbidden or not found
 
         # test_user2 shouldn't be able to read test_user1's ACL
         username = config.get("user_name")

@@ -15,8 +15,6 @@
 #
 
 import asyncio
-import time
-import traceback
 import random
 from asyncio import CancelledError
 import numpy as np
@@ -24,20 +22,23 @@ from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPServiceUnav
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.client_exceptions import ClientError
 
+from h5json.hdf5dtype import createDataType
+from h5json.array_util import jsonToArray, getNumpyValue
+from h5json.array_util import getNumElements, arrayToBytes, bytesToArray
+from h5json.shape_util import getShapeDims, getRank
+from h5json.dset_util import getChunkDims
+from h5json.time_util import getNow
+
+from .util.nodeUtil import getDataNodeUrl, getNodeCount
 from .util.httpUtil import http_get, http_put, http_post, get_http_client
 from .util.httpUtil import isUnixDomainUrl
-from .util.idUtil import getDataNodeUrl, getNodeCount
-from .util.hdf5dtype import createDataType
-from . import metrics
-from .util.dsetUtil import getSliceQueryParam, getShapeDims
-from .util.dsetUtil import getSelectionShape, getChunkLayout
-from .util.chunkUtil import getChunkCoverage, getDataCoverage
-from .util.chunkUtil import getChunkIdForPartition, getQueryDtype
-from .util.arrayUtil import jsonToArray, getNumpyValue
-from .util.arrayUtil import getNumElements, arrayToBytes, bytesToArray
+from .util.dsetUtil import getSliceQueryParam
+from .util.chunkUtil import getChunkCoverage, getDataCoverage, toNumpyIndex
+from .util.chunkUtil import getChunkIdForPartition
 
 from . import config
 from . import hsds_logger as log
+from . import metrics
 
 CHUNK_REF_LAYOUTS = (
     "H5D_CONTIGUOUS_REF",
@@ -84,6 +85,7 @@ async def write_chunk_hyperslab(
 
     msg = f"write_chunk_hyperslab, chunk_id: {chunk_id}, slices: {slices}, "
     msg += f"bucket: {bucket}"
+    msg += f" dset_json: {dset_json}"
     log.info(msg)
 
     partition_chunk_id = getChunkIdForPartition(chunk_id, dset_json)
@@ -105,7 +107,7 @@ async def write_chunk_hyperslab(
         log.debug(f"setting fields_param to: {fields_param}")
         params["fields"] = fields_param
 
-    layout = getChunkLayout(dset_json)
+    layout = getChunkDims(dset_json)
     log.debug(f"getChunkCoverage({chunk_id}, {slices}, {layout})")
     chunk_sel = getChunkCoverage(chunk_id, slices, layout)
     if chunk_sel is None:
@@ -121,8 +123,8 @@ async def write_chunk_hyperslab(
     if np.prod(arr.shape) != 1:
         do_broadcast = False
     else:
-        for s in slices:
-            if s.step is None:
+        for s in slices.slices:
+            if not isinstance(s, slice) or s.step is None:
                 continue
             if s.step > 1:
                 do_broadcast = False
@@ -133,7 +135,7 @@ async def write_chunk_hyperslab(
         params["element_count"] = 1
         arr_chunk = arr
     else:
-        arr_chunk = arr[data_sel]
+        arr_chunk = arr[toNumpyIndex(data_sel)]
 
     req = getDataNodeUrl(app, chunk_id)
     req += "/chunks/" + chunk_id
@@ -162,6 +164,7 @@ async def read_chunk_hyperslab(
     select_dtype=None,
     query=None,
     query_update=None,
+    query_indices=False,
     limit=0,
     chunk_map=None,
     bucket=None,
@@ -218,6 +221,7 @@ async def read_chunk_hyperslab(
         raise HTTPInternalServerError()
     type_json = dset_json["type"]
     dset_dt = createDataType(type_json)
+    dset_rank = getRank(dset_json)
 
     chunk_shape = None  # expected return array shape
     chunk_sel = None  # for hyperslab
@@ -235,7 +239,14 @@ async def read_chunk_hyperslab(
     if "data_sel" in chunk_info:
         data_sel = chunk_info["data_sel"]
         log.debug(f"read_chunk_hyperslab - data_sel: {data_sel}")
-        chunk_shape = getSelectionShape(chunk_sel)
+        chunk_shape = chunk_sel.mshape
+        if np_arr is not None and len(np_arr.shape) > dset_rank:
+            # an array/subarray dtype's own dims are absorbed into
+            # np_arr's shape beyond the dataset's own logical rank (e.g.
+            # np_arr.shape == (2, 3) for a 2-element dataset of 3-int8
+            # arrays) - append them so bytesToArray()/reshape() below
+            # expect the correct total shape, not just the logical one
+            chunk_shape = tuple(chunk_shape) + np_arr.shape[dset_rank:]
         log.debug(f"hyperslab selection - chunk_shape: {chunk_shape}")
 
     if "points" in chunk_info:
@@ -253,8 +264,15 @@ async def read_chunk_hyperslab(
 
     if query is None and query_update is None:
         query_dtype = None
+    elif query_update is not None or query_indices:
+        # PUT_Chunk's query-update handling, and GET_Chunk's query_indices
+        # mode, both return the global dataset indices of matching
+        # elements, as (n, rank) coordinate tuples
+        query_dtype = np.dtype("i8")
     else:
-        query_dtype = getQueryDtype(select_dtype)
+        # GET_Chunk's query handling (h5json.query_util.arrayQuery) returns
+        # the matching values themselves, typed as select_dtype
+        query_dtype = select_dtype
 
     chunk_arr = None
     array_data = None
@@ -268,7 +286,7 @@ async def read_chunk_hyperslab(
     if "s3offset" in chunk_info:
         s3offset = chunk_info["s3offset"]
         if isinstance(s3offset, list):
-            # convert to a colon seperated string
+            # convert to a colon separated string
             s3offset = ":".join(map(str, s3offset))
         else:
             s3offset = int(s3offset)
@@ -277,7 +295,7 @@ async def read_chunk_hyperslab(
     if "s3size" in chunk_info:
         s3size = chunk_info["s3size"]
         if isinstance(s3size, list):
-            # convert to a colon seperated string
+            # convert to a colon separated string
             s3size = ":".join(map(str, s3size))
         else:
             s3size = int(s3size)
@@ -286,7 +304,7 @@ async def read_chunk_hyperslab(
     if "hyper_dims" in chunk_info:
         hyper_dims = chunk_info["hyper_dims"]
         if isinstance(hyper_dims, list):
-            # convert to colon seperated string
+            # convert to colon separated string
             hyper_dims = ":".join(map(str, hyper_dims))
         params["hyper_dims"] = hyper_dims
 
@@ -303,6 +321,8 @@ async def read_chunk_hyperslab(
         params["query"] = query
         if limit > 0:
             params["Limit"] = limit
+        if query_indices:
+            params["query_indices"] = "1"
 
     # bucket will be used to get dset json even when s3path is used for
     # the chunk data
@@ -377,9 +397,15 @@ async def read_chunk_hyperslab(
         log.debug(f"data: {len(array_data)} bytes")
         if query is not None or query_update is not None:
             # TBD: this needs to be fixed up for variable length dtypes
-            nrows = len(array_data) // query_dtype.itemsize
+            if query_update is not None or query_indices:
+                # indices are returned as (n, rank)
+                nrows = len(array_data) // (query_dtype.itemsize * dset_rank)
+                rsp_shape = (nrows, dset_rank)
+            else:
+                nrows = len(array_data) // query_dtype.itemsize
+                rsp_shape = (nrows,)
             try:
-                chunk_arr = bytesToArray(array_data, query_dtype, (nrows,))
+                chunk_arr = bytesToArray(array_data, query_dtype, rsp_shape)
             except ValueError as ve:
                 log.warn(f"bytesToArray ValueError: {ve}")
                 raise HTTPBadRequest()
@@ -416,7 +442,7 @@ async def read_chunk_hyperslab(
                 np_arr[point_index] = chunk_arr
             else:
                 # hyperslab selection
-                np_arr[data_sel] = chunk_arr
+                np_arr[toNumpyIndex(data_sel)] = chunk_arr
     log.debug(f"read_chunk_hyperslab {chunk_id} - done")
 
 
@@ -571,18 +597,29 @@ async def write_point_sel(
     # create a numpy array with point_data
 
     # if point data was already decoded from binary, don't decode again
-    if len(point_data) > 0 and isinstance(point_data[0], np.ndarray):
+    if len(point_data) > 0 and isinstance(point_data[0], np.void) and len(point_data[0].dtype):
+        # a structured (compound) scalar - may be a fields-narrowed subset
+        # of dset_dtype (e.g. a "fields" selection), so use its own dtype
+        # rather than forcing it through the full dataset dtype
         data_arr = point_data
+        value_dtype = point_data[0].dtype
+    elif len(point_data) > 0 and isinstance(point_data[0], np.ndarray):
+        # already-decoded data (e.g. vlen sub-arrays) - don't decode again,
+        # but the "value" wire type is still the full dataset dtype (e.g.
+        # the object/vlen dtype), not the sub-array's own element dtype
+        data_arr = point_data
+        value_dtype = dset_dtype
     else:
-        data_arr = jsonToArray((num_points,), dset_dtype, point_data)
+        value_dtype = dset_dtype
+        data_arr = jsonToArray((num_points,), value_dtype, point_data)
 
     # create a numpy array with the following type:
-    #   (coord1, coord2, ...) | dset_dtype
+    #   (coord1, coord2, ...) | value_dtype
     if rank == 1:
         coord_type_str = "uint64"
     else:
         coord_type_str = f"({rank},)uint64"
-    type_fields = [("coord", np.dtype(coord_type_str)), ("value", dset_dtype)]
+    type_fields = [("coord", np.dtype(coord_type_str)), ("value", value_dtype)]
     comp_type = np.dtype(type_fields)
     np_arr = np.zeros((num_points,), dtype=comp_type)
 
@@ -601,6 +638,11 @@ async def write_point_sel(
     params["action"] = "put"
     params["count"] = num_points
     params["bucket"] = bucket
+    if len(value_dtype) < len(dset_dtype):
+        # field selection, pass in the field names so the DN narrows too
+        fields_param = ":".join(value_dtype.names)
+        log.debug(f"setting fields_param to: {fields_param}")
+        params["fields"] = fields_param
 
     json_rsp = await http_post(app, req, params=params, data=post_data, client=client)
     log.debug(f"post to {req} returned {json_rsp}")
@@ -622,6 +664,7 @@ class ChunkCrawler:
         select_dtype=None,
         query=None,
         query_update=None,
+        query_indices=False,
         limit=0,
         points=None,
         action=None,
@@ -645,6 +688,7 @@ class ChunkCrawler:
         self._points = points
         self._query = query
         self._query_update = query_update
+        self._query_indices = query_indices
         self._hits = 0
         self._limit = limit
         self._status_map = {}  # map of chunk_ids to status code
@@ -674,6 +718,9 @@ class ChunkCrawler:
         if "cc_clients" not in app:
             app["cc_clients"] = {}
         self._clients = app["cc_clients"]
+
+    def now(self):
+        return getNow(app=self._app)
 
     def get_status(self):
         if len(self._status_map) != len(self._chunk_ids):
@@ -719,11 +766,12 @@ class ChunkCrawler:
         log.info(f"ChunkCrawler - client_name: {client_name}")
         while True:
             try:
-                start = time.time()
+                start = self.now()
                 chunk_id = await self._q.get()
                 with metrics.crawler_task("chunk"):
                     if self._limit > 0 and self._hits >= self._limit:
-                        msg = f"ChunkCrawler - maxhits exceeded, skipping fetch for chunk: {chunk_id}"
+                        msg = "ChunkCrawler - maxhits exceeded, "
+                        msg += f"skipping fetch for chunk: {chunk_id}"
                         log.debug(msg)
                     else:
                         dn_url = getDataNodeUrl(self._app, chunk_id)
@@ -745,7 +793,7 @@ class ChunkCrawler:
                         await self.do_work(chunk_id, client=client)
 
                 self._q.task_done()
-                elapsed = time.time() - start
+                elapsed = self.now() - start
                 msg = f"ChunkCrawler - task {chunk_id} start: {start:.3f} "
                 msg += f"elapsed: {elapsed:.3f}"
                 log.debug(msg)
@@ -775,6 +823,7 @@ class ChunkCrawler:
                         select_dtype=self._select_dtype,
                         query=self._query,
                         query_update=self._query_update,
+                        query_indices=self._query_indices,
                         limit=self._limit,
                         chunk_map=self._chunk_map,
                         bucket=self._bucket,
@@ -891,8 +940,6 @@ class ChunkCrawler:
                 status_code = 500
                 msg = f"Unexpected exception {type(e)} for {self._action}({chunk_id}): {e} "
                 log.error(msg)
-                tb = traceback.format_exc()
-                print("traceback:", tb)
             retry += 1
             if status_code == 200:
                 break

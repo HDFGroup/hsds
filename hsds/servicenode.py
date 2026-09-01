@@ -14,9 +14,10 @@
 #
 
 import asyncio
-import time
 from aiohttp.web import run_app
 import aiohttp_cors
+from h5json.time_util import getNow
+
 from .util.lruCache import LruCache
 from .util.httpUtil import isUnixDomainUrl, bindToSocket, getPortFromUrl
 from .util.httpUtil import release_http_client, jsonResponse
@@ -36,11 +37,11 @@ from .attr_sn import DELETE_Attributes, DELETE_Attribute, GET_AttributeValue, PU
 from .ctype_sn import GET_Datatype, POST_Datatype, DELETE_Datatype
 from .dset_sn import GET_Dataset, POST_Dataset, DELETE_Dataset
 from .dset_sn import GET_DatasetShape, PUT_DatasetShape, GET_DatasetType
-from .chunk_sn import PUT_Value, GET_Value, POST_Value
+from .chunk_sn import PUT_Value, GET_Value, POST_Value, GET_Query
 
 
 async def init():
-    """Intitialize application and return app object"""
+    """Initialize application and return app object"""
     app = baseInit("sn")
 
     # call app.router.add_get() here to add node-specific routes
@@ -178,6 +179,9 @@ async def init():
     app.router.add_route("GET", path, GET_Value)
     app.router.add_route("POST", path, POST_Value)
 
+    path = "/datasets/{id}/query"
+    app.router.add_route("GET", path, GET_Query)
+
     # Add CORS to all routes
     cors_domain = config.get("cors_domain")
     if cors_domain:
@@ -217,10 +221,10 @@ async def preStop(request):
     log.request(request)
     app = request.app
 
-    shutdown_start = time.time()
+    shutdown_start = getNow()
     log.warn(f"preStop request calling on_shutdown at {shutdown_start:.2f}")
     await on_shutdown(app)
-    shutdown_elapse_time = time.time() - shutdown_start
+    shutdown_elapse_time = getNow() - shutdown_start
     msg = f"shutdown took: {shutdown_elapse_time:.2f} seconds"
     if shutdown_elapse_time > 2.0:
         # 2.0 is the default grace period for kubernetes
@@ -297,7 +301,7 @@ def main():
         sn_url = f"http://localhost:{sn_port}"
 
     if isUnixDomainUrl(sn_url):
-        print("binding to socket:", sn_url)
+        log.info(f"binding to socket: {sn_url}")
         try:
             s = bindToSocket(sn_url)
         except OSError as oe:

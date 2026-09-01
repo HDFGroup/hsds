@@ -78,21 +78,15 @@ def getIPKeys(metadata):
     if not isinstance(managedFields, list):
         log.warn(f"expected managedFields to be list but got: {type(managedFields)}")
         return pod_ips
-    # log.debug(f"mangagedFields - {len(managedFields)} items")
     for item in managedFields:
         if not isinstance(item, dict):
             log.warn(f"ignoring item type {type(item)}: {item}")
             continue
         for key in KEY_PATH:
-            # log.debug(f"using key: {key}")
             if key not in item:
                 # key not found, move on to next managedField
-                # msg = f"getIPKeys - looking for {key} key but not present"
-                # log.debug(msg)
                 break
             item = item[key]
-            # log.debug(f"got obj type: {type(item)}")
-            # log.debug(f"item: {item}")
             if not isinstance(item, dict):
                 log.warn("not a dict")
                 break

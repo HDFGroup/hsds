@@ -12,21 +12,24 @@
 #
 # attribute handling routines
 #
-import time
 from bisect import bisect_left
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPConflict, HTTPNotFound, HTTPGone
 from aiohttp.web_exceptions import HTTPInternalServerError
 from aiohttp.web import json_response
 
+from h5json.hdf5dtype import getItemSize, createDataType
+from h5json.array_util import arrayToBytes, jsonToArray, decodeData
+from h5json.array_util import bytesToArray, bytesArrayToList, getNumElements
+from h5json.shape_util import getShapeDims
+from h5json.time_util import getNow
+
 from .util.attrUtil import validateAttributeName, isEqualAttr
-from .util.hdf5dtype import getItemSize, createDataType
 from .util.globparser import globmatch
-from .util.dsetUtil import getShapeDims
-from .util.arrayUtil import arrayToBytes, jsonToArray, decodeData
-from .util.arrayUtil import bytesToArray, bytesArrayToList, getNumElements
 from .util.domainUtil import isValidBucketName
 from .datanode_lib import get_obj_id, get_metadata_obj, save_metadata_obj
+
+from . import config
 from . import hsds_logger as log
 
 
@@ -359,15 +362,17 @@ async def PUT_Attributes(request):
     log.request(request)
     app = request.app
     params = request.rel_url.query
-    log.debug(f"got PUT_Attributes params: {params}")
+    log.debug(f"got PUT_Attributes params: {dict(params)}")
     obj_id = get_obj_id(request)
+    now = getNow(app)
+    max_timestamp_drift = int(config.get("max_timestamp_drift", default=300))
 
     if not request.has_body:
         log.error("PUT_Attribute with no body")
         raise HTTPBadRequest(message="body expected")
 
     body = await request.json()
-    log.debug(f"got body: {body}")
+    log.debug(f"PUT_Attributes got body: {body}")
     if "bucket" in params:
         bucket = params["bucket"]
     elif "bucket" in body:
@@ -433,11 +438,10 @@ async def PUT_Attributes(request):
                 raise HTTPBadRequest(reason=msg)
             log.debug(f"got arr: {arr}")
             log.debug(f"arr.shape: {arr.shape}")
-            data = arr.tolist()
             try:
-                json_data = bytesArrayToList(data)
-                log.debug(f"converted encoded data to {json_data}")
-                if attr_shape["class"] == "H5S_SCALAR":
+                json_data = bytesArrayToList(arr)
+                log.debug(f"converted encoded data to '{json_data}'")
+                if attr_shape["class"] == "H5S_SCALAR" and isinstance(json_data, list):
                     attr_json["value"] = json_data[0]  # just store the scalar
                 else:
                     attr_json["value"] = json_data
@@ -458,11 +462,18 @@ async def PUT_Attributes(request):
 
     attributes = obj_json["attributes"]
 
-    create_time = time.time()
     # check for conflicts
     new_attributes = set()  # attribute names that are new or replacements
     for attr_name in items:
         attribute = items[attr_name]
+        if attribute.get("created"):
+            create_time = attribute["created"]
+            log.debug(f"attribute {attr_name} has create time: {create_time}")
+            if abs(create_time - now) > max_timestamp_drift:
+                log.warn(f"attribute {attr_name} create time stale, ignoring")
+                create_time = now
+        else:
+            create_time = now
         if attr_name in attributes:
             log.debug(f"attribute {attr_name} exists")
             old_item = attributes[attr_name]
@@ -510,7 +521,7 @@ async def PUT_Attributes(request):
 
     if new_attributes:
         # update the obj lastModified
-        now = time.time()
+        now = getNow(app)
         obj_json["lastModified"] = now
         # write back to S3, save to metadata cache
         await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
@@ -609,7 +620,7 @@ async def DELETE_Attributes(request):
 
     if save_obj:
         # update the object lastModified
-        now = time.time()
+        now = getNow(app)
         obj_json["lastModified"] = now
         await save_metadata_obj(app, obj_id, obj_json, bucket=bucket)
 

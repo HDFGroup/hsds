@@ -1,0 +1,107 @@
+name: "Start HSDS and run its test suite"
+description: >
+  Installs HSDS, starts it either as a bare process ("manual") or via
+  Docker Compose ("docker"), waits for node startup, then runs testall.py
+  against it. Shared by any job that needs a running HSDS instance.
+inputs:
+  build-method:
+    description: "How to start HSDS: 'manual' or 'docker'"
+    required: true
+  os:
+    description: "matrix.os of the calling job (used to skip docker on windows)"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install flake8 pytest
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Install package
+      shell: bash
+      run: |
+        pip install -e .
+
+    - name: Run unit tests
+      shell: bash
+      run: |
+        pytest
+
+    - name: Start HSDS (Manual)
+      shell: bash
+      if: ${{ inputs.build-method == 'manual' }}
+      env:
+        ADMIN_PASSWORD: admin
+        ADMIN_USERNAME: admin
+        USER_NAME: test_user1
+        USER_PASSWORD: test
+        USER2_NAME: test_user2
+        USER2_PASSWORD: test
+        HSDS_ENDPOINT: http://127.0.0.1:5101
+        BUCKET_NAME: hsdstest
+        LOG_LEVEL: DEBUG
+      run: |
+        cp admin/config/groups.default admin/config/groups.txt
+        cp admin/config/passwd.default admin/config/passwd.txt
+        hsds --root_dir data --host localhost --port 5101 --password_file admin/config/passwd.txt --logfile hs.log   --loglevel DEBUG  --config_dir=admin/config --count=4 &
+
+    - name: Start HSDS (Docker)
+      shell: bash
+      if: ${{ inputs.build-method == 'docker' && inputs.os != 'windows-latest' }}
+      env:
+        ADMIN_PASSWORD: admin
+        ADMIN_USERNAME: admin
+        USER_NAME: test_user1
+        USER_PASSWORD: test
+        USER2_NAME: test_user2
+        USER2_PASSWORD: test
+        HSDS_ENDPOINT: http://127.0.0.1:5101
+        BUCKET_NAME: hsdstest
+        LOG_LEVEL: DEBUG
+      run: |
+        cp admin/config/groups.default admin/config/groups.txt
+        cp admin/config/passwd.default admin/config/passwd.txt
+        ./build.sh --nolint
+        ./runall.sh
+
+    - name: Wait for node startup
+      shell: bash
+      run: |
+        sleep 45
+
+    - name: Run HSDS tests
+      if: ${{ !(inputs.build-method == 'docker' && inputs.os == 'windows-latest') }}
+      id: hsds-tests
+      shell: bash
+      env:
+        ADMIN_PASSWORD: admin
+        ADMIN_USERNAME: admin
+        USER_NAME: test_user1
+        USER_PASSWORD: test
+        USER2_NAME: test_user2
+        USER2_PASSWORD: test
+        BUCKET_NAME: hsdstest
+        LOG_LEVEL: DEBUG
+      run: |
+        python testall.py
+
+    - name: Show HSDS Logs on Fail (Docker)
+      # Only run if the whole workflow failed due to HSDS tests
+      if: ${{ failure() && steps.hsds-tests.outcome == 'failure' && (inputs.build-method == 'docker' && inputs.os != 'windows-latest') }}
+      shell: bash
+      run: |
+        docker logs hsds-sn-1 >&1
+        docker logs hsds-dn-1 >&1
+        docker logs hsds-dn-2 >&1
+        docker logs hsds-dn-3 >&1
+        docker logs hsds-dn-4 >&1
+
+    - name: Show HSDS Logs on Fail (Manual)
+      # Only run if the whole workflow failed due to HSDS tests
+      if: ${{ failure() && steps.hsds-tests.outcome == 'failure' && (inputs.build-method == 'manual') }}
+      shell: bash
+      run: |
+        cat hs.log

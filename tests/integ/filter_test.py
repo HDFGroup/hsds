@@ -58,6 +58,8 @@ class FilterTest(unittest.TestCase):
         # Create ~1MB dataset
 
         payload = {"type": "H5T_STD_I8LE", "shape": [1024, 1024]}
+        # use a chunked layout for compression
+        layout = {"class": "H5D_CHUNKED", "dims": [64, 64]}
         # define deflate compression
         gzip_filter = {
             "class": "H5Z_FILTER_DEFLATE",
@@ -65,7 +67,7 @@ class FilterTest(unittest.TestCase):
             "level": 9,
             "name": "deflate",
         }
-        payload["creationProperties"] = {"filters": [gzip_filter]}
+        payload["creationProperties"] = {"layout": layout, "filters": [gzip_filter]}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -120,7 +122,9 @@ class FilterTest(unittest.TestCase):
         payload = {"type": "H5T_STD_I32LE", "shape": [1024, 1024]}
         # define sshufle compression
         shuffle_filter = {"class": "H5Z_FILTER_SHUFFLE", "id": 2, "name": "shuffle"}
-        payload["creationProperties"] = {"filters": [shuffle_filter]}
+        # use chunked layout for compression
+        layout = {"class": "H5D_CHUNKED", "dims": [64, 64]}
+        payload["creationProperties"] = {"filters": [shuffle_filter], "layout": layout}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -182,7 +186,11 @@ class FilterTest(unittest.TestCase):
         }
         # and shuffle compression
         shuffle_filter = {"class": "H5Z_FILTER_SHUFFLE", "id": 2, "name": "shuffle"}
-        payload["creationProperties"] = {"filters": [shuffle_filter, gzip_filter]}
+        filters = [shuffle_filter, gzip_filter]
+        # use chunked layout
+        layout = {"class": "H5D_CHUNKED", "dims": [64, 64]}
+        payload["creationProperties"] = {"layout": layout, "filters": filters}
+
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -237,7 +245,9 @@ class FilterTest(unittest.TestCase):
 
         # bit shuffle
         bitshuffle_filter = {"class": "H5Z_FILTER_BITSHUFFLE", "id": 32008, "name": "bitshuffle"}
-        payload["creationProperties"] = {"filters": [bitshuffle_filter, ]}
+        # use chunked layout
+        layout = {"class": "H5D_CHUNKED", "dims": [64, 64]}
+        payload["creationProperties"] = {"filters": [bitshuffle_filter], "layout": layout}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -299,7 +309,68 @@ class FilterTest(unittest.TestCase):
         }
         # and bit shuffle
         bitshuffle_filter = {"class": "H5Z_FILTER_BITSHUFFLE", "id": 32008, "name": "bitshuffle"}
-        payload["creationProperties"] = {"filters": [bitshuffle_filter, gzip_filter]}
+        filters = [bitshuffle_filter, gzip_filter]
+        # use chunked layout
+        layout = {"class": "H5D_CHUNKED", "dims": [64, 64]}
+        payload["creationProperties"] = {"filters": filters, "layout": layout}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)  # create dataset
+        rspJson = json.loads(rsp.text)
+        dset_uuid = rspJson["id"]
+        self.assertTrue(helper.validateId(dset_uuid))
+
+        # link new dataset as 'dset'
+        name = "dset" + helper.getRandomName()
+        req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+        payload = {"id": dset_uuid}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        # write a horizontal strip of 22s
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        data = [22] * 1024
+        payload = {"start": [512, 0], "stop": [513, 1024], "value": data}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        # read back the 512,512 element
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"  # test
+        params = {"select": "[512:513,512:513]"}  # read  1 element
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("hrefs" in rspJson)
+        self.assertTrue("value" in rspJson)
+        value = rspJson["value"]
+        self.assertEqual(len(value), 1)
+        row = value[0]
+        self.assertEqual(len(row), 1)
+        self.assertEqual(row[0], 22)
+
+    def testBloscCompression(self):
+        # test Dataset with creation property list
+        print("testBloscCompression", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        # get domain
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        self.assertTrue("root" in rspJson)
+        root_uuid = rspJson["root"]
+
+        # create the dataset
+        req = self.endpoint + "/datasets"
+
+        # Create ~4MB dataset
+
+        payload = {"type": "H5T_STD_I32LE", "shape": [1024, 1024]}
+        # define blosc compression (blosclz is one of the compressors
+        # available via the blosc filter, as defined in h5json's FILTER_DEFS)
+        blosc_filter = {"class": "H5Z_FILTER_BLOSC", "id": 32001, "name": "blosclz"}
+        # use chunked layout for compression
+        layout = {"class": "H5D_CHUNKED", "dims": [64, 64]}
+        payload["creationProperties"] = {"filters": [blosc_filter], "layout": layout}
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)  # create dataset
@@ -459,6 +530,12 @@ class FilterTest(unittest.TestCase):
         hdf5_sample_bucket = config.get("hdf5_sample_bucket")
         if not hdf5_sample_bucket:
             print("hdf5_sample_bucket config not set, skipping testShuffleFilter")
+            return
+
+        else:
+            msg = "TBD: testBitDeshuffling - need to verify that the bitshuffle "
+            msg += "filter is working correctly"
+            print(msg)
             return
 
         # Get domain
