@@ -421,8 +421,7 @@ class DatasetTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
-            return  # abort rest of test
+            self.skipTest(f'{domain}: test data not loaded - see docs/post_install.md')
         domainJson = json.loads(rsp.text)
         root_uuid = domainJson["root"]
 
@@ -523,8 +522,7 @@ class DatasetTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
-            return  # abort rest of test
+            self.skipTest(f'{domain}: test data not loaded - see docs/post_install.md')
         domainJson = json.loads(rsp.text)
         root_uuid = domainJson["root"]
 
@@ -600,8 +598,7 @@ class DatasetTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
-            return  # abort rest of test
+            self.skipTest(f'{domain}: test data not loaded - see docs/post_install.md')
         domainJson = json.loads(rsp.text)
         root_uuid = domainJson["root"]
         self.assertTrue(helper.validateId(root_uuid))

@@ -57,9 +57,7 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
-            print(msg)
-            return  # abort rest of test
+            self.skipTest(f'{domain}: test data not loaded - see docs/post_install.md')
         self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
         rspJson = json.loads(rsp.text)
 
@@ -171,9 +169,7 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
-            print(msg)
-            return  # abort rest of test
+            self.skipTest(f'{domain}: test data not loaded - see docs/post_install.md')
         domainJson = json.loads(rsp.text)
         self.assertTrue("root" in domainJson)
         root_id = domainJson["root"]
@@ -216,9 +212,7 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
-            print(msg)
-            return  # abort rest of test
+            self.skipTest(f'{domain}: test data not loaded - see docs/post_install.md')
         domainJson = json.loads(rsp.text)
         self.assertTrue("root" in domainJson)
         root_id = domainJson["root"]
@@ -248,9 +242,7 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
-            print(msg)
-            return  # abort rest of test
+            self.skipTest(f'{domain}: test data not loaded - see docs/post_install.md')
         domainJson = json.loads(rsp.text)
         self.assertTrue("root" in domainJson)
         root_id = domainJson["root"]
@@ -302,9 +294,7 @@ class DomainTest(unittest.TestCase):
 
         rsp = self.session.get(req, params=params, headers=headers)
         if rsp.status_code == 404:
-            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
-            print(msg)
-            return  # abort rest of test
+            self.skipTest(f'{domain}: test data not loaded - see docs/post_install.md')
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
         rspJson = json.loads(rsp.text)
@@ -1098,9 +1088,7 @@ class DomainTest(unittest.TestCase):
 
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
-            print(msg)
-            return  # abort rest of test
+            self.skipTest(f'{domain}: test data not loaded - see docs/post_install.md')
 
         rspJson = json.loads(rsp.text)
         for k in ("root", "owner", "created", "lastModified"):
@@ -1507,8 +1495,7 @@ class DomainTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(f"WARNING: Failed to get domain: {folder}. Is test data setup?")
-            return  # abort rest of test
+            self.skipTest(f'{folder}: test data not loaded - see docs/post_install.md')
         self.assertEqual(rsp.headers["content-type"], "application/json; charset=utf-8")
         rspJson = json.loads(rsp.text)
 
@@ -1555,8 +1542,7 @@ class DomainTest(unittest.TestCase):
             if name.endswith("tall.h5"):
                 tall_item = item
         if not tall_item:
-            print("WARNING: Failed to get domain. Is test data setup?")
-            return  # abort rest of test
+            self.skipTest('test data not loaded - see docs/post_install.md')
         self.assertEqual(tall_item["class"], "domain")
         self.assertTrue("num_objects" in tall_item)
         self.assertEqual(tall_item["num_objects"], 14)

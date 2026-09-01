@@ -479,8 +479,7 @@ class LinkTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
-            return  # abort rest of test
+            self.skipTest(f'{domain}: test data not loaded - see docs/post_install.md')
 
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -570,8 +569,7 @@ class LinkTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
-            return  # abort rest of test
+            self.skipTest(f'{domain}: test data not loaded - see docs/post_install.md')
 
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -664,8 +662,7 @@ class LinkTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            print(f"WARNING: Failed to get domain: {domain}. Is test data setup?")
-            return  # abort rest of test
+            self.skipTest(f'{domain}: test data not loaded - see docs/post_install.md')
 
         rspJson = json.loads(rsp.text)
         root_uuid = rspJson["root"]
@@ -1183,9 +1180,7 @@ class LinkTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
-            print(msg)
-            return  # abort rest of test
+            self.skipTest(f'{domain}: test data not loaded - see docs/post_install.md')
 
         domainJson = json.loads(rsp.text)
         root_id = domainJson["root"]
@@ -1248,9 +1243,7 @@ class LinkTest(unittest.TestCase):
         req = helper.getEndpoint() + "/"
         rsp = self.session.get(req, headers=headers)
         if rsp.status_code != 200:
-            msg = f"WARNING: Failed to get domain: {domain}. Is test data setup?"
-            print(msg)
-            return  # abort rest of test
+            self.skipTest(f'{domain}: test data not loaded - see docs/post_install.md')
 
         domainJson = json.loads(rsp.text)
         root_id = domainJson["root"]
