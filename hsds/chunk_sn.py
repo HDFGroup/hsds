@@ -16,6 +16,7 @@
 
 import base64
 import math
+import traceback
 import numpy as np
 
 from json import JSONDecodeError
@@ -989,6 +990,7 @@ async def GET_Value(request):
 
     resp_json = {"status": 200}  # will over-write if there's a problem
     # write response
+    resp = None
     try:
         resp = StreamResponse()
         if config.get("http_compression"):
@@ -1137,7 +1139,13 @@ async def GET_Value(request):
         await resp.write_eof()
     except Exception as e:
         log.error(f"{type(e)} Exception during data write: {e}")
-        raise HTTPInternalServerError()
+        log.error(f"traceback: {traceback.format_exc()}")
+        if resp is not None and resp.prepared:
+            # headers are already on the wire - raising here would inject a new
+            # status line into the body and corrupt the chunked stream
+            await resp.write_eof()
+        else:
+            raise HTTPInternalServerError()
 
     return resp
 
@@ -1467,7 +1475,8 @@ async def POST_Value(request):
             resp_body = resp_body.encode("utf-8")
             await resp.write(resp_body)
     except Exception as e:
-        log.error(f"{type(e)} Exception during response write")
+        log.error(f"{type(e)} Exception during response write: {e}")
+        log.error(f"traceback: {traceback.format_exc()}")
 
     # finalize response
     await resp.write_eof()
