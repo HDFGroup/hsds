@@ -132,13 +132,28 @@ jobs:
           wget https://s3.amazonaws.com/hdfgroup/data/hdf5test/tall.h5
           hsload -v -e $HS_ENDPOINT tall.h5 /home/test_user1/test/
           hsls -r -e $HS_ENDPOINT /home/test_user1/test/tall.h5
+          # Those same tests also read .info.json and .summary.json, written by
+          # the data node's bucket scan. The scan does not start until
+          # scan_wait_time (10s) after the load, and the scan loop naps up to
+          # scan_sleep_time (10s) between passes, so its output can land after
+          # the tests have already read it - an intermittent "0 != 6" on
+          # num_groups and a missing domain_objs. Force the scan and block
+          # until it completes rather than hoping it wins the race. This is the
+          # same flush+rescan the tests use when they need scan output (see
+          # dataset_test.py and value_test.py): it runs the ordinary async scan
+          # path and only skips the aging delay.
+          curl -sS -f -u "$HS_USERNAME:$HS_PASSWORD" -X PUT \
+            -H "X-Hdf-domain: /home/test_user1/test/tall.h5" \
+            "$HS_ENDPOINT/?flush=1&rescan=1"
+
           # domain_test's testGetDomain, testGetDomainVerbose and
           # testGetDomainsVerbose assert the test-data domain is more than ten
           # seconds old ("created < now - 10"). That holds for the setup those
           # tests were written against - docs/post_install.md, where hsload is
           # run once into a long-lived server - but not here, where the domain
           # is created seconds earlier. Wait it out rather than weaken an
-          # assertion that is correct in its intended setting.
+          # assertion that is correct in its intended setting. Kept last so the
+          # flush above cannot leave a timestamp newer than the ten seconds.
           sleep 11
 
       - name: Run HSDS integration tests (with test data loaded)
