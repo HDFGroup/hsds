@@ -104,4 +104,10 @@ runs:
       if: ${{ failure() && steps.hsds-tests.outcome == 'failure' && (inputs.build-method == 'manual') }}
       shell: bash
       run: |
+        # Sub-process output reaches hs.log via a queue that the parent drains
+        # once a second (app.py's "time.sleep(1); app.check_processes()" loop),
+        # so cat'ing immediately after a failure loses the last second - which
+        # is exactly the part that explains the failure. Wait for a full drain
+        # cycle first.
+        sleep 3
         cat hs.log

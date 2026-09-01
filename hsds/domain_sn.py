@@ -1057,15 +1057,37 @@ async def PUT_Domain(request):
                 "include_attrs": False,
                 "bucket": bucket,
             }
-            try:
-                await getObjectJson(app, root_id, **kwargs)
+            # A 404 or 410 means the id is free; anything else that is not a
+            # successful fetch is a transient failure rather than an answer.
+            # http_get turns a ClientError, CancelledError or
+            # ConnectionResetError into a 500 and a busy DN into a 503, and
+            # neither says the root exists - so look again once rather than
+            # failing a legitimate create on a blip. A second failure is
+            # re-raised unchanged, so a genuine DN error is not masked.
+            root_exists = False
+            for attempt in (1, 2):
+                try:
+                    await getObjectJson(app, root_id, **kwargs)
+                    root_exists = True
+                    break
+                except HTTPNotFound:
+                    log.debug(f"root_id: {root_id} not found (expected)")
+                    break
+                except HTTPGone:
+                    log.debug(f"root_id: {root_id} has been removed (expected)")
+                    break
+                except (HTTPInternalServerError, HTTPServiceUnavailable) as e:
+                    msg = f"transient error checking root_id: {root_id} on "
+                    msg += f"attempt {attempt}: {type(e).__name__}"
+                    log.warn(msg)
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(0.1)
+
+            if root_exists:
                 msg = "client specified root_id already exists"
                 log.warn(msg)
                 raise HTTPConflict()
-            except HTTPNotFound:
-                log.debug(f"root_id: {root_id} not found (expected)")
-            except HTTPGone:
-                log.debug(f"root_id: {root_id} has been removed (expected)")
             log.debug(f"using client supplied root_id: {root_id}")
         else:
             root_id = createObjId("groups")
