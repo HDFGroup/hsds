@@ -90,6 +90,10 @@ jobs:
         with:
           build-method: docker
           os: ubuntu-latest
+          # this job runs the suite itself further down, against the loaded
+          # test data - running it here too would run it twice, and the first
+          # pass would be against a server with no test data
+          run-tests: "false"
 
       - name: Checkout h5pyd
         uses: actions/checkout@v4
@@ -101,6 +105,22 @@ jobs:
         working-directory: ${{github.workspace}}/h5pyd
         run: |
           pip install . -v
+
+      - name: Create home folders
+        # hstouch/hsload below need /home/<user>/ to already exist. That is
+        # created by setup_test, which testall.py runs first - so this job used
+        # to get it as a side effect of the suite run that has now been turned
+        # off. Do it explicitly instead.
+        env:
+          ADMIN_USERNAME: admin
+          ADMIN_PASSWORD: admin
+          USER_NAME: test_user1
+          USER_PASSWORD: test
+          USER2_NAME: test_user2
+          USER2_PASSWORD: test
+          BUCKET_NAME: hsdstest
+        run: |
+          python tests/integ/setup_test.py
 
       - name: Load test data
         env:

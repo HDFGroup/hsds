@@ -10,6 +10,14 @@ inputs:
   os:
     description: "matrix.os of the calling job (used to skip docker on windows)"
     required: true
+  run-tests:
+    description: >
+      Run the unit and integration suites after starting HSDS. Callers that
+      only need a running server - test-data-setup, which loads sample data
+      and then runs the suite itself - should pass "false" so the suite is not
+      run twice, once of them against a server with no test data.
+    required: false
+    default: "true"
 runs:
   using: "composite"
   steps:
@@ -26,6 +34,7 @@ runs:
         pip install -e .
 
     - name: Run unit tests
+      if: ${{ inputs.run-tests == 'true' }}
       shell: bash
       run: |
         pytest
@@ -73,7 +82,7 @@ runs:
         sleep 45
 
     - name: Run HSDS tests
-      if: ${{ !(inputs.build-method == 'docker' && inputs.os == 'windows-latest') }}
+      if: ${{ inputs.run-tests == 'true' && !(inputs.build-method == 'docker' && inputs.os == 'windows-latest') }}
       id: hsds-tests
       shell: bash
       env:
