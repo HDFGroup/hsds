@@ -1,11 +1,11 @@
 name: Release
 
-# Cuts a GitHub release from a pushed tag.
+# Cuts a release from a pushed tag: builds the distributions, attaches them to
+# a GitHub release whose notes are generated from the commits/PRs since the
+# previous release, and uploads them to PyPI (https://pypi.org/project/hsds/).
 #
-# HSDS is not published to PyPI, so this workflow does one thing: turn an
-# annotated tag into a GitHub release whose notes are generated from the
-# commits/PRs since the previous release. Docker images are built separately
-# by docker-image.yml, which already triggers on the same `v*` tags.
+# Docker images are built separately by docker-image.yml, which already
+# triggers on the same `v*` tags.
 #
 # To cut a release:
 #   1. Bump the version in pyproject.toml (the SSOT) AND the matching
@@ -91,19 +91,87 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------
+  # Build once. The same sdist/wheel are attached to the GitHub release and
+  # uploaded to PyPI - never rebuilt per target, so the two can't disagree.
+  # This job runs on a dry run too, so `workflow_dispatch` rehearses the build
+  # and metadata checks rather than only the version validation.
+  # ---------------------------------------------------------------------
+  build:
+    name: Build distributions
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.BUILD_PYTHON_VERSION }}
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+
+      - name: Check metadata
+        run: python -m twine check --strict dist/*
+
+      - name: Verify built version matches the tag
+        env:
+          EXPECTED: ${{ needs.version.outputs.version }}
+        run: |
+          # Guards against a stale build backend or leftover dist/ contents
+          # silently shipping the wrong version.
+          if ! ls "dist/hsds-${EXPECTED}.tar.gz" >/dev/null 2>&1; then
+            echo "::error::expected dist/hsds-${EXPECTED}.tar.gz, got:"
+            ls -1 dist/
+            exit 1
+          fi
+
+      - name: Smoke test the wheel
+        run: |
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install --quiet dist/*.whl
+          /tmp/smoke/bin/python -c "import hsds; print('import ok')"
+          /tmp/smoke/bin/hsds --help > /dev/null
+          # Only `hsds` itself is safe to run: hsds-datanode, hsds-servicenode
+          # and hsds-headnode start serving instead of printing help and never
+          # return. Resolve the rest of the entry points without calling them.
+          /tmp/smoke/bin/python - <<'PY'
+          from importlib.metadata import entry_points
+
+          eps = [e for e in entry_points(group="console_scripts")
+                 if e.module.startswith("hsds")]
+          assert eps, "no hsds console scripts in the installed metadata"
+          for ep in sorted(eps, key=lambda e: e.name):
+              ep.load()  # imports the module, resolves the attr, does not call
+              print(f"entry point ok: {ep.name} -> {ep.value}")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------
   # GitHub release. Notes come from --generate-notes (commits/PRs since the
   # previous release) rather than a hand-maintained CHANGELOG, which HSDS
-  # does not have.
+  # does not have. The built dists are attached alongside.
   # ---------------------------------------------------------------------
   github-release:
     name: GitHub release
-    needs: version
+    needs: [version, build]
     if: needs.version.outputs.dry_run == 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
 
       - name: Create release
         env:
@@ -115,4 +183,37 @@ jobs:
           if [ "$PRERELEASE" = "true" ]; then
             args+=(--prerelease)
           fi
-          gh release create "$TAG" "${args[@]}"
+          gh release create "$TAG" "${args[@]}" dist/*
+
+  # ---------------------------------------------------------------------
+  # PyPI. Uses Trusted Publishing (OIDC) - no long-lived API token in repo
+  # secrets. Requires a one-time publisher config on PyPI plus a `pypi`
+  # environment on this repo; both are spelled out in the Publish step below.
+  # ---------------------------------------------------------------------
+  pypi:
+    name: Publish to PyPI
+    needs: [version, build]
+    if: needs.version.outputs.dry_run == 'false'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/hsds/${{ needs.version.outputs.version }}
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # Trusted Publishing is configured at
+        # https://pypi.org/manage/project/hsds/settings/publishing/
+        #   owner: HDFGroup   repo: hsds
+        #   workflow: release.yml   environment: pypi
+        #
+        # To use an API token instead, drop the `id-token: write` permission
+        # above and add:
+        #   with:
+        #     password: ${{ secrets.PYPI_API_TOKEN }}
