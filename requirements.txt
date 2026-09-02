@@ -42,7 +42,7 @@ pytz==2026.3.post1
 PyYAML==6.0.3
 referencing==0.37.0
 requests-unixsocket==0.4.1
-requests==2.32.4
+requests==2.33.0
 rpds-py==2026.6.3
 s3fs==2026.1.0
 setuptools==84.0.0
