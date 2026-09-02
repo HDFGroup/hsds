@@ -189,10 +189,16 @@ jobs:
   # PyPI. Uses Trusted Publishing (OIDC) - no long-lived API token in repo
   # secrets. Requires a one-time publisher config on PyPI plus a `pypi`
   # environment on this repo; both are spelled out in the Publish step below.
+  #
+  # Runs after github-release rather than alongside it. The two publish to
+  # places with very different undo stories: a GitHub release can be deleted
+  # and recreated, while PyPI permanently burns a version number - a deleted
+  # release cannot be re-uploaded. Ordering it this way means a failure in the
+  # recoverable half stops the irreversible half from happening at all.
   # ---------------------------------------------------------------------
   pypi:
     name: Publish to PyPI
-    needs: [version, build]
+    needs: [version, github-release]
     if: needs.version.outputs.dry_run == 'false'
     runs-on: ubuntu-latest
     environment:
