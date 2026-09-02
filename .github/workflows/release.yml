@@ -17,10 +17,6 @@ name: Release
 # the version/tag checks can be rehearsed off a branch before tagging.
 
 on:
-  push:
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
-      - "v[0-9]+.[0-9]+.[0-9]+[abrc]*[0-9]*"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -63,12 +59,7 @@ jobs:
 
       - name: Determine run mode
         id: mode
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            echo "dry_run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
-          fi
+        run: echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
 
       - name: Read version from SSOT and validate against tag
         id: ssot
@@ -154,13 +145,62 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------
+  # Create the tag. Derived from the SSOT rather than typed by hand, so it
+  # cannot disagree with pyproject.toml.
+  #
+  # Placed after build and before github-release, keeping the pipeline
+  # ordered by how hard each step is to undo: validate and build create
+  # nothing, a tag and a release can be deleted, a PyPI upload cannot. A
+  # failed build therefore never leaves a stray tag behind.
+  # ---------------------------------------------------------------------
+  tag:
+    name: Tag
+    needs: [version, build]
+    if: needs.version.outputs.dry_run == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create and push the tag
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          # An annotated tag's refs/tags/<t> is the tag object, not the
+          # commit, so ask for the peeled ref first and fall back for
+          # lightweight tags.
+          existing=$(git ls-remote origin "refs/tags/${TAG}^{}" | cut -f1)
+          if [ -z "$existing" ]; then
+            existing=$(git ls-remote origin "refs/tags/${TAG}" | cut -f1)
+          fi
+
+          if [ -n "$existing" ]; then
+            # Re-running after a later job failed is expected and fine, as
+            # long as the tag still means the same commit.
+            if [ "$existing" = "$GITHUB_SHA" ]; then
+              echo "::notice::$TAG already points at $GITHUB_SHA - nothing to do"
+              exit 0
+            fi
+            echo "::error::$TAG already exists at $existing, which is not the"
+            echo "commit being released ($GITHUB_SHA). Delete the tag, or bump"
+            echo "the version in pyproject.toml and run again."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+
+  # ---------------------------------------------------------------------
   # GitHub release. Notes come from --generate-notes (commits/PRs since the
   # previous release) rather than a hand-maintained CHANGELOG, which HSDS
   # does not have. The built dists are attached alongside.
   # ---------------------------------------------------------------------
   github-release:
     name: GitHub release
-    needs: [version, build]
+    needs: [version, build, tag]
     if: needs.version.outputs.dry_run == 'false'
     runs-on: ubuntu-latest
     permissions:
@@ -189,10 +229,16 @@ jobs:
   # PyPI. Uses Trusted Publishing (OIDC) - no long-lived API token in repo
   # secrets. Requires a one-time publisher config on PyPI plus a `pypi`
   # environment on this repo; both are spelled out in the Publish step below.
+  #
+  # Runs after github-release rather than alongside it. The two publish to
+  # places with very different undo stories: a GitHub release can be deleted
+  # and recreated, while PyPI permanently burns a version number - a deleted
+  # release cannot be re-uploaded. Ordering it this way means a failure in the
+  # recoverable half stops the irreversible half from happening at all.
   # ---------------------------------------------------------------------
   pypi:
     name: Publish to PyPI
-    needs: [version, build]
+    needs: [version, github-release]
     if: needs.version.outputs.dry_run == 'false'
     runs-on: ubuntu-latest
     environment:
