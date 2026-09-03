@@ -94,4 +94,5 @@ hsds-servicenode = "hsds.servicenode:main"
 hsds-headnode = "hsds.headnode:main"
 hsds-node = "hsds.node_runner:main"
 hsds-chunklocator = "hsds.chunklocator:main"
+hsds-node-state = "hsds.node_state:main"
 

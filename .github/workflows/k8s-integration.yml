@@ -1,0 +1,25 @@
+name: k8s integration
+
+# Runs HSDS headless (no head node) on a real k3s cluster and asserts the
+# service nodes actually reach READY and serve requests. Unit tests cannot see
+# this failure mode: it only appears when service nodes discover data nodes
+# through the Kubernetes API, and it presents as healthy pods that 503.
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  headless-k8s:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k3d
+        run: curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+      - name: Run headless k8s readiness test
+        run: tests/k8s/run.sh 3
