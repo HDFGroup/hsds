@@ -160,6 +160,18 @@ async def k8s_update_dn_info(app):
     elif app["dn_urls"] != dn_urls:
         log.info(f"pod ips have changed: {dn_urls}, fetch dn_ids")
         scale_update = True
+    elif app.get("cluster_state") != "READY":
+        # the roster was incomplete last pass - e.g. a dn had not yet assigned
+        # itself a node_number, so it reported -1. Re-fetch until it converges;
+        # keying only off dn_urls changes leaves the cluster wedged in WAITING
+        # forever once the pod set goes stable.
+        #
+        # Costs one /info request per dn per health check, so n^2 across the cluster,
+        # but only while not READY. A cluster that never converges therefore polls
+        # indefinitely where it previously checked once; add backoff here if that
+        # becomes a problem at larger node counts.
+        log.info("cluster_state is not READY, re-fetching dn_ids")
+        scale_update = True
     else:
         scale_update = False
 
@@ -210,14 +222,34 @@ async def k8s_update_dn_info(app):
         log.info(f"scaling - updating dn_ids to: {dn_ids}")
         app["dn_ids"] = dn_ids
 
+        # Any partial view sets WAITING, so a rescale briefly returns 503 until the
+        # roster reconverges - about one health check interval. That is the trade this
+        # gate makes: nodes holding different dn rosters compute different partitions
+        # for the same obj_id, so serving through the churn risks inconsistent reads
+        # rather than a short unavailability.
         if len(dn_ids) != new_count:
             log.warn(f"scaling - got {len(dn_ids)} dn_ids expected {new_count}")
+            app["cluster_state"] = "WAITING"
         elif len(dn_node_numbers) != len(dn_urls):
             log.warn(f"scaling - got {len(dn_node_numbers)} node numbers, expected {new_count}")
+            app["cluster_state"] = "WAITING"
         elif not consecutive:
             log.warn(f"scaling - node_numbers not consecutive - got: {dn_node_numbers}")
+            app["cluster_state"] = "WAITING"
+        elif min_node_count != len(dn_urls) or max_node_count != len(dn_urls):
+            msg = "scaling - dn node_counts have not converged, got range: "
+            msg += f"{min_node_count}-{max_node_count}, expected: {len(dn_urls)}"
+            log.warn(msg)
+            app["cluster_state"] = "WAITING"
         else:
             log.info("scaling - node numbers complete")
+            # No head node exists in this mode to report cluster_state, so derive it
+            # from the dn roster. This deliberately covers only the dn dimension of
+            # isClusterReady(): that function also compares the sn count against
+            # target_sn_count, which is not checked here. getObjPartition() partitions
+            # by dn count, so dn completeness is what decides whether nodes agree on
+            # partitioning - an sn that is not up is simply not serving.
+            app["cluster_state"] = "READY"
 
 
 async def docker_update_dn_info(app):
