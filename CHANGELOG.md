@@ -1,4 +1,4 @@
-v1.0.1 --- unreleased
+v1.0.1 --- 9/10/26
 
 # 🔺 HSDS Changelog
 
