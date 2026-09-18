@@ -23,6 +23,46 @@ from .. import hsds_logger as log
 from .chunkUtil import _toArraySlice, slice_stop, toNumpyIndex
 
 
+# Layout classes whose layout json locates the actual data - a file_uri, and for
+# the indirect case a chunk_table - rather than just describing a chunk shape.
+# Also defined in dset_lib.py and chunk_crawl.py; those could import it from here
+# in a follow-up.
+CHUNK_REF_LAYOUTS = (
+    "H5D_CONTIGUOUS_REF",
+    "H5D_CHUNKED_REF",
+    "H5D_CHUNKED_REF_INDIRECT",
+)
+
+
+def getDatasetCreationProps(dset_json):
+    """ Return the creationProperties to report for the given dataset json.
+
+    Datasets created by this version keep their layout in creationProperties
+    only.  Ones written by older versions (and by hsload --link) also store the
+    resolved chunk shape under a top-level "layout" key, which is folded in here
+    so clients see the shape actually in use.
+
+    A reference layout is the exception: its creationProperties copy carries the
+    file_uri (and, for H5D_CHUNKED_REF_INDIRECT, the chunk_table) that locate the
+    data, while the top-level layout is a plain H5D_CHUNKED shape.  Folding that
+    in would discard the reference and leave the chunks unresolvable, so the
+    creationProperties layout wins.
+
+    Returns a copy - dset_json is typically the meta_cache entry, and updating it
+    in place would corrupt the cached metadata for the lifetime of the process.
+    """
+    cpl = dict(dset_json.get("creationProperties", {}))
+
+    layout = dset_json.get("layout")
+    if layout:
+        cpl_layout = cpl.get("layout")
+        is_ref = isinstance(cpl_layout, dict) and cpl_layout.get("class") in CHUNK_REF_LAYOUTS
+        if not is_ref:
+            cpl["layout"] = layout
+
+    return cpl
+
+
 def isSelectAll(selection, dims):
     """ return True if the selection covers the entire dataspace """
     if len(selection.shape) != len(dims):

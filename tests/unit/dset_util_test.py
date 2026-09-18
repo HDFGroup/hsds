@@ -23,6 +23,7 @@ from hsds.util.dsetUtil import get_slices
 from hsds.util.dsetUtil import getSelectionList, getSelectionPagination
 from hsds.util.dsetUtil import parseRegionRefParam, extractJsonArrayElement
 from hsds.util.dsetUtil import regionRefSelectionToTargetSelection, unwrapSingleElement
+from hsds.util.dsetUtil import getDatasetCreationProps
 
 
 class DsetUtilTest(unittest.TestCase):
@@ -606,6 +607,67 @@ class DsetUtilTest(unittest.TestCase):
         ref_pts = RegionReference(dset_id, pts_sel)
         pts_target = regionRefSelectionToTargetSelection(ref_pts.to_json(), (3, 16))
         self.assertEqual(pts_target.nselect, 2)
+
+    def testGetDatasetCreationProps(self):
+        # datasets created by this version carry the layout in creationProperties
+        # only, and it is reported as-is
+        dset_json = {"creationProperties": {"layout": {"class": "H5D_CHUNKED", "dims": [10, 10]}}}
+        cpl = getDatasetCreationProps(dset_json)
+        self.assertEqual(cpl["layout"], {"class": "H5D_CHUNKED", "dims": [10, 10]})
+
+        # datasets written by older versions also store the resolved chunk shape
+        # under a top-level "layout" key - that is the shape in use, so it wins
+        dset_json = {
+            "creationProperties": {"layout": {"class": "H5D_CHUNKED", "dims": [1000, 1000]}},
+            "layout": {"class": "H5D_CHUNKED", "dims": [500, 500]},
+        }
+        cpl = getDatasetCreationProps(dset_json)
+        self.assertEqual(cpl["layout"], {"class": "H5D_CHUNKED", "dims": [500, 500]})
+
+        # ... but a reference layout must survive: the top-level layout is a plain
+        # chunk shape, and folding it in would drop the file_uri/chunk_table that
+        # locate the data, leaving every chunk unresolvable
+        ref_layout = {
+            "class": "H5D_CHUNKED_REF_INDIRECT",
+            "file_uri": "s3://a-storage-bucket/some-file.h5",
+            "dims": [2000, 500],
+            "chunk_table": "d-b4b3b3d6-94343adc-1727-28bebf-12caac",
+        }
+        dset_json = {
+            "creationProperties": {"layout": dict(ref_layout)},
+            "layout": {"class": "H5D_CHUNKED", "dims": [2000, 500]},
+        }
+        cpl = getDatasetCreationProps(dset_json)
+        self.assertEqual(cpl["layout"], ref_layout)
+
+        # the same holds for the other reference layout classes
+        for layout_class in ("H5D_CHUNKED_REF", "H5D_CONTIGUOUS_REF"):
+            cpl_layout = {"class": layout_class, "file_uri": "s3://a-bucket/f.h5"}
+            dset_json = {
+                "creationProperties": {"layout": dict(cpl_layout)},
+                "layout": {"class": "H5D_CHUNKED", "dims": [1, 1]},
+            }
+            cpl = getDatasetCreationProps(dset_json)
+            self.assertEqual(cpl["layout"], cpl_layout)
+
+        # the dataset json is the meta_cache entry - it must not be mutated
+        dset_json = {
+            "creationProperties": {"layout": {"class": "H5D_CHUNKED", "dims": [1000, 1000]}},
+            "layout": {"class": "H5D_CHUNKED", "dims": [500, 500]},
+        }
+        getDatasetCreationProps(dset_json)
+        self.assertEqual(
+            dset_json["creationProperties"]["layout"],
+            {"class": "H5D_CHUNKED", "dims": [1000, 1000]},
+        )
+
+        # a dataset with no creationProperties still reports the stored layout
+        dset_json = {"layout": {"class": "H5D_CHUNKED", "dims": [4]}}
+        cpl = getDatasetCreationProps(dset_json)
+        self.assertEqual(cpl["layout"], {"class": "H5D_CHUNKED", "dims": [4]})
+
+        # and one with neither reports empty props rather than raising
+        self.assertEqual(getDatasetCreationProps({"id": "d-123"}), {})
 
 
 if __name__ == "__main__":
