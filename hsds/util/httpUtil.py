@@ -625,7 +625,7 @@ def respJsonAssemble(obj_json, params, id):
     elif isValidUuid(id, "group"):
         log.debug("assemble group")
         return obj_json
-    elif isValidUuid(id, "type"):
+    elif isValidUuid(id, "datatype"):
         log.debug("assemble type")
         return obj_json
     elif isValidUuid(id, "chunk"):
@@ -643,7 +643,7 @@ def getHeader(uri):
         return "/groups/"
     elif isValidUuid(uri, "dataset"):
         return "/datasets/"
-    elif isValidUuid(uri, "type"):
+    elif isValidUuid(uri, "datatype"):
         return "/datatypes/"
     else:
         log.error("Couldn't determine proper header for type")
@@ -658,7 +658,7 @@ def getObjectClass(uri):
         return "group"
     elif isValidUuid(uri, "dataset"):
         return "dataset"
-    elif isValidUuid(uri, "type"):
+    elif isValidUuid(uri, "datatype"):
         return "datatype"
     else:
         log.error("Couldn't determine proper object class for id")

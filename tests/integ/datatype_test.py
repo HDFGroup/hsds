@@ -689,6 +689,38 @@ class DatatypeTest(unittest.TestCase):
         rspJson = json.loads(rsp.text)
         self.assertEqual(rspJson["linkCount"], 3)
 
+    def testGetByPath(self):
+        # committed datatypes can be looked up by h5path, like groups and datasets
+        print("testGetByPath", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        root_uuid = json.loads(rsp.text)["root"]
+
+        payload = {"type": "H5T_IEEE_F64LE", "link": {"id": root_uuid, "name": "dtype_by_path"}}
+        rsp = self.session.post(self.endpoint + "/datatypes", data=json.dumps(payload),
+                                headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        dtype_uuid = json.loads(rsp.text)["id"]
+
+        # GET with h5path param
+        params = {"h5path": "/dtype_by_path"}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = json.loads(rsp.text)
+        self.assertEqual(rspJson["id"], dtype_uuid)
+        self.assertEqual(rspJson["class"], "datatype")
+
+        # POST with list of h5paths
+        data = {"h5paths": ["/dtype_by_path"]}
+        rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        obj_json = json.loads(rsp.text)["h5paths"]["/dtype_by_path"]
+        self.assertEqual(obj_json["id"], dtype_uuid)
+        self.assertEqual(obj_json["class"], "datatype")
+
 
 if __name__ == "__main__":
     # setup test files
