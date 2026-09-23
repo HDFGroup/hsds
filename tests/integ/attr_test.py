@@ -15,6 +15,7 @@ import json
 import time
 import numpy as np
 import base64
+from urllib.parse import quote
 import helper
 import config
 
@@ -2765,6 +2766,47 @@ class AttributeTest(unittest.TestCase):
                 else:
                     # other attributes are larger than 10 bytes
                     self.assertFalse("value" in attrJson)
+
+    def testAttrNameReservedChars(self):
+        # attribute names may be any string; reserved URL characters are percent-encoded
+        print("testAttrNameReservedChars", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        attr_name = "attr {name} with !*'();:@&=+$,?#[]|~<>^` chars"
+        encoded_name = quote(attr_name, safe="")
+        attr_payload = {"type": "H5T_STD_I32LE", "value": 42}
+
+        for col_name in ("groups", "datatypes", "datasets"):
+            data = None
+            if col_name != "groups":
+                data = {"type": "H5T_IEEE_F32LE"}
+            req = self.endpoint + "/" + col_name
+            rsp = self.session.post(req, data=json.dumps(data), headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+            obj_id = json.loads(rsp.text)["id"]
+
+            req = f"{self.endpoint}/{col_name}/{obj_id}/attributes/{encoded_name}"
+            rsp = self.session.put(req, data=json.dumps(attr_payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            self.assertEqual(rspJson["name"], attr_name)
+            self.assertEqual(rspJson["value"], 42)
+
+            rsp = self.session.put(req + "/value", data=json.dumps({"value": 84}),
+                                   headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+
+            rsp = self.session.get(req + "/value", headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            self.assertEqual(json.loads(rsp.text)["value"], 84)
+
+            rsp = self.session.delete(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 410)  # gone
 
 
 if __name__ == "__main__":

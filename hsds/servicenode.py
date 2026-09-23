@@ -47,6 +47,10 @@ async def init():
     # call app.router.add_get() here to add node-specific routes
     #
 
+    # Link titles and attribute names may be any string, so their path segments use an
+    # explicit [^/]+ pattern. aiohttp's default pattern, [^{}/]+, rejects names that
+    # contain '{' or '}', even when percent-encoded.
+
     #
     # domain paths
     #
@@ -89,7 +93,7 @@ async def init():
     app.router.add_route("PUT", path, PUT_Links)
     app.router.add_route("DELETE", path, DELETE_Links)
 
-    path = "/groups/{id}/links/{title}"
+    path = "/groups/{id}/links/{title:[^/]+}"
     app.router.add_route("GET", path, GET_Link)
     app.router.add_route("DELETE", path, DELETE_Link)
     app.router.add_route("PUT", path, PUT_Link)
@@ -100,12 +104,12 @@ async def init():
     app.router.add_route("PUT", path, PUT_Attributes)
     app.router.add_route("DELETE", path, DELETE_Attributes)
 
-    path = "/groups/{id}/attributes/{name}"
+    path = "/groups/{id}/attributes/{name:[^/]+}"
     app.router.add_route("GET", path, GET_Attribute)
     app.router.add_route("DELETE", path, DELETE_Attribute)
     app.router.add_route("PUT", path, PUT_Attribute)
 
-    path = "/groups/{id}/attributes/{name}/value"
+    path = "/groups/{id}/attributes/{name:[^/]+}/value"
     app.router.add_route("GET", path, GET_AttributeValue)
     app.router.add_route("PUT", path, PUT_AttributeValue)
 
@@ -129,12 +133,12 @@ async def init():
     app.router.add_route("PUT", path, PUT_Attributes)
     app.router.add_route("DELETE", path, DELETE_Attributes)
 
-    path = "/datatypes/{id}/attributes/{name}"
+    path = "/datatypes/{id}/attributes/{name:[^/]+}"
     app.router.add_route("GET", path, GET_Attribute)
     app.router.add_route("DELETE", path, DELETE_Attribute)
     app.router.add_route("PUT", path, PUT_Attribute)
 
-    path = "/datatypes/{id}/attributes/{name}/value"
+    path = "/datatypes/{id}/attributes/{name:[^/]+}/value"
     app.router.add_route("GET", path, GET_AttributeValue)
     app.router.add_route("PUT", path, PUT_AttributeValue)
 
@@ -165,12 +169,12 @@ async def init():
     app.router.add_route("PUT", path, PUT_Attributes)
     app.router.add_route("DELETE", path, DELETE_Attributes)
 
-    path = "/datasets/{id}/attributes/{name}"
+    path = "/datasets/{id}/attributes/{name:[^/]+}"
     app.router.add_route("GET", path, GET_Attribute)
     app.router.add_route("DELETE", path, DELETE_Attribute)
     app.router.add_route("PUT", path, PUT_Attribute)
 
-    path = "/datasets/{id}/attributes/{name}/value"
+    path = "/datasets/{id}/attributes/{name:[^/]+}/value"
     app.router.add_route("GET", path, GET_AttributeValue)
     app.router.add_route("PUT", path, PUT_AttributeValue)
 
