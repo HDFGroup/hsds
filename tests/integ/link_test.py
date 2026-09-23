@@ -14,6 +14,7 @@ import unittest
 import time
 import json
 import uuid
+from urllib.parse import quote
 import helper
 import config
 
@@ -2065,6 +2066,35 @@ class LinkTest(unittest.TestCase):
         # client assigned with large time-skew, ignored
         _create_link("a4", ts=999)
         _check_link_ts("a4", min_ts=(now - 1), max_ts=(now + 1))
+
+    def testLinkTitleReservedChars(self):
+        # link titles may be any string; reserved URL characters are percent-encoded
+        domain = self.base_domain + "/testLinkTitleReservedChars.h5"
+        print("testLinkTitleReservedChars", domain)
+        helper.setupDomain(domain)
+        headers = helper.getRequestHeaders(domain=domain)
+
+        rsp = self.session.get(helper.getEndpoint() + "/", headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        root_id = json.loads(rsp.text)["root"]
+
+        link_title = "link {title} with !*'();:@&=+$,?#[]|~<>^` chars"
+        req = f"{helper.getEndpoint()}/groups/{root_id}/links/{quote(link_title, safe='')}"
+        payload = {"h5path": "/some/target"}
+        rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        link_json = json.loads(rsp.text)["link"]
+        self.assertEqual(link_json["title"], link_title)
+        self.assertEqual(link_json["h5path"], "/some/target")
+
+        rsp = self.session.delete(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 410)  # gone
 
 
 if __name__ == "__main__":
