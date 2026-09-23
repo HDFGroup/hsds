@@ -21,6 +21,7 @@ from h5json.objid import isValidUuid, validateUuid
 from h5json.time_util import getNow
 
 from .util.domainUtil import isValidBucketName
+from .util.dsetUtil import getDatasetCreationProps
 from .datanode_lib import get_obj_id, check_metadata_obj, get_metadata_obj
 from .datanode_lib import save_metadata_obj, delete_metadata_obj
 from . import hsds_logger as log
@@ -56,13 +57,7 @@ async def GET_Dataset(request):
     resp_json["type"] = dset_json["type"]
     resp_json["shape"] = dset_json["shape"]
     resp_json["attributeCount"] = len(dset_json["attributes"])
-    if "creationProperties" in dset_json:
-        cpl = dset_json["creationProperties"]
-    else:
-        cpl = {}
-    if "layout" in dset_json:
-        cpl["layout"] = dset_json["layout"]
-    resp_json["creationProperties"] = cpl
+    resp_json["creationProperties"] = getDatasetCreationProps(dset_json)
     if "include_attrs" in params and params["include_attrs"]:
         resp_json["attributes"] = dset_json["attributes"]
 
