@@ -16,11 +16,10 @@
 
 import base64
 import math
-import traceback
 import numpy as np
 
 from json import JSONDecodeError
-from aiohttp.web_exceptions import HTTPException, HTTPBadRequest
+from aiohttp.web_exceptions import HTTPBadRequest
 from aiohttp.web_exceptions import HTTPRequestEntityTooLarge
 from aiohttp.web_exceptions import HTTPConflict, HTTPInternalServerError
 from aiohttp.web import StreamResponse
@@ -988,165 +987,140 @@ async def GET_Value(request):
     else:
         content_length = None
 
-    resp_json = {"status": 200}  # will over-write if there's a problem
-    # write response
-    resp = None
-    try:
-        resp = StreamResponse()
-        if config.get("http_compression"):
-            log.debug("enabling http_compression")
-            resp.enable_compression()
-        if response_type == "binary":
-            resp.headers["Content-Type"] = "application/octet-stream"
-            if content_length is None:
-                log.debug("content_length could not be determined")
-            else:
-                resp.content_length = content_length
+    # Fetch the data before sending the response headers.
+    if stream_pagination:
+        if item_size == "H5T_VARIABLE":
+            page_item_size = VARIABLE_AVG_ITEM_SIZE  # random guess of avg item_size
         else:
-            resp.headers["Content-Type"] = "application/json"
-        log.debug("prepare request")
-        await resp.prepare(request)
-        arr = None  # will be set based on returned data
+            page_item_size = item_size
+        pages = getSelectionPagination(selection, dims, page_item_size, max_request_size)
+        log.debug(f"getSelectionPagination returned: {len(pages)} pages")
+        first_slices = pages[0]
+    else:
+        pages = None
+        first_slices = selection
 
-        if stream_pagination:
-            # get binary data a page at a time and write back to response
-            if item_size == "H5T_VARIABLE":
-                page_item_size = VARIABLE_AVG_ITEM_SIZE  # random guess of avg item_size
-            else:
-                page_item_size = item_size
-            pages = getSelectionPagination(selection, dims, page_item_size, max_request_size)
-            log.debug(f"getSelectionPagination returned: {len(pages)} pages")
-            bytes_streamed = 0
-            try:
-                for page_number in range(len(pages)):
-                    page = pages[page_number]
-                    msg = f"streaming response data for page: {page_number + 1} "
-                    msg += f"of {len(pages)}, selection: {page}"
-                    log.info(msg)
+    # raises HTTPException on failure, which aiohttp returns as-is
+    arr = await getSelectionData(
+        app,
+        dset_id,
+        dset_json,
+        slices=first_slices,
+        select_dtype=select_dtype,
+        query=query,
+        bucket=bucket,
+        limit=limit
+    )
 
-                    log.debug("calling getSelectionData!")
-
-                    arr = await getSelectionData(
-                        app,
-                        dset_id,
-                        dset_json,
-                        slices=page,
-                        select_dtype=select_dtype,
-                        query=query,
-                        bucket=bucket,
-                        limit=limit
-                    )
-
-                    if arr is None or math.prod(arr.shape) == 0:
-                        log.warn(f"no data returned for streaming page: {page_number}")
-                        continue
-
-                    log.debug("preparing binary response")
-                    output_data = arrayToBytes(arr)
-                    log.debug(f"got {len(output_data)} bytes for resp")
-                    bytes_streamed += len(output_data)
-                    log.debug("write request")
-                    await resp.write(output_data)
-
-                    if query and limit > 0:
-                        query_rows = arr.shape[0]
-                        msg = f"streaming page {page_number} returned {query_rows} rows"
-                        log.debug(msg)
-                        limit -= query_rows
-                        if limit <= 0:
-                            log.debug("skipping remaining pages, query limit reached")
-                            break
-
-            except HTTPException as he:
-                # close the response stream
-                log.error(f"got {type(he)} exception doing getSelectionData: {he}")
-                resp_json["status"] = he.status_code
-                # can't raise a HTTPException here since write is in progress
-                #
-            except Exception as e:
-                log.error(f"got {type(e)} exception doing getSelectionData: {e}")
-            finally:
-                msg = f"streaming data for {len(pages)} pages complete, "
-                msg += f"{bytes_streamed} bytes written"
-                log.info(msg)
-
-                await resp.write_eof()
-                return resp
-
-        #
-        # non-paginated response
-        #
+    resp_body = None
+    if stream_pagination:
+        pass  # pages are converted to bytes as they're written
+    elif arr is None:
+        # no array (OPTION request?)  Return empty response
+        log.warn("got None response from getSelectionData")
+    elif not isinstance(arr, np.ndarray):
+        log.error(f"GET_Value - Expected ndarray but got: {type(arr)}")
+        raise HTTPInternalServerError()
+    elif response_type == "binary":
+        log.debug("preparing binary response")
+        resp_body = arrayToBytes(arr)
+        log.debug(f"got {len(resp_body)} bytes for resp")
+    else:
+        log.debug("GET Value - returning JSON data")
+        params = request.rel_url.query
+        if "reduce_dim" in params and params["reduce_dim"]:
+            arr = squeezeArray(arr)
 
         try:
-            arr = await getSelectionData(
-                app,
-                dset_id,
-                dset_json,
-                slices=selection,
-                select_dtype=select_dtype,
-                query=query,
-                bucket=bucket,
-                limit=limit
-            )
-        except HTTPException as he:
-            # close the response stream
-            log.error(f"got {type(he)} exception doing getSelectionData: {he}")
-            resp_json["status"] = he.status_code
-            # can't raise a HTTPException here since write is in progress
+            json_data = bytesArrayToList(arr)
+        except ValueError as err:
+            msg = f"Cannot decode bytes to list: {err}"
+            raise HTTPBadRequest(reason=msg)
 
-        if arr is None:
-            # no array (OPTION request?)  Return empty json response
-            log.warn("got None response from getSelectionData")
-
-        elif not isinstance(arr, np.ndarray):
-            msg = f"GET_Value - Expected ndarray but got: {type(arr)}"
-            resp_json["status"] = 500
-        elif response_type == "binary":
-            if resp_json["status"] != 200:
-                # write json with status_code
-                log.warn(f"GET Value - got error status: {resp_json['status']}")
-            else:
-                log.debug("preparing binary response")
-                output_data = arrayToBytes(arr)
-                log.debug(f"got {len(output_data)} bytes for resp")
-                log.debug("write request")
-                await resp.write(output_data)
+        resp_json = {"status": 200}
+        if isScalar(dset_json):
+            # convert array response to value
+            resp_json["value"] = json_data[0]
         else:
-            # return json
-            log.debug("GET Value - returning JSON data")
-            params = request.rel_url.query
-            if "reduce_dim" in params and params["reduce_dim"]:
-                arr = squeezeArray(arr)
+            resp_json["value"] = json_data
+        resp_json["hrefs"] = get_hrefs(request, dset_json)
+        resp_body = await jsonResponse(None, resp_json, ignore_nan=ignore_nan, body_only=True)
+        log.debug(f"jsonResponse returned: {len(resp_body)} items")
+        resp_body = resp_body.encode("utf-8")
 
-            try:
-                json_data = bytesArrayToList(arr)
-            except ValueError as err:
-                msg = f"Cannot decode bytes to list: {err}"
-                raise HTTPBadRequest(reason=msg)
+    # write response
+    resp = StreamResponse()
+    if config.get("http_compression"):
+        log.debug("enabling http_compression")
+        resp.enable_compression()
+    if response_type == "binary":
+        resp.headers["Content-Type"] = "application/octet-stream"
+        if content_length is None:
+            log.debug("content_length could not be determined")
+        else:
+            resp.content_length = content_length
+    else:
+        resp.headers["Content-Type"] = "application/json"
+    log.debug("prepare request")
+    await resp.prepare(request)
 
-            if isScalar(dset_json):
-                # convert array response to value
-                resp_json["value"] = json_data[0]
-            else:
-                resp_json["value"] = json_data
-            resp_json["hrefs"] = get_hrefs(request, dset_json)
-            resp_body = await jsonResponse(
-                resp, resp_json, ignore_nan=ignore_nan, body_only=True
-            )
-            log.debug(f"jsonResponse returned: {len(resp_body)} items")
-            resp_body = resp_body.encode("utf-8")
+    if not stream_pagination:
+        if resp_body is not None:
             await resp.write(resp_body)
         await resp.write_eof()
-    except Exception as e:
-        log.error(f"{type(e)} Exception during data write: {e}")
-        log.error(f"traceback: {traceback.format_exc()}")
-        if resp is not None and resp.prepared:
-            # headers are already on the wire - raising here would inject a new
-            # status line into the body and corrupt the chunked stream
-            await resp.write_eof()
-        else:
-            raise HTTPInternalServerError()
+        return resp
 
+    # write binary data a page at a time
+    bytes_streamed = 0
+    try:
+        for page_number in range(len(pages)):
+            page = pages[page_number]
+            msg = f"streaming response data for page: {page_number + 1} "
+            msg += f"of {len(pages)}, selection: {page}"
+            log.info(msg)
+
+            if page_number > 0:
+                arr = await getSelectionData(
+                    app,
+                    dset_id,
+                    dset_json,
+                    slices=page,
+                    select_dtype=select_dtype,
+                    query=query,
+                    bucket=bucket,
+                    limit=limit
+                )
+
+            if arr is None or math.prod(arr.shape) == 0:
+                log.warn(f"no data returned for streaming page: {page_number}")
+                continue
+
+            output_data = arrayToBytes(arr)
+            log.debug(f"got {len(output_data)} bytes for page")
+            bytes_streamed += len(output_data)
+            await resp.write(output_data)
+
+            if query and limit > 0:
+                query_rows = arr.shape[0]
+                msg = f"streaming page {page_number} returned {query_rows} rows"
+                log.debug(msg)
+                limit -= query_rows
+                if limit <= 0:
+                    log.debug("skipping remaining pages, query limit reached")
+                    break
+    except Exception as e:
+        msg = f"got {type(e)} exception streaming page {page_number + 1} "
+        msg += f"of {len(pages)} after {bytes_streamed} bytes: {e}"
+        log.error(msg)
+        # The status line has already been sent, so the error can't be reported.
+        # Ending the stream normally would pass the truncated body off as
+        # complete; drop the connection instead so the client sees a failed
+        # transfer.  (An HTTPException here would make aiohttp try to write a
+        # second status line; any other exception makes it close the connection.)
+        raise ConnectionResetError(msg) from e
+
+    log.info(f"streamed {len(pages)} pages, {bytes_streamed} bytes written")
+    await resp.write_eof()
     return resp
 
 
@@ -1419,66 +1393,57 @@ async def POST_Value(request):
                         log.warn(msg)
                         raise HTTPBadRequest(reason=msg)
 
+    # Build the whole response body before sending the headers, so a failure
+    # can still be reported with a real status code.
+    kwargs = {"bucket": bucket}
+    if points is None:
+        kwargs["slices"] = selection
+    else:
+        kwargs["points"] = points
+    kwargs["select_dtype"] = select_dtype
+    log.debug(f"getSelectionData kwargs: {kwargs}")
+
+    # raises HTTPException on failure, which aiohttp returns as-is
+    arr_rsp = await getSelectionData(app, dset_id, dset_json, **kwargs)
+    if not isinstance(arr_rsp, np.ndarray):
+        log.error(f"POST_Value - Expected ndarray but got: {type(arr_rsp)}")
+        raise HTTPInternalServerError()
+
+    log.debug(f"arr shape: {arr_rsp.shape}")
+    if response_type == "binary":
+        log.debug("preparing binary response")
+        resp_body = arrayToBytes(arr_rsp)
+        log.debug(f"POST Value - returning {len(resp_body)} bytes binary data")
+    else:
+        log.debug("POST Value - returning JSON data")
+        resp_json = {}
+        try:
+            json_data = bytesArrayToList(arr_rsp)
+        except ValueError as err:
+            msg = f"Cannot decode bytes to list: {err}"
+            raise HTTPBadRequest(reason=msg)
+        resp_json["value"] = json_data
+        resp_json["hrefs"] = get_hrefs(request, dset_json)
+        resp_body = await jsonResponse(None, resp_json, ignore_nan=ignore_nan, body_only=True)
+        log.debug(f"jsonResponse returned: {len(resp_body)} items")
+        resp_body = resp_body.encode("utf-8")
+
     # write response
     resp = StreamResponse()
-    try:
-        if config.get("http_compression"):
-            log.debug("enabling http_compression")
-            resp.enable_compression()
-        if response_type == "binary":
-            resp.headers["Content-Type"] = "application/octet-stream"
-            if content_length is None:
-                log.debug("content_length could not be determined")
-            else:
-                resp.content_length = content_length
+    if config.get("http_compression"):
+        log.debug("enabling http_compression")
+        resp.enable_compression()
+    if response_type == "binary":
+        resp.headers["Content-Type"] = "application/octet-stream"
+        if content_length is None:
+            log.debug("content_length could not be determined")
         else:
-            resp.headers["Content-Type"] = "application/json"
-        log.debug("prepare request...")
-        await resp.prepare(request)
-
-        kwargs = {"bucket": bucket}
-        if points is None:
-            kwargs["slices"] = selection
-        else:
-            kwargs["points"] = points
-        kwargs["select_dtype"] = select_dtype
-        log.debug(f"getSelectionData kwargs: {kwargs}")
-
-        arr_rsp = await getSelectionData(app, dset_id, dset_json, **kwargs)
-        if not isinstance(arr_rsp, np.ndarray):
-            msg = f"POST_Value - Expected ndarray but got: {type(arr_rsp)}"
-            log.error(msg)
-            raise ValueError(msg)
-
-        log.debug(f"arr shape: {arr_rsp.shape}")
-        if response_type == "binary":
-            log.debug("preparing binary response")
-            output_data = arrayToBytes(arr_rsp)
-            msg = f"POST Value - returning {len(output_data)} bytes binary data"
-            log.debug(msg)
-            await resp.write(output_data)
-        else:
-            log.debug("POST Value - returning JSON data")
-            resp_json = {}
-            log.debug(f"got rsp data shape: {arr_rsp.shape}")
-            try:
-                json_data = bytesArrayToList(arr_rsp)
-            except ValueError as err:
-                msg = f"Cannot decode bytes to list: {err}"
-                raise HTTPBadRequest(reason=msg)
-            resp_json["value"] = json_data
-            resp_json["hrefs"] = get_hrefs(request, dset_json)
-            resp_body = await jsonResponse(
-                resp, resp_json, ignore_nan=ignore_nan, body_only=True
-            )
-            log.debug(f"jsonResponse returned: {len(resp_body)} items")
-            resp_body = resp_body.encode("utf-8")
-            await resp.write(resp_body)
-    except Exception as e:
-        log.error(f"{type(e)} Exception during response write: {e}")
-        log.error(f"traceback: {traceback.format_exc()}")
-
-    # finalize response
+            resp.content_length = content_length
+    else:
+        resp.headers["Content-Type"] = "application/json"
+    log.debug("prepare request...")
+    await resp.prepare(request)
+    await resp.write(resp_body)
     await resp.write_eof()
 
     log.response(request, resp=resp)

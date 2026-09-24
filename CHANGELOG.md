@@ -33,6 +33,9 @@ at <https://github.com/HDFGroup/hsds/releases>.
 - `PUT` to an object's attributes collection now returns 400 when the request contains
   no attributes, instead of reporting success without writing anything
 
+- A read that fails on the data node returns an error instead of a 200 with an
+  empty or partial body
+
 ## Acknowledgements:
 
 We would like to thank the HSDS community members who contributed to this release.
@@ -66,6 +69,13 @@ None.
    data node and answered with 200. It now returns 400, as does an `obj_ids` entry
    with no `attributes` key, which was previously skipped while the other objects'
    attributes were written.
+
+### Failed reads no longer return 200
+
+   `GET` and `POST /datasets/{id}/value` sent their 200 status before fetching any
+   data, so a data node failure produced an empty or truncated body that looked
+   successful. Errors now return their real status, and a failure partway through a
+   streamed response drops the connection.
 
 # ☑️ Platforms Tested
 
