@@ -462,6 +462,10 @@ async def PUT_Attributes(request):
                         log.warn(msg)
                         raise HTTPBadRequest(reason=msg)
                     id_json = body_ids[obj_id]
+                    if not isinstance(id_json, dict) or "attributes" not in id_json:
+                        msg = f"expected an attributes map for object: {obj_id}"
+                        log.warn(msg)
+                        raise HTTPBadRequest(reason=msg)
 
                     kwargs = {"obj_id": obj_id, "bucket": bucket}
                     obj_items = await getAttributesFromRequest(app, id_json, **kwargs)
@@ -479,6 +483,12 @@ async def PUT_Attributes(request):
         obj_id = request.match_info.get("id")
         if not obj_id:
             msg = "Missing object id"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if not attr_items:
+            # otherwise the DN gets an empty set and the request "succeeds"
+            # without writing anything
+            msg = "no attributes provided"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         obj_ids[obj_id] = attr_items  # make it look like a list for consistency
