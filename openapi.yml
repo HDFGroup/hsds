@@ -2424,6 +2424,12 @@ components:
           description: Chunk compression/transform filters, restricted to HSDS's supported filter set (e.g. gzip/deflate, shuffle, szip, bitshuffle, blosc-family filters).
           items:
             type: object
+            description: >-
+              A filter is identified by its class (e.g. H5Z_FILTER_DEFLATE). A missing id or
+              name is filled in from the registered filter for that class, and a
+              H5Z_FILTER_USER filter whose id or name is a registered filter is stored under
+              that filter's class. Responses always include class, id and name.
+            required: [class]
             properties:
               class: { type: string }
               id: { type: integer }
