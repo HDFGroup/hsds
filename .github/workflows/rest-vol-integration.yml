@@ -1,0 +1,112 @@
+name: REST VOL integration
+
+# Runs the HDF5 REST VOL connector's test suite against HSDS. Kept apart from
+# the HSDS-only suite for the same reason as h5pyd integration: a failure here
+# can be a real REST VOL bug rather than an HSDS one.
+
+on:
+  push:
+  pull_request:
+    branches: [master]
+
+env:
+  ROOT_DIR: ${{github.workspace}}/data
+  # HDF5 release the connector is built against. Pinned so that HDF5
+  # development doesn't change what this job tests.
+  HDF5_TAG: "2.2.0"
+  VOL_REST_REF: master
+
+jobs:
+  rest-vol-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install REST VOL build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev libyajl-dev
+
+      - name: Restore HDF5 ${{ env.HDF5_TAG }} installation
+        id: hdf5-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/hdf5-install
+          key: ${{ runner.os }}-${{ runner.arch }}-hdf5-${{ env.HDF5_TAG }}
+
+      - name: Build HDF5 ${{ env.HDF5_TAG }}
+        if: ${{ steps.hdf5-cache.outputs.cache-hit != 'true' }}
+        run: |
+          git clone --depth 1 --branch "$HDF5_TAG" https://github.com/HDFGroup/hdf5.git "$RUNNER_TEMP/hdf5"
+          cmake -S "$RUNNER_TEMP/hdf5" -B "$RUNNER_TEMP/hdf5-build" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/hdf5-install" \
+            -DBUILD_TESTING=OFF \
+            -DHDF5_BUILD_TOOLS=OFF \
+            -DHDF5_BUILD_EXAMPLES=OFF \
+            -DHDF5_BUILD_HL_LIB=ON \
+            -DHDF5_ENABLE_ZLIB_SUPPORT=OFF \
+            -DHDF5_ENABLE_SZIP_SUPPORT=OFF
+          cmake --build "$RUNNER_TEMP/hdf5-build" --parallel 4
+          cmake --install "$RUNNER_TEMP/hdf5-build"
+
+      - name: Checkout REST VOL
+        uses: actions/checkout@v4
+        with:
+          repository: HDFGroup/vol-rest
+          ref: ${{ env.VOL_REST_REF }}
+          path: ${{github.workspace}}/vol-rest
+
+      - name: Build REST VOL
+        working-directory: ${{github.workspace}}/vol-rest
+        run: |
+          CFLAGS="-D_POSIX_C_SOURCE=200809L" cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DHDF5_ROOT="$RUNNER_TEMP/hdf5-install" \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/vol-rest-install"
+          cmake --build build --parallel 4
+          cmake --install build
+
+      - name: Start HSDS
+        uses: ./.github/actions/run-hsds
+        with:
+          build-method: manual
+          os: ubuntu-latest
+          # The HSDS suite already runs in the HSDS Linux workflow
+          run-tests: "false"
+
+      - name: Create home folders
+        env:
+          ADMIN_USERNAME: admin
+          ADMIN_PASSWORD: admin
+          USER_NAME: test_user1
+          USER_PASSWORD: test
+          USER2_NAME: test_user2
+          USER2_PASSWORD: test
+          BUCKET_NAME: hsdstest
+        run: |
+          python tests/integ/setup_test.py
+
+      - name: Run REST VOL tests
+        id: rest-vol-tests
+        working-directory: ${{github.workspace}}/vol-rest/build
+        env:
+          HDF5_VOL_CONNECTOR: REST
+          HDF5_PLUGIN_PATH: ${{ runner.temp }}/vol-rest-install/lib
+          HSDS_ENDPOINT: http://127.0.0.1:5101
+          HSDS_USERNAME: test_user1
+          HSDS_PASSWORD: test
+        run: |
+          ctest --output-on-failure -R test_rest_vol
+
+      - name: Show HSDS log on failure
+        if: ${{ failure() && steps.rest-vol-tests.outcome == 'failure' }}
+        run: |
+          # hs.log is drained from the node processes once a second; wait so the
+          # lines around the failure are included (see run-hsds)
+          sleep 3
+          cat hs.log
