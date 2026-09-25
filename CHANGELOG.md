@@ -43,6 +43,9 @@ at <https://github.com/HDFGroup/hsds/releases>.
   and compact datasets to 64 KiB, so a large chunk can no longer exhaust a data
   node's memory
 
+- The head node refuses to start when `TARGET_SN_COUNT` or `TARGET_DN_COUNT` is
+  unset or 0, instead of leaving the cluster stuck in `WAITING`
+
 ## Acknowledgements:
 
 We would like to thank the HSDS community members who contributed to this release.
@@ -107,6 +110,14 @@ None.
    read and returned zeros in their place. It now keeps them and zero-fills only the
    missing remainder. This affected `H5D_CONTIGUOUS_REF` datasets whose last chunk
    extends past the end of their file.
+
+## Head Node
+
+### Missing target node counts are reported at startup
+
+   With `target_sn_count` or `target_dn_count` at its default of 0, the head node
+   admitted no nodes and every request got 503. It now exits at startup with an
+   error naming the relevant settings.
 
 # ☑️ Platforms Tested
 

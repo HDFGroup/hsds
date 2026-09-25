@@ -501,6 +501,15 @@ async def init():
 
     target_sn_count = await getTargetNodeCount(app, "sn")
     target_dn_count = await getTargetNodeCount(app, "dn")
+    if target_sn_count < 1 or target_dn_count < 1:
+        # Nodes are admitted into a fixed number of slots, and the cluster is
+        # READY once every slot is filled. With no slots nothing is ever
+        # admitted, so the cluster would wait forever with no error.
+        msg = "target_sn_count and target_dn_count must both be at least 1 when "
+        msg += f"running a head node (got {target_sn_count} and {target_dn_count}); "
+        msg += "set TARGET_SN_COUNT and TARGET_DN_COUNT"
+        log.error(msg)
+        raise ValueError(msg)
 
     app["nodes"] = {}
     app["active_sn_ids"] = [None, ] * target_sn_count

@@ -22,8 +22,8 @@ dn_port: 6101 # Start dn ports at 6101
 dn_ram: 3g # memory for DN container (per container)
 sn_port: 5101 # Start sn ports at 5101
 sn_ram: 3g # memory for SN container
-target_sn_count: 0 # desired number of SN containers
-target_dn_count: 0 # desire number of DN containers
+target_sn_count: 0 # number of SN containers the head node waits for; must be set (>= 1) when a head node is used
+target_dn_count: 0 # number of DN containers the head node waits for; must be set (>= 1) when a head node is used
 log_level: INFO    # log level.  One of ERROR, WARNING, INFO, DEBUG
 log_format: text   # log output format.  One of: text, json (json lines always include a timestamp)
 log_timestamps: true # emit timestamp with log messages (text format)
