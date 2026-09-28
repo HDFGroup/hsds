@@ -29,7 +29,7 @@ earlier releases, see the notes on each [release](https://github.com/HDFGroup/hs
 - **Richer object-creation payloads**: `POST` requests for datasets and groups can now initialize attributes, links, and (for datasets) initial data values in the same request that creates the object.
 - **Batch object creation**: added multi-object creation support for datasets, groups, and datatypes (create several objects in a single `POST`), backed by a new async `DomainCrawler`/`PostCrawler`-based implementation.
 - **Improved array (`H5T_ARRAY`) dtype handling**: fixed selection/read/write handling for datasets whose own type is an array (subarray) dtype, not just array-typed fields nested in a compound type. (Note: this covers binary reads/writes; JSON-encoded writes to a top-level `H5T_ARRAY` dataset are still tracked as a known issue.)
-- **Formal OpenAPI specification**: added `openapi.yml`, a full OpenAPI 3 description of the HSDS REST API, plus new `/about` and `/info` endpoints.
+- **Formal OpenAPI specification**: added `openapi.yml`, a full OpenAPI 3 description of the HSDS REST API.
 
 ### Notable Bug Fixes
 
@@ -50,13 +50,31 @@ earlier releases, see the notes on each [release](https://github.com/HDFGroup/hs
 
 v1.0.0 is a major version bump and includes some deliberate, non-backward-compatible changes. If you're upgrading from a 0.x release, be aware of the following:
 
-- **Query response shape changed**: previously, using the `query` parameter on a `PUT /datasets/{id}/value` request returned the *updated values* for the matching rows in a `"value"` field. Now that same request returns the matching row **indices** in an `"indices"` field instead (no `"value"` key). To retrieve matches read-only (without updating), use the new dedicated `GET /datasets/{id}/query` endpoint, which also returns `"indices"`. `GET /datasets/{id}/value?query=...` (read, non-update) is unchanged and still returns `"value"`.
+### REST API
+
+- **Query responses changed**: using the `query` parameter on `PUT /datasets/{id}/value` used to return the matching rows in a `"value"` field, each row starting with its index. It now returns only the matching coordinates, in an `"indices"` field with one list per match (for example `[[1], [4]]` on a 1-D dataset). The new `GET /datasets/{id}/query` endpoint returns the same `"indices"` without updating anything, or little-endian int64 coordinates when a binary response is requested. `GET /datasets/{id}/value?query=...` still returns `"value"`, but its rows no longer start with the index: JSON rows lose their first element and binary rows lose their 8-byte index prefix. Use `/query` when you need the indices.
+- **Query syntax changed**: queries are now evaluated by `h5json`, which has no `where` clause. A query such as `open < 4000 where symbol in (b'AAPL', b'EBAY')` now returns 400; write it as `open < 4000 AND symbol IN (AAPL, EBAY)`. Byte-string literals (`b'AAPL'`) and the `&` and `|` operators are still accepted. Domain queries (`GET /domains?query=...`) go through the same engine, and their existing syntax still works.
 - **Dataset chunk layout moved in the JSON schema**: `GET /datasets/{id}` no longer returns a top-level `"layout"` key. Layout information (whether client-specified or server-generated) now always appears nested under `"creationProperties"."layout"`. Clients that read `dataset_json["layout"]` directly need to switch to `dataset_json["creationProperties"]["layout"]`.
+- **Client chunk dimensions are used as given**: chunk dimensions supplied in `creationProperties.layout` are stored exactly as requested. 0.x servers resized them to fall between `min_chunk_size` and `max_chunk_size`.
+- **Filters require a chunked layout**: creating a dataset with an `H5D_CONTIGUOUS` layout and a filter list now returns 400. 0.x servers silently switched such datasets to a chunked layout.
+- **Unlimited dimensions are reported as `"H5S_UNLIMITED"`**: an unlimited dimension in `maxdims` is now returned as the string `"H5S_UNLIMITED"` rather than `0`. Requests may still use `0`. Datasets created by a 0.x server still report `0`, so clients should accept both.
 - **External link field renamed**: external link objects now report the target file/domain under a `"file"` key instead of `"h5domain"` in API responses. Creating a link with `"h5domain"` in the request body is still accepted for backward compatibility, but it will no longer be echoed back that way - expect `"file"` in the response.
-- **Status code change for duplicate object IDs**: `POST` requests that specify a client-provided object ID which already exists now return `400 Bad Request` (previously `500 Internal Server Error`).
-- **AWS Lambda support removed**: HSDS can no longer be deployed as an AWS Lambda function; `Dockerfile.lambda`, `lambda_function.py`, `hsds/util/awsLambdaClient.py`, and the associated setup docs have been removed.
-- **New required dependency**: HSDS now depends on the [h5json](https://github.com/HDFGroup/hdf5-json) package for core type/array/object-ID/shape utilities. Code that imported HSDS's own `hsds.util.idUtil`, `hsds.util.timeUtil`, `hsds.util.hdf5dtype`, or `hsds.util.arrayUtil` modules directly will break, as those modules have been removed in favor of `h5json` equivalents.
-- **Minimum Python version raised to 3.11** (from 3.10).
+- **`id` in object-creation requests is now honored**: `POST /groups`, `/datasets` and `/datatypes` create the object with the `id` given in the request body, and return 400 if that ID already exists. 0.x servers ignored the key and always generated a new ID, so a client that posts an existing object's JSON back unchanged now gets 400 instead of a copy. Sending both `link` and `h5path` in one request also returns 400 now.
+- **`getobjs` reads a background summary**: `GET /?getobjs=1` now builds `domain_objs` from a summary the data nodes write when they scan a domain, instead of crawling the domain on each request. A domain that has not been scanned yet, which includes every domain created by a 0.x server until its next scan, gets no `domain_objs` key, and a scanned domain reflects the last scan. Entries no longer include `id` or `attributeCount`, always include `attributes`, and the `include_attrs` parameter is ignored.
+- **ACL updates require `updateACL`**: `PUT /acls/{username}` now returns 403 unless the caller has `updateACL` permission on the domain. 0.x servers let any authenticated user change a domain's ACLs.
+
+### Storage and deployment
+
+- **No downgrades or mixed-version clusters**: datasets created by v1.0.0 store their layout only under `creationProperties`, and new external links store `file` rather than `h5domain`. 0.x nodes read the old keys, so don't run 0.x and 1.x nodes against the same storage, and don't return to 0.x after writing data with 1.x.
+- **Cluster readiness waits for the target node counts**: with a head node (the Docker deployments), service and data nodes stay out of the `READY` state until the head node has seen `TARGET_SN_COUNT` service nodes and `TARGET_DN_COUNT` data nodes register. Nodes started beyond those counts, for example with `docker compose --scale`, are not added to the cluster. The shipped Compose files set both counts from `SN_CORES` and `DN_CORES`.
+- **Kubernetes load balancer manifests removed**: `admin/kubernetes/k8s_service_lb.yml` and `k8s_service_lb_azure.yml` are gone. Expose `k8s_service.yml` through `k8s_ingress_nginx.yml` or `k8s_gateway_envoy.yml` instead; see the Kubernetes install docs.
+- **Log format changed**: timestamps are now on by default (`log_timestamps: true`) and use ISO 8601 instead of epoch seconds, and lines logged while handling a request include its trace ID in brackets. The `REQ>` and `RSP>` lines changed layout too. Log parsers written against 0.x need updating; the new `log_format: json` option gives structured output.
+
+### Python and packaging
+
+- **AWS Lambda support removed**: HSDS can no longer be deployed as an AWS Lambda function; `Dockerfile.lambda`, `lambda_function.py`, `hsds/util/awsLambdaClient.py`, and the associated setup docs have been removed. `HsdsApp` no longer accepts the `islambda` argument, and the `--removesitepackages` node option is gone.
+- **New required dependency**: HSDS now depends on the [h5json](https://github.com/HDFGroup/hdf5-json) package (2.0.0 or later) for core type/array/object-ID/shape utilities. Code that imported HSDS's own `hsds.util.idUtil`, `hsds.util.timeUtil`, `hsds.util.hdf5dtype`, `hsds.util.arrayUtil`, or `hsds.util.boolparser` modules directly will break, as those modules have been removed in favor of `h5json` equivalents.
+- **Minimum Python version raised to 3.11** (from 3.10). Building from source now requires setuptools 77 or later.
 
 ## Quick Start
 
