@@ -55,6 +55,8 @@ aio_max_pool_connections: 64 # number of connections to keep in conection pool f
 client_pool_count: 10 # pool count for SessionClient
 metadata_mem_cache_size: 128m # 128 MB - metadata cache size per DN node
 metadata_mem_cache_expire: 3600 # expire cache items after one hour
+# chunk_mem_cache_size also caps single chunk size and contiguous dataset size,
+# since a chunk or contiguous dataset has to fit in the cache to be written
 chunk_mem_cache_size: 128m # 128 MB - chunk cache size per DN node
 chunk_mem_cache_expire: 3600 # expire cache items after one hour
 timeout: 30 # http timeout - 30 sec
@@ -105,4 +107,4 @@ azure_storage_account: null # storage account to use on Azure
 azure_resource_group: null # Azure resource group the container (BUCKET_NAME) belongs to with use_cache
 standalone_app: false # True when run as a single application
 k8s_namespace: null # Specifies if a the client should be limited to a specific namespace. Useful for some RBAC configurations.
-max_compact_dset_size: 65536  # size in bytes for maximum compact storage size
+max_compact_dset_size: 65536  # max size in bytes of a compact dataset

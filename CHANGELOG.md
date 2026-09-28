@@ -39,6 +39,10 @@ at <https://github.com/HDFGroup/hsds/releases>.
 - A range read that runs past the end of an object keeps the bytes it read
   instead of returning zeros
 
+- Chunks and contiguous datasets are limited to the data node chunk cache size,
+  and compact datasets to 64 KiB, so a large chunk can no longer exhaust a data
+  node's memory
+
 ## Acknowledgements:
 
 We would like to thank the HSDS community members who contributed to this release.
@@ -50,7 +54,22 @@ The full list of changes in this release is in
 
 # ⚠️ Breaking Changes
 
-None.
+### Chunks larger than `chunk_mem_cache_size` are refused at creation
+
+   HSDS 1.0.0 and 1.0.1 stored client chunk shapes with no size limit, and stored
+   contiguous and compact datasets as a single chunk the size of the whole dataset.
+   To read or write any part of a chunk, a data node loads the whole chunk, and its
+   memory use peaks at 2-3x the chunk's size while it does, so a large chunk could
+   exhaust a data node's memory. Writes to chunks over roughly 128M elements failed
+   outright.
+
+   Creating a dataset whose chunk, or whose whole contiguous dataset, is larger than
+   `chunk_mem_cache_size` (128 MB by default) now returns 400. A chunked layout should
+   be used for larger contiguous data. Compact datasets are limited to
+   `max_compact_dset_size` (64 KiB, as in HDF5). Writes to existing datasets with
+   chunks over the limit now fail, but their data is still readable. In order to
+   handle large contiguous datasets or large chunks, raise for `chunk_mem_cache_size`
+   and `dn_ram`.
 
 # 🪦 Deprecations
 

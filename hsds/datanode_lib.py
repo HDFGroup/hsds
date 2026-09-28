@@ -42,6 +42,7 @@ from .util.dsetUtil import getChunkInitializer, getSliceQueryParam
 from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
 from .util.nodeUtil import validateInPartition
 from .util.rangegetUtil import ChunkLocation, chunkMunge, getHyperChunkIndex, getHyperChunkFactors
+from .util.lruCache import getArraySize
 
 from . import config
 from . import hsds_logger as log
@@ -1168,7 +1169,7 @@ async def get_chunk(
 
         if chunk_arr is not None:
             # check that there's room in the cache before adding it
-            if chunk_id in chunk_cache or chunk_cache.memFree >= chunk_arr.size:
+            if chunk_id in chunk_cache or chunk_cache.memFree >= getArraySize(chunk_arr):
                 chunk_cache[chunk_id] = chunk_arr  # store in cache
             else:
                 # no room in the cache, just skip caching
@@ -1227,11 +1228,19 @@ def save_chunk(app, chunk_id, dset_json, chunk_arr, bucket=None):
         # check that we have enough room to store the chunk
         # TBD: there could be issues with the free space calculation
         # not working precisely with variable types
+        chunk_bytes = getArraySize(chunk_arr)
         log.debug(f"chunk_cache free space: {chunk_cache.memFree}")
-        if chunk_cache.memFree < chunk_arr.size:
+        if chunk_bytes > chunk_cache.memTarget:
+            # this chunk can never fit, however much of the cache is flushed
+            msg = f"unable to save chunk: {chunk_id}, chunk size: {chunk_bytes} bytes "
+            msg += f"is larger than chunk_mem_cache_size: {chunk_cache.memTarget}. "
+            msg += "Increase chunk_mem_cache_size + dn_ram to write it"
+            log.error(msg)
+            raise HTTPServiceUnavailable()
+        if chunk_cache.memFree < chunk_bytes:
             msg = f"unable to save chunk: {chunk_id}, "
             msg += f"chunk_cache free space: {chunk_cache.memFree}, "
-            msg += f"chunk_size:{chunk_arr.size}"
+            msg += f"chunk size: {chunk_bytes} bytes"
             log.warn(msg)
             raise HTTPServiceUnavailable()
 
