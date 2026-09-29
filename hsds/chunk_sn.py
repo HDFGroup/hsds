@@ -30,7 +30,7 @@ from h5json.array_util import bytesArrayToList, jsonToArray, getNumElements, arr
 from h5json.array_util import bytesToArray, squeezeArray, getBroadcastShape
 from h5json.objid import isValidUuid
 from h5json.shape_util import isNullSpace, isScalar, getShapeDims, getMaxDims, getRank
-from h5json.dset_util import getChunkDims, isExtensible
+from h5json.dset_util import isExtensible
 from h5json import selections
 
 from .util.httpUtil import getHref, getAcceptType, getContentType
@@ -38,7 +38,7 @@ from .util.httpUtil import request_read, jsonResponse
 from .util.domainUtil import getDomainFromRequest, isValidDomain
 from .util.domainUtil import getBucketForDomain
 from .util.dsetUtil import getSelectionPagination, get_slices
-from .util.dsetUtil import isSelect, getSelectParam, getSelect
+from .util.dsetUtil import isSelect, getSelectParam, getSelect, getChunkDims
 from .util.dsetUtil import parseRegionRefParam, extractJsonArrayElement
 from .util.dsetUtil import regionRefSelectionToTargetSelection, unwrapSingleElement
 from .util.authUtil import getUserPasswordFromRequest, validateUserPassword

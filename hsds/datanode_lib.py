@@ -27,7 +27,7 @@ from h5json.objid import getS3Key, isValidUuid
 from h5json.objid import isValidChunkId, isSchema2Id
 from h5json.objid import getRootObjId, isRootObjId
 from h5json.shape_util import getShapeDims
-from h5json.dset_util import getChunkDims, getDatasetLayoutClass
+from h5json.dset_util import getDatasetLayoutClass
 from h5json.time_util import getNow
 from h5json import selections
 
@@ -38,7 +38,7 @@ from .util.storUtil import getBucketFromStorURI, getKeyFromStorURI, getURIFromKe
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
-from .util.dsetUtil import getChunkInitializer, getSliceQueryParam
+from .util.dsetUtil import getChunkInitializer, getSliceQueryParam, getChunkDims
 from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
 from .util.nodeUtil import validateInPartition
 from .util.rangegetUtil import ChunkLocation, chunkMunge, getHyperChunkIndex, getHyperChunkFactors

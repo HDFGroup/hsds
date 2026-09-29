@@ -9,6 +9,7 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
+import json
 import unittest
 import logging
 import sys
@@ -23,7 +24,8 @@ from hsds.util.dsetUtil import get_slices
 from hsds.util.dsetUtil import getSelectionList, getSelectionPagination
 from hsds.util.dsetUtil import parseRegionRefParam, extractJsonArrayElement
 from hsds.util.dsetUtil import regionRefSelectionToTargetSelection, unwrapSingleElement
-from hsds.util.dsetUtil import getDatasetCreationProps
+from hsds.util.dsetUtil import getDatasetCreationProps, getChunkDims
+from hsds import config
 
 
 class DsetUtilTest(unittest.TestCase):
@@ -668,6 +670,86 @@ class DsetUtilTest(unittest.TestCase):
 
         # and one with neither reports empty props rather than raising
         self.assertEqual(getDatasetCreationProps({"id": "d-123"}), {})
+
+    def testGetChunkDims(self):
+        min_chunk_size = int(config.get("min_chunk_size", default=1024 * 1024))
+        max_chunk_size = int(config.get("max_chunk_size", default=4 * 1024 * 1024))
+
+        def contiguous_ref(dims, type_json, **extra):
+            dset_json = {
+                "type": type_json,
+                "shape": {"class": "H5S_SIMPLE", "dims": dims},
+                "creationProperties": {
+                    "layout": {
+                        "class": "H5D_CONTIGUOUS_REF",
+                        "file_uri": "s3://a-bucket/f.h5",
+                        "offset": 1234,
+                        "size": 0,
+                    }
+                },
+            }
+            dset_json.update(extra)
+            return dset_json
+
+        # a chunked layout reports its own chunk shape, as before
+        dset_json = {
+            "type": "H5T_IEEE_F32LE",
+            "shape": {"class": "H5S_SIMPLE", "dims": [100, 100]},
+            "creationProperties": {"layout": {"class": "H5D_CHUNKED", "dims": [10, 10]}},
+        }
+        self.assertEqual(getChunkDims(dset_json), (10, 10))
+
+        # and a plain contiguous layout is still one chunk the size of the dataset
+        dset_json["creationProperties"] = {"layout": {"class": "H5D_CONTIGUOUS"}}
+        self.assertEqual(getChunkDims(dset_json), (100, 100))
+
+        # a contiguous reference is split into virtual chunks within the configured
+        # bounds, rather than read as one chunk. This is the NSRDB TMY `meta`
+        # dataset: 2,693,287 records of 134 bytes, 361 MB contiguous. As a single
+        # chunk, reading one row made the DN fetch and cache all 361 MB; with the
+        # default 1m/4m bounds it is 21042-row (~2.7 MB) range gets, as in 0.9.x.
+        meta_type = {
+            "class": "H5T_STRING",
+            "charSet": "H5T_CSET_ASCII",
+            "length": 134,
+            "strPad": "H5T_STR_NULLPAD",
+        }
+        chunk_dims = getChunkDims(contiguous_ref([2693287], meta_type))
+        self.assertLessEqual(chunk_dims[0] * 134, max_chunk_size)
+        self.assertGreaterEqual(chunk_dims[0] * 134, min_chunk_size)
+        if (min_chunk_size, max_chunk_size) == (1024 * 1024, 4 * 1024 * 1024):
+            self.assertEqual(chunk_dims, (21042,))
+
+        # multi-dimensional: 50K x 8M float32 (1.6 TB) must not be a single chunk
+        chunk_dims = getChunkDims(contiguous_ref([50000, 8000000], "H5T_IEEE_F32LE"))
+        self.assertEqual(len(chunk_dims), 2)
+        self.assertLessEqual(chunk_dims[0] * chunk_dims[1] * 4, max_chunk_size)
+
+        # a contiguous reference smaller than a chunk is still one chunk
+        self.assertEqual(getChunkDims(contiguous_ref([100], "H5T_IEEE_F32LE")), (100,))
+
+        # the shape is derived, never read from a stored layout: SN and DN must
+        # agree on it, and only the derivation is available to both (the SN's
+        # dataset json is the GET_Dataset response, which carries no dims for a
+        # reference layout)
+        dset_json = contiguous_ref(
+            [2693287], meta_type, layout={"class": "H5D_CHUNKED", "dims": [1]}
+        )
+        expected = getChunkDims(contiguous_ref([2693287], meta_type))
+        self.assertEqual(getChunkDims(dset_json), expected)
+
+        # scalar and null shapes behave as they do for other layouts
+        dset_json = contiguous_ref([1], "H5T_IEEE_F32LE")
+        dset_json["shape"] = {"class": "H5S_SCALAR"}
+        self.assertEqual(getChunkDims(dset_json), (1,))
+        dset_json["shape"] = {"class": "H5S_NULL"}
+        self.assertIsNone(getChunkDims(dset_json))
+
+        # and the dataset json is not modified
+        dset_json = contiguous_ref([2693287], meta_type)
+        before = json.dumps(dset_json, sort_keys=True)
+        getChunkDims(dset_json)
+        self.assertEqual(json.dumps(dset_json, sort_keys=True), before)
 
 
 if __name__ == "__main__":

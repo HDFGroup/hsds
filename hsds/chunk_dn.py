@@ -25,13 +25,12 @@ from h5json.hdf5dtype import createDataType, getSubType
 from h5json.array_util import bytesToArray, arrayToBytes, getBroadcastShape
 from h5json.objid import getS3Key, isValidUuid
 from h5json.shape_util import getShapeDims
-from h5json.dset_util import getChunkDims
 from h5json.query_util import arrayQuery
 
 from .util.httpUtil import request_read, getContentType
 from .util.storUtil import isStorObj, deleteStorObj
 from .util.dsetUtil import getSelectionList, getChunkInitializer
-from .util.dsetUtil import getSelect
+from .util.dsetUtil import getSelect, getChunkDims
 from .util.chunkUtil import getChunkIndex, getDatasetId
 from .util.chunkUtil import chunkWriteSelection, chunkReadSelection
 from .util.chunkUtil import chunkWritePoints, chunkReadPoints

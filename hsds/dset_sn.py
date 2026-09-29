@@ -21,13 +21,13 @@ from h5json.hdf5dtype import createDataType
 from h5json.array_util import getNumElements, jsonToArray
 from h5json.objid import isValidUuid, isSchema2Id
 from h5json.shape_util import getShapeDims, isNullSpace, isScalar
-from h5json.dset_util import getChunkDims, getDatasetLayoutClass
+from h5json.dset_util import getDatasetLayoutClass
 from h5json import selections
 
 from .util.httpUtil import getHref, respJsonAssemble
 from .util.httpUtil import jsonResponse, getBooleanParam
 from .util.chunkUtil import getChunkIds
-from .util.dsetUtil import getPreviewQuery
+from .util.dsetUtil import getPreviewQuery, getChunkDims
 from .util.authUtil import getUserPasswordFromRequest, aclCheck
 from .util.authUtil import validateUserPassword
 from .util.domainUtil import getDomainFromRequest, getPathForDomain, isValidDomain

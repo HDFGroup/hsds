@@ -17,8 +17,12 @@ import re
 from h5json.shape_util import getShapeDims
 from h5json.objid import isValidUuid
 from h5json.array_util import jsonToArray, bytesArrayToList
+from h5json.dset_util import getChunkDims as _getLayoutChunkDims
+from h5json.dset_util import getContiguousLayout, getDatasetLayoutClass
+from h5json.hdf5dtype import getItemSize
 from h5json import selections
 
+from .. import config
 from .. import hsds_logger as log
 from .chunkUtil import _toArraySlice, slice_stop, toNumpyIndex
 
@@ -61,6 +65,40 @@ def getDatasetCreationProps(dset_json):
             cpl["layout"] = layout
 
     return cpl
+
+
+def getChunkDims(dset_json):
+    """ Return the chunk shape to read and cache the given dataset with.
+
+    Same as h5json's getChunkDims, except for H5D_CONTIGUOUS_REF.  h5json treats
+    every non-chunked layout as a single chunk the size of the dataset, which is
+    right for data HSDS stores itself but not for a contiguous reference: there
+    the data stays in the referenced file, and one chunk means that reading any
+    element fetches - and caches - the entire dataset from storage.
+
+    So a contiguous reference is split into virtual chunks sized from the
+    min_chunk_size/max_chunk_size config, as versions before 1.0 did.  Nothing
+    is ever stored per chunk (each one is a range get into the file), so the
+    shape only has to agree between the SN, which turns chunk indexes into byte
+    ranges, and the DN, which decodes and caches them.  Deriving it from the
+    dataset's shape, type and the shared config gives that on both sides,
+    without having to carry it through the GET_Dataset response.
+    """
+    if getDatasetLayoutClass(dset_json) != "H5D_CONTIGUOUS_REF":
+        return _getLayoutChunkDims(dset_json)
+
+    item_size = getItemSize(dset_json["type"])
+    if item_size == "H5T_VARIABLE":
+        # contiguous references are fixed-size data - nothing to split
+        return _getLayoutChunkDims(dset_json)
+
+    # defaults match admin/config/config.yml, for configs that leave them out
+    kwargs = {
+        "chunk_min": int(config.get("min_chunk_size", default=1024 * 1024)),
+        "chunk_max": int(config.get("max_chunk_size", default=4 * 1024 * 1024)),
+    }
+    chunk_dims = getContiguousLayout(dset_json["shape"], item_size, **kwargs)
+    return None if chunk_dims is None else tuple(chunk_dims)
 
 
 def isSelectAll(selection, dims):

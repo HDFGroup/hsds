@@ -22,13 +22,14 @@ from h5json.objid import isValidUuid, isSchema2Id, getS3Key, isS3ObjKey
 from h5json.objid import getObjId, isValidChunkId, getCollectionForId
 from h5json.filters import getFilters
 from h5json.shape_util import getShapeDims, getDataSize
-from h5json.dset_util import getDatasetLayoutClass, getDatasetLayout, getChunkDims
+from h5json.dset_util import getDatasetLayoutClass, getDatasetLayout
 from h5json.time_util import getNow
 from h5json import selections
 
 from .util.chunkUtil import getDatasetId, getNumChunks, ChunkIterator, getChunkIndex, getChunkIds
 from .util.storUtil import getStorKeys, putStorJSONObj, getStorJSONObj
 from .util.storUtil import deleteStorObj, getStorBytes, isStorObj
+from .util.dsetUtil import getChunkDims
 from .datanode_lib import getFilterOps
 from . import hsds_logger as log
 from . import config

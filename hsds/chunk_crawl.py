@@ -26,13 +26,12 @@ from h5json.hdf5dtype import createDataType
 from h5json.array_util import jsonToArray, getNumpyValue
 from h5json.array_util import getNumElements, arrayToBytes, bytesToArray
 from h5json.shape_util import getShapeDims, getRank
-from h5json.dset_util import getChunkDims
 from h5json.time_util import getNow
 
 from .util.nodeUtil import getDataNodeUrl, getNodeCount
 from .util.httpUtil import http_get, http_put, http_post, get_http_client
 from .util.httpUtil import isUnixDomainUrl
-from .util.dsetUtil import getSliceQueryParam
+from .util.dsetUtil import getSliceQueryParam, getChunkDims
 from .util.chunkUtil import getChunkCoverage, getDataCoverage, toNumpyIndex
 from .util.chunkUtil import getChunkIdForPartition
 

@@ -25,12 +25,12 @@ from h5json.array_util import getNumpyValue, bytesToArray
 from h5json.objid import isSchema2Id, getS3Key, getObjId
 from h5json.shape_util import isNullSpace, getShapeDims, getRank, getMaxDims
 from h5json.shape_util import isExtensible, getShapeClass
-from h5json.dset_util import getChunkDims, getDatasetLayout, getDatasetLayoutClass
+from h5json.dset_util import getDatasetLayout, getDatasetLayoutClass
 from h5json.query_util import arrayQuery
 from h5json import selections
 
 from .util.nodeUtil import getDataNodeUrl
-from .util.dsetUtil import get_slices
+from .util.dsetUtil import get_slices, getChunkDims
 from .util.chunkUtil import getChunkCoordinate, getChunkIndex, getChunkSuffix
 from .util.chunkUtil import getNumChunks, getChunkIds, getChunkId
 from .util.chunkUtil import getChunkCoverage, getDataCoverage
