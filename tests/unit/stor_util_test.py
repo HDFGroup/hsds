@@ -15,6 +15,7 @@ import time
 import numpy as np
 from aiobotocore.session import get_session
 import unittest
+from unittest.mock import patch
 import sys
 from aiohttp.web_exceptions import HTTPNotFound
 
@@ -222,6 +223,35 @@ class StorUtilTest(unittest.TestCase):
         self.assertFalse(key_list)
         """
         await releaseStorageClient(app)
+
+    def testGetStorBytesShortRead(self):
+        # A range read that runs past the end of the object should keep the bytes
+        # it read and zero-fill the rest.
+        class FakeClient:
+            def __init__(self, data):
+                self._data = data
+
+            async def get_object(self, bucket=None, key=None, offset=0, length=-1):
+                if length > 0:
+                    return self._data[offset:offset + length]
+                return self._data[offset:]
+
+        app = {"bucket_name": "somebucket", "storage_clients": {}}
+        data = bytes(range(1, 11))  # 10 non-zero bytes
+        loop = asyncio.new_event_loop()
+        try:
+            with patch("hsds.util.storUtil._getStorageClient", return_value=FakeClient(data)):
+                # short: 4 bytes left from offset 6, 8 requested
+                result = loop.run_until_complete(getStorBytes(app, "akey", offset=6, length=8))
+                self.assertEqual(result, data[6:] + bytes(4))
+
+                # complete reads are unchanged
+                result = loop.run_until_complete(getStorBytes(app, "akey", offset=2, length=8))
+                self.assertEqual(result, data[2:])
+                result = loop.run_until_complete(getStorBytes(app, "akey"))
+                self.assertEqual(result, data)
+        finally:
+            loop.close()
 
     def testStorUtil(self):
         # run synchronous tests

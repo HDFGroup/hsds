@@ -36,6 +36,9 @@ at <https://github.com/HDFGroup/hsds/releases>.
 - A read that fails on the data node returns an error instead of a 200 with an
   empty or partial body
 
+- A range read that runs past the end of an object keeps the bytes it read
+  instead of returning zeros
+
 ## Acknowledgements:
 
 We would like to thank the HSDS community members who contributed to this release.
@@ -76,6 +79,15 @@ None.
    data, so a data node failure produced an empty or truncated body that looked
    successful. Errors now return their real status, and a failure partway through a
    streamed response drops the connection.
+
+## Storage
+
+### Short range reads no longer come back as zeros
+
+   A range read that returned fewer bytes than requested discarded the bytes it had
+   read and returned zeros in their place. It now keeps them and zero-fills only the
+   missing remainder. This affected `H5D_CONTIGUOUS_REF` datasets whose last chunk
+   extends past the end of their file.
 
 # ☑️ Platforms Tested
 
