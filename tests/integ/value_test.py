@@ -5344,6 +5344,45 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.content, data.tobytes())
 
+    def testReadErrorStatus(self):
+        # A read that fails on the data node has to come back as an error.
+        print("testReadErrorStatus", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_rsp = helper.getRequestHeaders(domain=self.base_domain)
+        headers_bin_rsp["accept"] = "application/octet-stream"
+
+        req = self.endpoint + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        root_uuid = json.loads(rsp.text)["root"]
+        rsp = self.session.get(self.endpoint + "/groups/" + root_uuid, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        bucket = json.loads(rsp.text)["bucket"]
+
+        # Point the dataset's one chunk at the start of this domain's own
+        # .domain.json and declare it gzip-compressed. The file exists, so the
+        # data node finds it, but the bytes aren't a gzip stream, so the read fails.
+        file_uri = f"{bucket}{self.base_domain}/.domain.json"
+        layout = {"class": "H5D_CHUNKED_REF", "file_uri": file_uri, "dims": [10],
+                  "chunks": {"0": [0, 16]}}
+        gzip_filter = {"class": "H5Z_FILTER_DEFLATE", "id": 1, "name": "gzip", "level": 5}
+        payload = {"type": "H5T_STD_I32LE", "shape": [10],
+                   "creationProperties": {"layout": layout, "filters": [gzip_filter]}}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        dset_uuid = json.loads(rsp.text)["id"]
+
+        # Each read takes a few seconds while the service node retries the data
+        # node, so this covers each code path once
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        for req_headers in (headers, headers_bin_rsp):
+            rsp = self.session.get(req, headers=req_headers)
+            self.assertEqual(rsp.status_code, 500)
+        body = {"points": [1, 2]}
+        rsp = self.session.post(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 500)
+
 
 if __name__ == "__main__":
     # setup test files
