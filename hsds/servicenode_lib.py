@@ -37,6 +37,7 @@ from h5json.time_util import getNow
 from .util.nodeUtil import getDataNodeUrl
 from .util.authUtil import getAclKeys
 from .util.linkUtil import getRequestLinks
+from .util.dsetUtil import CHUNK_REF_LAYOUTS
 from .util.storUtil import getStorJSONObj, isStorObj, getSupportedFilters
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
@@ -1639,12 +1640,41 @@ def getDatasetCreateArgs(body,
             elif chunk_size > max_chunk_size:
                 msg = f"chunk size: {chunk_size} greater than recommended "
                 msg += f"max size: {max_chunk_size}"
-                log.debug(msg)
+                log.warn(msg)
         else:
+            # a layout without dims (H5D_CONTIGUOUS, H5D_COMPACT) stores the whole
+            # dataset as one chunk
+            chunk_size = dset_size
             # log warning if contiguous layout used with too large datadset
             if dset_size > max_chunk_size:
                 msg = f"dataset larger than recommended {max_chunk_size} for CONTIGUOUS storage"
                 log.warn(msg)
+
+        # A chunk stored by HSDS has to fit in a DN's chunk cache to be written
+        layout_class = layout_json.get("class")
+        if layout_class == "H5D_COMPACT":
+            # HDF5 limits compact datasets to just under 64 KiB
+            max_compact_size = int(config.get("max_compact_dset_size", default=65536))
+            if dset_size > max_compact_size:
+                msg = f"compact dataset of {dset_size} bytes is larger than the "
+                msg += f"server's max_compact_dset_size of {max_compact_size} bytes; "
+                msg += "use a contiguous or chunked layout"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+        elif layout_class not in CHUNK_REF_LAYOUTS:
+            chunk_mem_cache_size = int(config.get("chunk_mem_cache_size"))
+            if chunk_size > chunk_mem_cache_size:
+                if layout_class == "H5D_CONTIGUOUS":
+                    msg = f"contiguous dataset of {chunk_size} bytes is larger than the "
+                    msg += f"server's chunk_mem_cache_size of {chunk_mem_cache_size} "
+                    msg += "bytes; HSDS stores a contiguous dataset as a single chunk, "
+                    msg += "so use a chunked layout for larger datasets"
+                else:
+                    msg = f"chunk size of {chunk_size} bytes is larger than the server's "
+                    msg += f"chunk_mem_cache_size of {chunk_mem_cache_size} bytes; "
+                    msg += "use smaller chunk dimensions"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
     else:
         # no layout, create one based on shape and itemsize
         layout_json = genLayout(shape_json, type_json, has_filters=has_filters)

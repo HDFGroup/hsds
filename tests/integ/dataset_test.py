@@ -1885,6 +1885,59 @@ class DatasetTest(unittest.TestCase):
         rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
         self.assertEqual(rsp.status_code, 201)
 
+    def testChunkSizeLimit(self):
+        # A chunk HSDS stores has to fit in a data node's chunk cache
+        # (chunk_mem_cache_size) to be written, so creating a dataset with a larger
+        # one is refused.
+        domain = self.base_domain + "/testChunkSizeLimit.h5"
+        helper.setupDomain(domain)
+        print("testChunkSizeLimit", domain)
+        headers = helper.getRequestHeaders(domain=domain)
+        req = self.endpoint + "/datasets"
+        extent = 2 ** 31  # 16 GiB of float64
+
+        too_big = (
+            ("H5T_IEEE_F64LE", {"class": "H5D_CHUNKED", "dims": [extent]}),
+            # a contiguous dataset is stored as a single chunk
+            ("H5T_IEEE_F64LE", {"class": "H5D_CONTIGUOUS"}),
+            # variable length types are sized by an estimate of the average item
+            ({"class": "H5T_STRING", "charSet": "H5T_CSET_UTF8",
+              "strPad": "H5T_STR_NULLTERM", "length": "H5T_VARIABLE"},
+             {"class": "H5D_CHUNKED", "dims": [extent // 8]}),
+        )
+        for type_json, layout in too_big:
+            payload = {"type": type_json, "shape": [extent],
+                       "creationProperties": {"layout": layout}}
+            rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 400, f"layout: {layout}")
+
+        # compact datasets are limited to max_compact_dset_size (64 KiB), as in HDF5
+        for nbytes, expected_status in ((60_000, 201), (70_000, 400)):
+            payload = {"type": "H5T_STD_U8LE", "shape": [nbytes],
+                       "creationProperties": {"layout": {"class": "H5D_COMPACT"}}}
+            rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, expected_status, f"compact: {nbytes} bytes")
+
+        # chunks above the recommended max_chunk_size are still used as given
+        layout = {"class": "H5D_CHUNKED", "dims": [1024, 1024]}  # 8 MiB
+        payload = {"type": "H5T_IEEE_F64LE", "shape": [4096, 4096],
+                   "creationProperties": {"layout": layout}}
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        dset_uuid = json.loads(rsp.text)["id"]
+        rsp = self.session.get(req + "/" + dset_uuid, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        layout_json = json.loads(rsp.text)["creationProperties"]["layout"]
+        self.assertEqual(layout_json["dims"], [1024, 1024])
+
+        # linked datasets are exempt since their chunks are sized by the source file
+        layout = {"class": "H5D_CHUNKED_REF", "file_uri": "some_bucket/some_file.h5",
+                  "dims": [extent], "chunks": {"0": [0, 8 * extent]}}
+        payload = {"type": "H5T_IEEE_F64LE", "shape": [extent],
+                   "creationProperties": {"layout": layout}}
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
     def testAutoChunk1dDataset(self):
         # test Dataset where chunk layout is set automatically
         domain = self.base_domain + "/testAutoChunk1dDataset.h5"
@@ -2803,14 +2856,8 @@ class DatasetTest(unittest.TestCase):
 
         # unlimited extend in dim 0, fixed in dimension 2, extensible by 10x in dim 3
         max_dims = [0, 80000, 900000]
-        chunk_shape = [1000, 1000, 1000]
-        layout = {
-            "class": "H5D_CHUNKED",
-            "dims": chunk_shape
-        }
-        cpl = {"layout": layout}
+        # no layout given, so the server picks the chunk shape
         payload = {"type": "H5T_IEEE_F32LE", "shape": dims, "maxdims": max_dims}
-        payload["creationProperties"] = cpl
 
         req = self.endpoint + "/datasets"
         rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
@@ -2845,6 +2892,12 @@ class DatasetTest(unittest.TestCase):
         layout = layout_json["dims"]
 
         self.assertEqual(len(layout), 3)
+        chunk_size = layout[0] * layout[1] * layout[2] * 4
+        # chunk size should be between chunk min and max
+        CHUNK_MIN = 1024
+        CHUNK_MAX = 50 * 1024 * 1024
+        self.assertTrue(chunk_size >= CHUNK_MIN)
+        self.assertTrue(chunk_size <= CHUNK_MAX)
 
     def testDatasetEmptyChunkExtent(self):
         # Attempting to create 0-extent chunks should respond with Bad Request
