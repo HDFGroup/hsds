@@ -2411,6 +2411,54 @@ class AttributeTest(unittest.TestCase):
         rsp = self.session.put(req, data=json.dumps(data), headers=headers)
         self.assertEqual(rsp.status_code, 200)
 
+    def testPutAttributesNoAttributes(self):
+        # PUT to the attributes collection needs an "attributes" map with at least
+        # one entry.
+        print("testPutAttributesNoAttributes", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        root_id = json.loads(rsp.text)["root"]
+
+        req = self.endpoint + "/groups"
+        rsp = self.session.post(req, headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        grp_id = json.loads(rsp.text)["id"]
+
+        req = self.endpoint + "/groups/" + root_id + "/links/no_attrs_grp"
+        rsp = self.session.put(req, data=json.dumps({"id": grp_id}), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        attr_req = self.endpoint + "/groups/" + grp_id + "/attributes"
+        bodies = (
+            # the single-attribute form of PUT /attributes/{name}, sent to the collection
+            {"name": "a1", "type": "H5T_STD_I32LE", "value": 5},
+            {"attributes": {}},
+            {"replace": True},
+        )
+        for body in bodies:
+            rsp = self.session.put(attr_req, data=json.dumps(body), headers=headers)
+            self.assertEqual(rsp.status_code, 400, f"body: {body}")
+
+        # same for a per-object entry in an obj_ids map, which would otherwise be
+        # skipped while the other objects' attributes were written
+        attr_json = {"type": "H5T_STD_I32LE", "shape": "H5S_SCALAR", "value": 5}
+        body = {"obj_ids": {
+            root_id: {"attributes": {"a1": attr_json}},
+            grp_id: {"name": "a1", "type": "H5T_STD_I32LE", "value": 5},
+        }}
+        req = self.endpoint + "/groups/" + root_id + "/attributes"
+        rsp = self.session.put(req, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+        rsp = self.session.get(self.endpoint + "/groups/" + root_id + "/attributes/a1",
+                               headers=headers)
+        self.assertEqual(rsp.status_code, 404)
+
+        rsp = self.session.get(self.endpoint + "/groups/" + grp_id, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(json.loads(rsp.text)["attributeCount"], 0)
+
     def testDeleteAttributesMultiple(self):
         print("testDeleteAttributesMultiple", self.base_domain)
         headers = helper.getRequestHeaders(domain=self.base_domain)
