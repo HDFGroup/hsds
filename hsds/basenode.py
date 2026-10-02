@@ -36,7 +36,7 @@ from .util.nodeUtil import createNodeId, getNodeNumber, getNodeCount
 from . import hsds_logger as log
 from . import metrics
 
-HSDS_VERSION = "1.0.1"
+HSDS_VERSION = "1.0.2"
 
 
 def getVersion():
