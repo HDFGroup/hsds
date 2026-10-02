@@ -41,7 +41,7 @@ dependencies = [
     "bitshuffle >=0.5.2",
     "cryptography",
     "h5py >= 3.6.0",
-    "h5json >= 2.0.0",
+    "h5json >= 2.0.1",
     "importlib_resources",
     "numcodecs <= 0.15.1",
     "numpy >=2.0.0",

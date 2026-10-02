@@ -406,6 +406,79 @@ class FilterTest(unittest.TestCase):
         self.assertEqual(len(row), 1)
         self.assertEqual(row[0], 22)
 
+    def testAbbreviatedFilterSpecs(self):
+        # The server should fill in a missing id or name in a filter dict.
+        print("testAbbreviatedFilterSpecs", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = helper.getEndpoint() + "/"
+        rsp = self.session.get(req, headers=headers)
+        rspJson = json.loads(rsp.text)
+        root_uuid = rspJson["root"]
+
+        test_cases = (
+            ({"class": "H5Z_FILTER_DEFLATE", "id": 1, "level": 9}, "H5Z_FILTER_DEFLATE", 1),
+            ({"class": "H5Z_FILTER_USER", "name": "lz4", "level": 5}, "H5Z_FILTER_LZ4", 32004),
+            ({"class": "H5Z_FILTER_FLETCHER32", "id": 3}, "H5Z_FILTER_FLETCHER32", 3),
+            ({"class": "H5Z_FILTER_SCALEOFFSET", "id": 6, "scaleOffset": 2,
+              "scaleType": "H5Z_SO_INT"}, "H5Z_FILTER_SCALEOFFSET", 6),
+            ({"class": "H5Z_FILTER_SHUFFLE", "id": 2}, "H5Z_FILTER_SHUFFLE", 2),
+            ({"class": "H5Z_FILTER_DEFLATE", "id": 1, "level": 6}, "H5Z_FILTER_DEFLATE", 1),
+            ({"class": "H5Z_FILTER_DEFLATE"}, "H5Z_FILTER_DEFLATE", 1),
+        )
+
+        for filter_spec, expected_class, expected_id in test_cases:
+            payload = {"type": "H5T_STD_I32LE", "shape": [1024, 1024]}
+            layout = {"class": "H5D_CHUNKED", "dims": [64, 64]}
+            payload["creationProperties"] = {"layout": layout, "filters": [filter_spec]}
+            req = self.endpoint + "/datasets"
+            rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201, f"filter: {filter_spec}")
+            rspJson = json.loads(rsp.text)
+            dset_uuid = rspJson["id"]
+
+            name = "dset" + helper.getRandomName()
+            req = self.endpoint + "/groups/" + root_uuid + "/links/" + name
+            rsp = self.session.put(req, data=json.dumps({"id": dset_uuid}), headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+
+            # the stored filter is fully specified
+            req = self.endpoint + "/datasets/" + dset_uuid
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            rspJson = json.loads(rsp.text)
+            filters = rspJson["creationProperties"]["filters"]
+            self.assertEqual(len(filters), 1)
+            filter_json = filters[0]
+            self.assertEqual(filter_json["class"], expected_class)
+            self.assertEqual(filter_json["id"], expected_id)
+            self.assertTrue(filter_json.get("name"))
+
+            # and the dataset is usable
+            req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+            payload = {"start": [512, 0], "stop": [513, 1024], "value": [22] * 1024}
+            rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            params = {"select": "[512:513,512:513]"}
+            rsp = self.session.get(req, params=params, headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            self.assertEqual(json.loads(rsp.text)["value"], [[22]])
+
+        bad_filters = (
+            "nonexistent-filter",
+            {"class": "H5Z_FILTER_USER", "name": "nonexistent-filter"},
+            {"class": "H5Z_FILTER_DEFLATE", "id": 2},  # id doesn't match class
+            {"id": 1},  # dicts need a class
+            "gzip",  # filters have to be dicts, not bare names or ids
+            1,
+        )
+        for filter_spec in bad_filters:
+            payload = {"type": "H5T_STD_I32LE", "shape": [1024, 1024]}
+            layout = {"class": "H5D_CHUNKED", "dims": [64, 64]}
+            payload["creationProperties"] = {"layout": layout, "filters": [filter_spec]}
+            req = self.endpoint + "/datasets"
+            rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 400, f"filter: {filter_spec}")
+
     def testDeshuffling(self):
         """Test the shuffle filter implementation used with a known data file."""
         print("testDeshuffling", self.base_domain)

@@ -46,6 +46,12 @@ at <https://github.com/HDFGroup/hsds/releases>.
 - The head node refuses to start when `TARGET_SN_COUNT` or `TARGET_DN_COUNT` is
   unset or 0, instead of leaving the cluster stuck in `WAITING`
 
+- Dataset creation no longer rejects filters that give a class but omit `id` or `name`.
+
+## Dependencies:
+
+- h5json 2.0.1 or later is required
+
 ## Acknowledgements:
 
 We would like to thank the HSDS community members who contributed to this release.
@@ -101,6 +107,12 @@ None.
    data, so a data node failure produced an empty or truncated body that looked
    successful. Errors now return their real status, and a failure partway through a
    streamed response drops the connection.
+
+### Filters that omit `id` or `name` are accepted again
+
+   HSDS 1.0 required every filter in `creationProperties` to give class, id and
+   name, so dataset creation which adhered to the API specification could still
+   fail. A missing id or name is now filled in from the filter's class again.
 
 ## Storage
 

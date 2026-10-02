@@ -31,6 +31,7 @@ from h5json.hdf5dtype import getBaseTypeJson, validateTypeItem, createDataType, 
 from h5json.shape_util import getShapeDims, getShapeClass, getShapeJson
 from h5json.dset_util import getChunkSize, generateLayout
 from h5json.dset_util import getDataSize, validateDatasetCreationProps
+from h5json.filters import normalizeFilters
 from h5json.link_util import h5Join, validateLinkName, getLinkClass, getLinkFilePath
 from h5json.time_util import getNow
 
@@ -1567,6 +1568,8 @@ def getDatasetCreateArgs(body,
     if creation_props:
         log.debug(f"POST_Dataset creation props: {creation_props}")
         try:
+            if "filters" in creation_props:
+                creation_props["filters"] = normalizeFilters(creation_props["filters"])
             validateDatasetCreationProps(creation_props, type_json=type_json, shape=shape_json)
         except (KeyError, TypeError, ValueError) as e:
             msg = f"Provided creation properties are invalid: {e}"
