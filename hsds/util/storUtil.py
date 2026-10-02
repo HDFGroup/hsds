@@ -481,7 +481,7 @@ async def getStorBytes(app,
         log.warn(f"requested {length} bytes but got {len(data)} bytes")
         # extend data to expected length
         buffer = bytearray(length)
-        buffer[:(len(data))]
+        buffer[:len(data)] = data
         data = bytes(buffer)
     if chunk_locations:
         log.debug(f"getStorBytes - got {len(chunk_locations)} chunk locations")

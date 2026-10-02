@@ -5383,6 +5383,47 @@ class ValueTest(unittest.TestCase):
         rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 500)
 
+    def testContiguousRefShortRead(self):
+        # A contiguous reference whose chunk runs past the end of the file it
+        # points into should return the bytes that exist, zero-filled past the end.
+        print("testContiguousRefShortRead", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+
+        req = self.endpoint + "/"
+        rsp = self.session.get(req, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        root_uuid = json.loads(rsp.text)["root"]
+        rsp = self.session.get(self.endpoint + "/groups/" + root_uuid, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        bucket = json.loads(rsp.text)["bucket"]
+
+        # Point at this domain's own .domain.json and claim it holds 100,000 bytes of uint8 data.
+        extent = 100_000
+        file_uri = f"{bucket}{self.base_domain}/.domain.json"
+        layout = {"class": "H5D_CONTIGUOUS_REF", "file_uri": file_uri,
+                  "offset": 0, "size": extent}
+        payload = {"type": "H5T_STD_U8LE", "shape": [extent],
+                   "creationProperties": {"layout": layout}}
+        req = self.endpoint + "/datasets"
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        dset_uuid = json.loads(rsp.text)["id"]
+
+        req = self.endpoint + "/datasets/" + dset_uuid + "/value"
+        params = {"select": "[0:2]"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        # the file starts with '{', followed by a quote or whitespace
+        value = json.loads(rsp.text)["value"]
+        self.assertEqual(value[0], ord("{"))
+        self.assertNotEqual(value[1], 0)
+
+        # and past the end of the file is zero-filled
+        params = {"select": f"[{extent - 2}:{extent}]"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(json.loads(rsp.text)["value"], [0, 0])
+
 
 if __name__ == "__main__":
     # setup test files
