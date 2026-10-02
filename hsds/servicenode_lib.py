@@ -731,41 +731,8 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
             log.warn("Link has invalid type!")
             raise HTTPInternalServerError()
 
-    # If object at the end of the path was a symbolic link, search again under that link
-    if link_json and (link_json["class"] != "H5L_TYPE_HARD"):
-        log.debug("Recursing under symbolic link")
-        parent_id = None
-
-        if link_json["class"] == "H5L_TYPE_SOFT":
-
-            if link_json["h5path"][0] == '/':
-                domain_json = await getDomainJson(app, domain)
-                parent_id = domain_json["root"]
-            else:
-                parent_id = obj_id
-
-        elif link_json["class"] == "H5L_TYPE_EXTERNAL":
-            domain = link_json["h5domain"]
-
-            ext_domain_json = await getDomainJson(app, domain)
-            verifyRoot(ext_domain_json)
-
-            msg = f"external domain response = {ext_domain_json}"
-            log.debug(msg)
-
-            parent_id = ext_domain_json["root"]
-
-            if link_json["h5path"][0] != '/':
-                msg = "External link by relative path is unsupported"
-                log.warn(msg)
-                raise HTTPInternalServerError()
-
-        obj_id, domain, link_json = await getObjectIdByPath(
-            app, parent_id, link_json["h5path"],
-            bucket=bucket, refresh=refresh, domain=domain,
-            follow_soft_links=follow_soft_links,
-            follow_external_links=follow_external_links)
-
+    # Soft and external links are resolved inside the loop, each by a recursive
+    # call, so link_json here is always a hard link or None.
     return obj_id, domain, link_json
 
 

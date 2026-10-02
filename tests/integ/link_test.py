@@ -989,6 +989,65 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rspJson["attributeCount"], 0)
         self.assertEqual(rspJson["class"], "group")
 
+    def testH5PathEndingAtSymbolicLink(self):
+        # a path whose last component is a soft or external link resolves to the
+        # link's target, including when links point at other links
+        domain = self.base_domain + "/testH5PathEndingAtSymbolicLink.h5"
+        print("testH5PathEndingAtSymbolicLink", domain)
+        helper.setupDomain(domain)
+        other_domain = self.base_domain + "/testH5PathEndingAtSymbolicLink_other.h5"
+        helper.setupDomain(other_domain)
+
+        def getRootId(dom):
+            headers = helper.getRequestHeaders(domain=dom)
+            rsp = self.session.get(helper.getEndpoint() + "/", headers=headers)
+            self.assertEqual(rsp.status_code, 200)
+            return json.loads(rsp.text)["root"]
+
+        def createGroup(dom, parent_id, name):
+            headers = helper.getRequestHeaders(domain=dom)
+            payload = {"link": {"id": parent_id, "name": name}}
+            req = helper.getEndpoint() + "/groups"
+            rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+            return json.loads(rsp.text)["id"]
+
+        root_id = getRootId(domain)
+        other_root_id = getRootId(other_domain)
+        g1_id = createGroup(domain, root_id, "g1")
+        other_g_id = createGroup(other_domain, other_root_id, "g")
+
+        links = {
+            "abs_soft": {"h5path": "/g1"},
+            "rel_soft": {"h5path": "g1"},
+            "soft_to_soft": {"h5path": "abs_soft"},
+            "ext": {"h5path": "/g", "file": other_domain},
+            "ext_root": {"h5path": "/", "file": other_domain},
+            "soft_to_ext": {"h5path": "/ext"},
+        }
+        headers = helper.getRequestHeaders(domain=domain)
+        for title, payload in links.items():
+            req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + title
+            rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+
+        expected = {
+            "/abs_soft": (g1_id, domain),
+            "/rel_soft": (g1_id, domain),
+            "/soft_to_soft": (g1_id, domain),
+            "/ext": (other_g_id, other_domain),
+            "/ext_root": (other_root_id, other_domain),
+            "/soft_to_ext": (other_g_id, other_domain),
+        }
+        req = helper.getEndpoint() + "/"
+        for h5path, (expected_id, expected_domain) in expected.items():
+            params = {"h5path": h5path, "follow_soft_links": 1, "follow_external_links": 1}
+            rsp = self.session.get(req, headers=headers, params=params)
+            self.assertEqual(rsp.status_code, 200, h5path)
+            rspJson = json.loads(rsp.text)
+            self.assertEqual(rspJson["id"], expected_id, h5path)
+            self.assertEqual(rspJson["domain"], expected_domain, h5path)
+
     def testRelativeH5Path(self):
         # test that an object can be found via h5path request to domain endpoint
         domain = self.base_domain + "/testRelativeH5Path.h5"
