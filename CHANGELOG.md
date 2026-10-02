@@ -1,4 +1,4 @@
-v1.0.2 --- unreleased
+v1.0.2 --- 10/2/26
 
 # 🔺 HSDS Changelog
 
@@ -46,11 +46,21 @@ at <https://github.com/HDFGroup/hsds/releases>.
 - The head node refuses to start when `TARGET_SN_COUNT` or `TARGET_DN_COUNT` is
   unset or 0, instead of leaving the cluster stuck in `WAITING`
 
-- Dataset creation no longer rejects filters that give a class but omit `id` or `name`.
+- Dataset creation no longer rejects filters that give a class but omit `id` or `name`
+
+- Link and attribute names containing `{` or `}` no longer get a 404
+
+- Looking up a committed datatype by path no longer returns 500
+
+- `GET` on a linked dataset created by HSDS 0.9.x reports its reference layout
+  instead of a plain chunked one
+
+- Reading a few elements of an `H5D_CONTIGUOUS_REF` dataset no longer fetches the
+  whole dataset from its file
 
 ## Dependencies:
 
-- h5json 2.0.1 or later is required
+- h5json 2.0.1 or later is required, for the `H5D_CONTIGUOUS_REF` fix above
 
 ## Acknowledgements:
 
@@ -77,7 +87,7 @@ The full list of changes in this release is in
    be used for larger contiguous data. Compact datasets are limited to
    `max_compact_dset_size` (64 KiB, as in HDF5). Writes to existing datasets with
    chunks over the limit now fail, but their data is still readable. In order to
-   handle large contiguous datasets or large chunks, raise for `chunk_mem_cache_size`
+   handle large contiguous datasets or large chunks, raise `chunk_mem_cache_size`
    and `dn_ram`.
 
 # 🪦 Deprecations
@@ -108,11 +118,40 @@ None.
    successful. Errors now return their real status, and a failure partway through a
    streamed response drops the connection.
 
+### Names containing `{` or `}` are routed again
+
+   Since the move to aiohttp 3.14 in 1.0.1, link titles and attribute names containing `{` or
+   `}` got a 404 from the router before reaching a handler, even when
+   percent-encoded. The name-bearing routes now match any character but `/`, as they
+   did before.
+
+### Committed datatypes can be looked up by path again
+
+   `GET /` with `h5path`, and `POST /` with `h5paths`, returned 500 for a path that
+   resolved to a committed datatype, because the datatype id was rejected as invalid.
+
 ### Filters that omit `id` or `name` are accepted again
 
    HSDS 1.0 required every filter in `creationProperties` to give class, id and
    name, so dataset creation which adhered to the API specification could still
    fail. A missing id or name is now filled in from the filter's class again.
+
+## Data Node
+
+### Linked datasets keep their reference layout
+
+   For a linked dataset created by HSDS 0.9.x, which also stored a top-level `layout`,
+   `GET /datasets/{id}` replaced the reference layout with the plain `H5D_CHUNKED` layout
+   stored beside it, dropping the `file_uri` (and `chunk_table`) that locate the data,
+   and did so in the data node's cached copy of the dataset's metadata. The reference
+   layout is now reported, and the cache is left unchanged.
+
+### Contiguous linked datasets are read in chunks again
+
+   An `H5D_CONTIGUOUS_REF` dataset was treated as one chunk the size of the whole
+   dataset, so reading any part of it fetched all of it from its file. With h5json
+   2.0.1 it is split into chunks of at most 8 MB, as in 0.9.x, and only the chunks a
+   read touches are fetched.
 
 ## Storage
 
