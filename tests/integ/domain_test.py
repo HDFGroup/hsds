@@ -234,6 +234,95 @@ class DomainTest(unittest.TestCase):
             self.assertTrue("root" in obj_json)
             self.assertEqual(root_id, obj_json["root"])
 
+    def testPostDomainUnresolved(self):
+        # ignore_unresolved reports per-path failures instead of failing the request
+        domain = self.base_domain + "/testPostDomainUnresolved.h5"
+        print("testPostDomainUnresolved", domain)
+        helper.setupDomain(domain)
+        other_domain = self.base_domain + "/testPostDomainUnresolved_other.h5"
+        helper.setupDomain(other_domain)
+
+        root_id = helper.getRootUUID(domain, session=self.session)
+        other_root_id = helper.getRootUUID(other_domain, session=self.session)
+
+        def make_group(dom, parent_id, name):
+            req = helper.getEndpoint() + "/groups"
+            headers = helper.getRequestHeaders(domain=dom)
+            payload = {"link": {"id": parent_id, "name": name}}
+            rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+            return rsp.json()["id"]
+
+        g1_id = make_group(domain, root_id, "g1")
+        # both domains have a /g1, so resolving in the wrong domain is detectable
+        other_g1_id = make_group(other_domain, other_root_id, "g1")
+        other_g2_id = make_group(other_domain, other_root_id, "g2")
+
+        headers = helper.getRequestHeaders(domain=domain)
+        missing_domain = self.base_domain + "/testPostDomainUnresolved_missing.h5"
+        links = {
+            "soft_ok": {"h5path": "/g1"},
+            "soft_dangling": {"h5path": "/does_not_exist"},
+            "ext_ok": {"h5path": "/g2", "file": other_domain},
+            "ext_missing_domain": {"h5path": "/g1", "file": missing_domain},
+            "ext_missing_path": {"h5path": "/nope", "file": other_domain},
+            "ext_malformed": {"h5path": "/g1", "file": "not a domain"},
+        }
+        for title, payload in links.items():
+            req = helper.getEndpoint() + "/groups/" + root_id + "/links/" + title
+            rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+
+        req = helper.getEndpoint() + "/"
+        follow = {"follow_soft_links": 1, "follow_external_links": 1}
+        good = {"/g1": g1_id, "/soft_ok": g1_id, "/ext_ok": other_g2_id}
+        broken = ["/soft_dangling", "/ext_missing_domain", "/ext_missing_path",
+                  "/ext_malformed", "/missing"]
+
+        # default: one unresolvable path fails the whole request
+        data = {"h5paths": list(good) + ["/soft_dangling"]}
+        rsp = self.session.post(req, data=json.dumps(data), params=follow, headers=headers)
+        self.assertEqual(rsp.status_code, 404)
+
+        # ignore_unresolved: good paths returned, broken ones listed in errors
+        params = {"ignore_unresolved": 1, **follow}
+        data = {"h5paths": list(good) + broken}
+        rsp = self.session.post(req, data=json.dumps(data), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = rsp.json()
+        self.assertEqual(set(rspJson["h5paths"]), set(good))
+        for h5path, obj_id in good.items():
+            self.assertEqual(rspJson["h5paths"][h5path]["id"], obj_id)
+        self.assertEqual(set(rspJson["errors"]), set(broken))
+        for h5path in broken:
+            self.assertEqual(rspJson["errors"][h5path]["status"], 404)
+
+        # errors is present (empty) when everything resolves
+        data = {"h5paths": list(good)}
+        rsp = self.session.post(req, data=json.dumps(data), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.json()["errors"], {})
+
+        # links that aren't followed are reported per path with 400
+        params = {"ignore_unresolved": 1}
+        data = {"h5paths": ["/g1", "/soft_ok", "/ext_ok"]}
+        rsp = self.session.post(req, data=json.dumps(data), params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = rsp.json()
+        self.assertEqual(list(rspJson["h5paths"]), ["/g1"])
+        self.assertEqual(rspJson["errors"]["/soft_ok"]["status"], 400)
+        self.assertEqual(rspJson["errors"]["/ext_ok"]["status"], 400)
+
+        # following an external link must not change the domain later paths resolve in
+        data = {"h5paths": ["/ext_ok", "/soft_ok"]}
+        rsp = self.session.post(req, data=json.dumps(data), params=follow, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        rsp_paths = rsp.json()["h5paths"]
+        self.assertEqual(rsp_paths["/ext_ok"]["domain"], other_domain)
+        self.assertEqual(rsp_paths["/soft_ok"]["id"], g1_id)
+        self.assertNotEqual(rsp_paths["/soft_ok"]["id"], other_g1_id)
+        self.assertEqual(rsp_paths["/soft_ok"]["domain"], domain)
+
     def testGetByPath(self):
         domain = helper.getTestDomain("tall.h5")
         print("testGetByPath", domain)

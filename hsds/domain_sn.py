@@ -681,6 +681,7 @@ async def POST_Domain(request):
     include_attrs = False
     follow_soft_links = False
     follow_external_links = False
+    ignore_unresolved = False
 
     if "parent_id" in params and params["parent_id"]:
         parent_id = params["parent_id"]
@@ -692,6 +693,8 @@ async def POST_Domain(request):
         follow_soft_links = True
     if "follow_external_links" in params and params["follow_external_links"]:
         follow_external_links = True
+    if "ignore_unresolved" in params and params["ignore_unresolved"]:
+        ignore_unresolved = True
 
     if not request.has_body:
         msg = "POST Domain with no body"
@@ -765,29 +768,36 @@ async def POST_Domain(request):
     aclCheck(app, domain_json, "read", username)
 
     json_objs = {}
+    errors = {}
 
     # TBD: the following could be made more efficient for
     # cases where a large number of h5paths are given...
     for h5path in h5paths:
+        try:
+            # getObjectIdByPath throws 404 if not found
+            obj_id, obj_domain, _ = await getObjectIdByPath(
+                app, base_id, h5path, bucket=bucket, domain=domain,
+                follow_soft_links=follow_soft_links,
+                follow_external_links=follow_external_links)
 
-        # getObjectIdByPath throws 404 if not found
-        obj_id, domain, _ = await getObjectIdByPath(
-            app, base_id, h5path, bucket=bucket, domain=domain,
-            follow_soft_links=follow_soft_links,
-            follow_external_links=follow_external_links)
+            log.info(f"got obj_id: {obj_id} from h5path: {h5path}")
+            # get authoritative state for object from DN (even if
+            # it's in the meta_cache).
+            kwargs = {"refresh": True, "bucket": bucket,
+                      "include_attrs": include_attrs, "include_links": include_links}
+            log.debug(f"kwargs for getObjectJson: {kwargs}")
 
-        log.info(f"got obj_id: {obj_id} from h5path: {h5path}")
-        # get authoritative state for object from DN (even if
-        # it's in the meta_cache).
-        kwargs = {"refresh": True, "bucket": bucket,
-                  "include_attrs": include_attrs, "include_links": include_links}
-        log.debug(f"kwargs for getObjectJson: {kwargs}")
-
-        obj_json = await getObjectJson(app, obj_id, **kwargs)
+            obj_json = await getObjectJson(app, obj_id, **kwargs)
+        except (HTTPBadRequest, HTTPForbidden, HTTPNotFound, HTTPGone) as e:
+            if not ignore_unresolved:
+                raise
+            log.info(f"POST_Domain unable to resolve h5path {h5path}: {e.status_code}")
+            errors[h5path] = {"status": e.status_code, "message": e.reason}
+            continue
 
         obj_json = respJsonAssemble(obj_json, params, obj_id)
 
-        obj_json["domain"] = getPathForDomain(domain)
+        obj_json["domain"] = getPathForDomain(obj_domain)
 
         # client may not know class of object retrieved via path
         obj_json["class"] = getObjectClass(obj_id)
@@ -795,6 +805,8 @@ async def POST_Domain(request):
         json_objs[h5path] = obj_json
 
     jsonRsp = {"h5paths": json_objs}
+    if ignore_unresolved:
+        jsonRsp["errors"] = errors
     resp = await jsonResponse(request, jsonRsp)
     log.response(request, resp=resp)
     return resp
