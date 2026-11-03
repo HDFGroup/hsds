@@ -2333,7 +2333,9 @@ components:
           description: Target path, for a soft link (or, combined with `file`, an external link).
         file:
           type: string
-          description: Target domain, for an external link.
+          description: |
+            Target domain, for an external link. A relative path (e.g. `other.h5` or
+            `../data/other.h5`) is resolved from the folder of the domain holding the link.
 
     TypeSpec:
       description: |

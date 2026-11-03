@@ -1089,6 +1089,72 @@ class LinkTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers, params=params)
         self.assertEqual(rsp.status_code, 404)
 
+    def testExternalLinkRelativeDomain(self):
+        # a relative external file resolves from the linking domain's folder
+        folder = self.base_domain + "/relext"
+        domain = folder + "/a.h5"
+        print("testExternalLinkRelativeDomain", domain)
+        b_domain = folder + "/b.h5"
+        c_domain = folder + "/sub/c.h5"
+        for d in (domain, b_domain, c_domain):
+            helper.setupDomain(d)
+
+        def make_group(dom, name):
+            root_id = helper.getRootUUID(dom, session=self.session)
+            req = self.endpoint + "/groups"
+            headers = helper.getRequestHeaders(domain=dom)
+            payload = {"link": {"id": root_id, "name": name}}
+            rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+            return rsp.json()["id"]
+
+        def make_links(dom, links):
+            root_id = helper.getRootUUID(dom, session=self.session)
+            headers = helper.getRequestHeaders(domain=dom)
+            for title, (file, h5path) in links.items():
+                req = self.endpoint + "/groups/" + root_id + "/links/" + title
+                payload = {"h5path": h5path, "file": file}
+                rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+                self.assertEqual(rsp.status_code, 201)
+
+        b_g1_id = make_group(b_domain, "g1")
+        c_g2_id = make_group(c_domain, "g2")
+        make_links(c_domain, {"up_to_b": ("../b.h5", "/g1")})
+        make_links(domain, {
+            "bare": ("b.h5", "/g1"),
+            "dot": ("./b.h5", "/g1"),
+            "down": ("sub/c.h5", "/g2"),
+            # resolved from c.h5's folder, not a.h5's
+            "chain": ("sub/c.h5", "/up_to_b"),
+            "missing": ("nope.h5", "/g1"),
+        })
+
+        req = self.endpoint + "/"
+        headers = helper.getRequestHeaders(domain=domain)
+        expected = {
+            "/bare": (b_g1_id, b_domain),
+            "/dot": (b_g1_id, b_domain),
+            "/down": (c_g2_id, c_domain),
+            "/chain": (b_g1_id, b_domain),
+        }
+        for h5path, (obj_id, obj_domain) in expected.items():
+            params = {"h5path": h5path, "follow_external_links": 1}
+            rsp = self.session.get(req, headers=headers, params=params)
+            self.assertEqual(rsp.status_code, 200, h5path)
+            rspJson = rsp.json()
+            self.assertEqual(rspJson["id"], obj_id, h5path)
+            self.assertEqual(rspJson["domain"], obj_domain, h5path)
+
+        params = {"h5path": "/missing", "follow_external_links": 1}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 404)
+
+        # the link itself still reports the file as stored
+        root_id = helper.getRootUUID(domain, session=self.session)
+        rsp = self.session.get(req + "groups/" + root_id + "/links/bare", headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.json()["link"]["file"], "b.h5")
+
     def testRelativeH5Path(self):
         # test that an object can be found via h5path request to domain endpoint
         domain = self.base_domain + "/testRelativeH5Path.h5"

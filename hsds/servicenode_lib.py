@@ -15,6 +15,7 @@
 
 import asyncio
 import json
+import posixpath
 import numpy as np
 
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden, HTTPGone, HTTPConflict
@@ -42,7 +43,8 @@ from .util.dsetUtil import CHUNK_REF_LAYOUTS
 from .util.storUtil import getStorJSONObj, isStorObj, getSupportedFilters
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
-from .util.domainUtil import getBucketForDomain, verifyRoot, getLimits, isValidDomain
+from .util.domainUtil import getBucketForDomain, getPathForDomain, verifyRoot, getLimits
+from .util.domainUtil import isValidDomain
 from .util.storUtil import getCompressors
 
 from .basenode import getVersion
@@ -662,14 +664,17 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
                 raise HTTPBadRequest(reason=msg)
 
             # find domain object is stored under
-            domain = getLinkFilePath(link_json)
+            ext_path = getLinkFilePath(link_json)
 
-            if domain.startswith("hdf5:/"):
+            if ext_path.startswith("hdf5:/"):
                 # strip off prefix
-                domain = domain[6:]
+                ext_path = ext_path[6:]
+            elif not ext_path.startswith("/") and domain:
+                # as in HDF5, a relative file is resolved from the linking domain's folder
+                linking_folder = posixpath.dirname(getPathForDomain(domain))
+                ext_path = posixpath.normpath(posixpath.join(linking_folder, ext_path))
 
-            if bucket:
-                domain = bucket + domain
+            domain = bucket + ext_path if bucket else ext_path
 
             if not isValidDomain(domain):
                 msg = f"External link target {getLinkFilePath(link_json)} is not a valid domain"
