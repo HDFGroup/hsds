@@ -15,6 +15,8 @@
 # Abstracts S3 API vs Azure vs Posix storage access
 #
 import json
+import posixpath
+import re
 import time
 import zlib
 import numpy as np
@@ -22,6 +24,7 @@ import numcodecs as codecs
 import bitshuffle
 from json import JSONDecodeError
 from aiohttp.web_exceptions import HTTPInternalServerError, HTTPNotFound
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPForbidden
 
 from .. import hsds_logger as log
 from .s3Client import S3Client
@@ -385,6 +388,37 @@ def getBucketFromStorURI(uri):
     if not bucket:
         raise ValueError("invalid uri")
     return bucket
+
+
+# schema v1 object keys: <5-char hash>-<g|d|c|t>-<uuid>, at the bucket root
+_V1_OBJ_KEY = re.compile(r"[0-9A-Za-z]{5}-[cdgt]-")
+
+
+def isHsdsStorageKey(key):
+    """Return True if key names a domain, metadata or chunk object that HSDS manages."""
+    parts = [p for p in posixpath.normpath(key).split("/") if p not in ("", ".")]
+    if not parts:
+        return True
+    return parts[0] == "db" or parts[-1] == ".domain.json" or bool(_V1_OBJ_KEY.match(parts[0]))
+
+
+def validateReferenceUri(app, uri):
+    """Raise unless a reference layout may read from uri."""
+    try:
+        bucket = getBucketFromStorURI(uri)
+        key = getKeyFromStorURI(uri)
+    except (ValueError, TypeError):
+        msg = f"invalid reference uri: {uri}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    if isHsdsStorageKey(key):
+        # reading HSDS's own objects would bypass every domain's ACLs
+        msg = f"reference uri: {uri} names an object managed by HSDS"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    if bucket != app.get("bucket_name") and not app.get("allow_any_bucket_read", True):
+        log.warn(f"reference uri: {uri} is in a bucket reads aren't allowed from")
+        raise HTTPForbidden()
 
 
 def getKeyFromStorURI(uri):

@@ -41,6 +41,7 @@ from .util.authUtil import getAclKeys
 from .util.linkUtil import getRequestLinks
 from .util.dsetUtil import CHUNK_REF_LAYOUTS, validateChunkInitializer
 from .util.storUtil import getStorJSONObj, isStorObj, getSupportedFilters
+from .util.storUtil import getKeyFromStorURI, isHsdsStorageKey
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
 from .util.domainUtil import getBucketForDomain, getPathForDomain, verifyRoot, getLimits
@@ -1586,6 +1587,19 @@ def getDatasetCreateArgs(body,
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         log.debug(f"create_props after validation: {creation_props}")
+
+        layout = creation_props.get("layout")
+        if isinstance(layout, dict) and layout.get("class") in CHUNK_REF_LAYOUTS \
+                and layout.get("file_uri"):
+            # also checked, with bucket access, whenever the dataset is read
+            try:
+                ref_key = getKeyFromStorURI(layout["file_uri"])
+            except (ValueError, TypeError):
+                ref_key = None
+            if ref_key is None or isHsdsStorageKey(ref_key):
+                msg = f"invalid reference file_uri: {layout['file_uri']}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
 
         if "filters" in creation_props:
             # check that the given filters are supported by HSDS

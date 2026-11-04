@@ -37,7 +37,7 @@ from .util.chunkUtil import getChunkCoverage, getDataCoverage
 from .util.chunkUtil import get_chunktable_dims
 from .util.httpUtil import http_delete, http_put, request_read
 from .util.rangegetUtil import getHyperChunkFactors
-from .util.storUtil import getStorKeys
+from .util.storUtil import getStorKeys, validateReferenceUri
 
 from .servicenode_lib import getDsetJson, doFlush
 from .chunk_crawl import ChunkCrawler
@@ -155,6 +155,7 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         layout = getDatasetLayout(dset_json)
         log.debug(f"cpl layout: {layout}")
         s3path = layout["file_uri"]
+        validateReferenceUri(app, s3path)
         s3size = layout["size"]
         if s3size == 0:
             msg = "getChunkLocations - H5D_CONTIGUOUS_REF layout size 0, "
@@ -205,6 +206,7 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
         layout = getDatasetLayout(dset_json)
         log.debug(f"cpl layout: {layout}")
         s3path = layout["file_uri"]
+        validateReferenceUri(app, s3path)
         chunks = layout["chunks"]
         for chunk_id in chunk_ids:
             chunk_item = getChunkItem(chunk_id)
@@ -326,6 +328,9 @@ async def getChunkLocations(app, dset_id, dset_json, chunkinfo_map, chunk_ids, b
                     log.debug(f"got s3path: {s3path}")
             else:
                 s3path = s3_layout_path
+            if s3path:
+                # per-chunk paths come from a chunk table the user writes
+                validateReferenceUri(app, s3path)
             chunk_item["s3path"] = s3path
 
             if ref_num_chunks == num_chunks:

@@ -5373,15 +5373,15 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + "/"
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        root_uuid = json.loads(rsp.text)["root"]
-        rsp = self.session.get(self.endpoint + "/groups/" + root_uuid, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        bucket = json.loads(rsp.text)["bucket"]
+        hdf5_sample_bucket = config.get("hdf5_sample_bucket")
+        if not hdf5_sample_bucket:
+            print("hdf5_sample_bucket config not set, skipping testReadErrorStatus")
+            return
 
-        # Point the dataset's one chunk at the start of this domain's own
-        # .domain.json and declare it gzip-compressed. The file exists, so the
-        # data node finds it, but the bytes aren't a gzip stream, so the read fails.
-        file_uri = f"{bucket}{self.base_domain}/.domain.json"
+        # Point the dataset's one chunk at the start of an HDF5 file and declare it
+        # gzip-compressed. The file exists, so the data node finds it, but the bytes
+        # aren't a gzip stream, so the read fails.
+        file_uri = hdf5_sample_bucket + "/data/hdf5test/tall.h5"
         layout = {"class": "H5D_CHUNKED_REF", "file_uri": file_uri, "dims": [10],
                   "chunks": {"0": [0, 16]}}
         gzip_filter = {"class": "H5Z_FILTER_DEFLATE", "id": 1, "name": "gzip", "level": 5}
@@ -5402,6 +5402,61 @@ class ValueTest(unittest.TestCase):
         rsp = self.session.post(req, data=json.dumps(body), headers=headers)
         self.assertEqual(rsp.status_code, 500)
 
+    def testReferenceToHsdsObjectRejected(self):
+        # reference layouts can't read HSDS's own objects (that would bypass ACLs)
+        print("testReferenceToHsdsObjectRejected", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+        root_uuid = json.loads(self.session.get(req, headers=headers).text)["root"]
+        rsp = self.session.get(self.endpoint + "/groups/" + root_uuid, headers=headers)
+        bucket = json.loads(rsp.text)["bucket"]
+        req = self.endpoint + "/datasets"
+
+        def create(layout, shape=(10,), dtype="H5T_STD_U8LE"):
+            payload = {"type": dtype, "shape": list(shape),
+                       "creationProperties": {"layout": layout}}
+            return self.session.post(req, data=json.dumps(payload), headers=headers)
+
+        internal = [
+            f"{bucket}{self.base_domain}/.domain.json",
+            f"{bucket}/db/{root_uuid[2:10]}-{root_uuid[11:19]}/.group.json",
+            f"{bucket}/data/../db/x",
+        ]
+        for file_uri in internal:
+            layout = {"class": "H5D_CONTIGUOUS_REF", "file_uri": file_uri,
+                      "offset": 0, "size": 10}
+            self.assertEqual(create(layout).status_code, 400, file_uri)
+            layout = {"class": "H5D_CHUNKED_REF", "file_uri": file_uri, "dims": [10],
+                      "chunks": {"0": [0, 10]}}
+            self.assertEqual(create(layout).status_code, 400, file_uri)
+
+        # an ordinary file is fine
+        layout = {"class": "H5D_CONTIGUOUS_REF", "file_uri": f"{bucket}/data/some-file.h5",
+                  "offset": 0, "size": 10}
+        self.assertEqual(create(layout).status_code, 201)
+
+        # per-chunk paths in a chunk table are checked when the dataset is read
+        str_type = {"class": "H5T_STRING", "charSet": "H5T_CSET_ASCII",
+                    "strPad": "H5T_STR_NULLPAD", "length": 256}
+        fields = [{"name": "offset", "type": "H5T_STD_I64LE"},
+                  {"name": "size", "type": "H5T_STD_I32LE"},
+                  {"name": "path", "type": str_type}]
+        payload = {"type": {"class": "H5T_COMPOUND", "fields": fields}, "shape": [1]}
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        table_id = rsp.json()["id"]
+        row = [0, 10, f"{bucket}{self.base_domain}/.domain.json"]
+        rsp = self.session.put(self.endpoint + "/datasets/" + table_id + "/value",
+                               data=json.dumps({"value": [row]}), headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        layout = {"class": "H5D_CHUNKED_REF_INDIRECT", "dims": [10], "chunk_table": table_id}
+        rsp = create(layout)
+        self.assertEqual(rsp.status_code, 201)
+        value_req = self.endpoint + "/datasets/" + rsp.json()["id"] + "/value"
+        rsp = self.session.get(value_req, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+        self.assertNotIn("acls", rsp.text)
+
     def testContiguousRefShortRead(self):
         # A contiguous reference whose chunk runs past the end of the file it
         # points into should return the bytes that exist, zero-filled past the end.
@@ -5411,14 +5466,14 @@ class ValueTest(unittest.TestCase):
         req = self.endpoint + "/"
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        root_uuid = json.loads(rsp.text)["root"]
-        rsp = self.session.get(self.endpoint + "/groups/" + root_uuid, headers=headers)
-        self.assertEqual(rsp.status_code, 200)
-        bucket = json.loads(rsp.text)["bucket"]
+        hdf5_sample_bucket = config.get("hdf5_sample_bucket")
+        if not hdf5_sample_bucket:
+            print("hdf5_sample_bucket config not set, skipping testContiguousRefShortRead")
+            return
 
-        # Point at this domain's own .domain.json and claim it holds 100,000 bytes of uint8 data.
-        extent = 100_000
-        file_uri = f"{bucket}{self.base_domain}/.domain.json"
+        # Point at a small HDF5 file and claim it holds 10 MB of uint8 data.
+        extent = 10_000_000
+        file_uri = hdf5_sample_bucket + "/data/hdf5test/tall.h5"
         layout = {"class": "H5D_CONTIGUOUS_REF", "file_uri": file_uri,
                   "offset": 0, "size": extent}
         payload = {"type": "H5T_STD_U8LE", "shape": [extent],
@@ -5429,13 +5484,12 @@ class ValueTest(unittest.TestCase):
         dset_uuid = json.loads(rsp.text)["id"]
 
         req = self.endpoint + "/datasets/" + dset_uuid + "/value"
-        params = {"select": "[0:2]"}
+        params = {"select": "[0:8]"}
         rsp = self.session.get(req, params=params, headers=headers)
         self.assertEqual(rsp.status_code, 200)
-        # the file starts with '{', followed by a quote or whitespace
+        # the file starts with the HDF5 signature
         value = json.loads(rsp.text)["value"]
-        self.assertEqual(value[0], ord("{"))
-        self.assertNotEqual(value[1], 0)
+        self.assertEqual(bytes(value), b"\x89HDF\r\n\x1a\n")
 
         # and past the end of the file is zero-filled
         params = {"select": f"[{extent - 2}:{extent}]"}

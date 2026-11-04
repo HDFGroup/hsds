@@ -35,6 +35,7 @@ from .util.nodeUtil import getDataNodeUrl
 from .util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
 from .util.storUtil import getStorBytes, isStorObj, deleteStorObj, getHyperChunks
 from .util.storUtil import getBucketFromStorURI, getKeyFromStorURI, getURIFromKey
+from .util.storUtil import isHsdsStorageKey
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
@@ -1086,6 +1087,10 @@ async def get_chunk(
         except ValueError as ve:
             log.error(f"Invalid URI path: {s3path} exception: {ve}")
             raise
+        if isHsdsStorageKey(s3key):
+            msg = f"s3path: {s3path} names an object managed by HSDS"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
         msg = f"Using s3path bucket: {bucket} and  s3key: {s3key} "
         msg += f"offset: {s3offset} length: {s3size}"

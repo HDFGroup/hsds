@@ -24,6 +24,7 @@ import hsds.config as config
 from hsds.util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
 from hsds.util.storUtil import getStorBytes, isStorObj
 from hsds.util.storUtil import getStorObjStats, getStorKeys, releaseStorageClient
+from hsds.util.storUtil import isHsdsStorageKey
 from hsds.util.storUtil import _getStorageDriverName, getBucketFromStorURI, getKeyFromStorURI
 
 
@@ -252,6 +253,30 @@ class StorUtilTest(unittest.TestCase):
                 self.assertEqual(result, data)
         finally:
             loop.close()
+
+    def testIsHsdsStorageKey(self):
+        internal = [
+            "db/1cb6faa9-95aadb01/.group.json",
+            "db/1cb6faa9-95aadb01/d/a2d8-78da2f-8c356e/0",
+            "home/test_user1/x.h5/.domain.json",
+            ".domain.json",
+            "data/../db/x",
+            "./db/x",
+            "data/./../home/x.h5/.domain.json",
+            "a1b2c-g-1cb6faa9-95aadb01-943e-72211d-225389",  # schema v1 object
+            "",
+            ".",
+        ]
+        for key in internal:
+            self.assertTrue(isHsdsStorageKey(key), key)
+        external = [
+            "data/hdf5test/tall.h5",
+            "some-file.h5",
+            "dbx/file.h5",
+            "home/test_user1/notes.domain.json.h5",
+        ]
+        for key in external:
+            self.assertFalse(isHsdsStorageKey(key), key)
 
     def testStorUtil(self):
         # run synchronous tests
