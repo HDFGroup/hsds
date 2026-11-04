@@ -11,12 +11,12 @@
 ##############################################################################
 import requests
 import base64
-from aiohttp.web_exceptions import HTTPUnauthorized, HTTPForbidden
-from aiohttp.web_exceptions import HTTPNotFound, HTTPServiceUnavailable
+import time
+from aiohttp.web_exceptions import HTTPUnauthorized, HTTPServiceUnavailable
 from aiohttp.web_exceptions import HTTPInternalServerError
 import jwt
 from jwt.exceptions import InvalidAudienceError, InvalidSignatureError
-from jwt.exceptions import ExpiredSignatureError, DecodeError
+from jwt.exceptions import ExpiredSignatureError, DecodeError, PyJWTError
 from cryptography.x509 import load_pem_x509_certificate
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
@@ -28,6 +28,53 @@ MSONLINE_OPENID_URL = (
     "https://login.microsoftonline.com/common/.well-known/openid-configuration"
 )
 GOOGLE_OPENID_URL = "https://accounts.google.com/.well-known/openid-configuration"
+
+# signing keys by openid_url: {"keys": [...], "fetched": time, "tried": time}
+_jwks_cache = {}
+JWKS_MAX_AGE = 3600  # seconds before cached keys are refetched
+JWKS_MIN_REFETCH = 60  # an unknown kid or a failed fetch retries at most this often
+FETCH_TIMEOUT = 2.0  # seconds, for each request to the OpenID provider
+
+
+def _fetchJwks(openid_url):
+    """Return the signing keys published by the given OpenID provider."""
+    res = requests.get(openid_url, timeout=FETCH_TIMEOUT)
+    if res.status_code != 200:
+        raise ValueError(f"bad response from {openid_url}: {res.status_code}")
+    jwks_uri = res.json()["jwks_uri"]
+    res = requests.get(jwks_uri, timeout=FETCH_TIMEOUT)
+    if res.status_code != 200:
+        raise ValueError(f"bad response from {jwks_uri}: {res.status_code}")
+    return res.json()["keys"]
+
+
+def _getSigningKey(openid_url, kid):
+    """Return the provider's JWK for kid, or None. Keys are cached, and a token naming an
+    unknown kid can't make every request block on the provider."""
+    now = time.time()
+    entry = _jwks_cache.get(openid_url)
+
+    def find(entry):
+        return next((key for key in entry["keys"] if key.get("kid") == kid), None)
+
+    key = find(entry) if entry else None
+    stale = entry is None or now - entry["fetched"] > JWKS_MAX_AGE
+    if (key is None or stale) and (entry is None or now - entry["tried"] > JWKS_MIN_REFETCH):
+        try:
+            keys = _fetchJwks(openid_url)
+            entry = {"keys": keys, "fetched": now, "tried": now}
+        except (requests.exceptions.RequestException, ValueError, KeyError, TypeError) as e:
+            log.warn(f"unable to fetch OpenID signing keys from {openid_url}: {e}")
+            if entry is None:
+                entry = {"keys": [], "fetched": 0, "tried": now}
+            else:
+                entry["tried"] = now  # keep using the keys we have
+        _jwks_cache[openid_url] = entry
+        key = find(entry)
+    if key is None and not entry["keys"]:
+        # never managed to fetch any keys
+        raise HTTPServiceUnavailable()
+    return key
 
 
 def verifyBearerToken(app, token):
@@ -87,46 +134,23 @@ def verifyBearerToken(app, token):
         log.warn(msg)
         raise HTTPUnauthorized()
 
-    try:
-        res = requests.get(openid_url, timeout=1.0)
-    except requests.exceptions.ConnectionError:
-        msg = "connection error for getting openid configuration "
-        msg += f"from : {openid_url}"
-        log.warn(msg)
-        raise HTTPInternalServerError()
-    if res.status_code != 200:
-        log.warn(f"Bad response from {openid_url}: {res.status_code}")
-        if res.status_code == 404:
-            raise HTTPNotFound()
-        elif res.status_code == 401:
-            raise HTTPUnauthorized()
-        elif res.status_code == 403:
-            raise HTTPForbidden()
-        elif res.status_code == 503:
-            raise HTTPServiceUnavailable()
-        else:
-            raise HTTPInternalServerError()
+    kid = token_header.get("kid")
+    if not kid:
+        log.warn("bearer token has no kid")
+        raise HTTPUnauthorized()
+    key = _getSigningKey(openid_url, kid)
+    if key is None:
+        log.warn(f"bearer token kid: {kid} not found in OpenID signing keys")
+        raise HTTPUnauthorized()
 
-    jwk_uri = res.json()["jwks_uri"]
-
-    # TBD: cache responses by uri
-    res = requests.get(jwk_uri)
-    jwk_keys = res.json()
-    x5c = None
+    x5c = key.get("x5c")
     rsa = {}
-    log.info("_verifyBearerToken")
-
-    # Iterate JWK keys and extract matching x5c chain
-    for key in jwk_keys["keys"]:
-        if key["kid"] == token_header["kid"]:
-            if "x5c" in key:
-                x5c = key["x5c"]
-            elif "e" in key and "n" in key:
-                for field in ["e", "n"]:
-                    val = key[field]
-                    val = val + "=" * ((4 - len(val) % 4) % 4)
-                    val = base64.urlsafe_b64decode(val.encode("utf-8"))
-                    rsa[field] = int.from_bytes(val, "big")
+    if not x5c and "e" in key and "n" in key:
+        for field in ["e", "n"]:
+            val = key[field]
+            val = val + "=" * ((4 - len(val) % 4) % 4)
+            val = base64.urlsafe_b64decode(val.encode("utf-8"))
+            rsa[field] = int.from_bytes(val, "big")
 
     # Use the X5C chain to load a public key.
     if x5c:
@@ -174,6 +198,9 @@ def verifyBearerToken(app, token):
         raise HTTPUnauthorized()
     except ExpiredSignatureError:
         log.warn("OpenID ExpiredSignatureError")
+        raise HTTPUnauthorized()
+    except PyJWTError as e:
+        log.warn(f"OpenID token rejected: {e.__class__.__name__}")
         raise HTTPUnauthorized()
     roles = None
     for name in claims:
