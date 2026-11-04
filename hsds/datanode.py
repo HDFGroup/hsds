@@ -23,6 +23,7 @@ from h5json.time_util import getNow
 from . import config
 from .util.lruCache import LruCache
 from .util.httpUtil import isUnixDomainUrl, bindToSocket, getPortFromUrl
+from urllib.parse import urlparse
 from .util.httpUtil import jsonResponse, release_http_client
 from .util.storUtil import setBloscThreads, getBloscThreads
 from .basenode import healthCheck, baseInit
@@ -405,9 +406,12 @@ def main():
             raise ValueError(msg)
         dn_url = dn_urls[node_number]
         dn_port = getPortFromUrl(dn_url)
+        # launched with an explicit url (hsds_app): listen only on its host
+        dn_host = urlparse(dn_url).hostname
     else:
         dn_port = int(config.get("dn_port"))
         dn_url = f"http://localhost:{dn_port}"
+        dn_host = None  # containers: other nodes reach this one over the network
 
     if isUnixDomainUrl(dn_url):
         try:
@@ -430,8 +434,8 @@ def main():
         # close socket?
     else:
         # Use TCP connection
-        log.info(f"run_app on port: {dn_port}")
-        run_app(app, port=dn_port)
+        log.info(f"run_app on host: {dn_host} port: {dn_port}")
+        run_app(app, host=dn_host, port=dn_port)
 
     log.info("datanode exiting")
 

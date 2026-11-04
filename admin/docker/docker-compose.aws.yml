@@ -14,7 +14,7 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
-    ports:
+    expose:
       - ${HEAD_PORT}
     volumes:
       - ${PWD}/admin/config/:/config/
@@ -32,7 +32,7 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
-    ports:
+    expose:
       - ${DN_PORT}
     depends_on:
       - head

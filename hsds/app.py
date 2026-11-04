@@ -307,7 +307,9 @@ def main():
         if args.host:
             kwargs["host"] = args.host
         else:
+            # without --host, nodes reach the SN at localhost but it listens everywhere
             kwargs["host"] = "localhost"
+            kwargs["listen_all"] = True
         # sn_port only relevant for TCP connections
         if args.port:
             kwargs["sn_port"] = args.port

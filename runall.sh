@@ -200,14 +200,14 @@ if [[ $NO_DOCKER ]] ; then
       echo "Using Azure connection string"
     fi
     if [[ $USE_TCP ]]; then
-      hsds --bucket_name ${BUCKET_NAME} --password_file ${PASSWORD_FILE} --logfile hs.log --loglevel ${LOG_LEVEL} --host localhost --port ${SN_PORT} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+      hsds --bucket_name ${BUCKET_NAME} --password_file ${PASSWORD_FILE} --logfile hs.log --loglevel ${LOG_LEVEL} --port ${SN_PORT} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
     else
       hsds --bucket_name ${BUCKET_NAME} --password_file ${PASSWORD_FILE} --logfile hs.log  --loglevel ${LOG_LEVEL} --socket_dir ${SOCKET_DIR} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
     fi
   else
     echo "Using posix storage: ${ROOT_DIR}"
     if [[ $USE_TCP ]]; then
-      hsds --root_dir ${ROOT_DIR} --password_file ${PASSWORD_FILE} --logfile hs.log  --loglevel ${LOG_LEVEL} --host localhost --port ${SN_PORT} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+      hsds --root_dir ${ROOT_DIR} --password_file ${PASSWORD_FILE} --logfile hs.log  --loglevel ${LOG_LEVEL} --port ${SN_PORT} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
     else
       hsds --root_dir ${ROOT_DIR} --password_file ${PASSWORD_FILE} --logfile hs.log  --loglevel ${LOG_LEVEL} --socket_dir ${SOCKET_DIR}  --config_dir=${CONFIG_DIR} --count=${DN_CORES}
     fi

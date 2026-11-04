@@ -20,6 +20,7 @@ from h5json.time_util import getNow
 
 from .util.lruCache import LruCache
 from .util.httpUtil import isUnixDomainUrl, bindToSocket, getPortFromUrl
+from urllib.parse import urlparse
 from .util.httpUtil import release_http_client, jsonResponse
 
 from . import config
@@ -299,10 +300,14 @@ def main():
     sn_url = config.getCmdLineArg("sn_url")
     if sn_url:
         sn_port = getPortFromUrl(sn_url)
+        # launched with an explicit url (hsds_app): listen only on its host, unless
+        # the launcher was given no --host
+        sn_host = None if config.getCmdLineArg("sn_listen_all") else urlparse(sn_url).hostname
     else:
         # create TCP url based on port address
         sn_port = int(config.get("sn_port"))
         sn_url = f"http://localhost:{sn_port}"
+        sn_host = None  # containers: listen on all interfaces
 
     if isUnixDomainUrl(sn_url):
         log.info(f"binding to socket: {sn_url}")
@@ -326,8 +331,8 @@ def main():
         # close socket?
     else:
         # Use TCP connection
-        log.info(f"run_app on port: {sn_port}")
-        run_app(app, port=sn_port)
+        log.info(f"run_app on host: {sn_host} port: {sn_port}")
+        run_app(app, host=sn_host, port=sn_port)
 
     log.info("Service node exiting")
 

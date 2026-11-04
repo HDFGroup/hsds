@@ -88,6 +88,7 @@ class HsdsApp:
         sn_port=None,
         config_dir=None,
         readonly=False,
+        listen_all=False,
     ):
         """
         Initializer for class
@@ -105,6 +106,7 @@ class HsdsApp:
         self._logfile = logfile
         self._loglevel = log_level
         self._readonly = readonly
+        self._listen_all = listen_all  # TCP: SN listens on all interfaces, not just host
         self._ready = False
         self._config_dir = config_dir
         self._cmd_dir = get_cmd_dir()
@@ -154,7 +156,8 @@ class HsdsApp:
             sn_url = f"http://{host}:{sn_port}"
             dn_port = 6101  # TBD: pull this from config
             for i in range(dn_count):
-                dn_url = f"http://{host}:{dn_port + i}"
+                # DNs are local child processes; only the SN listens on the given host
+                dn_url = f"http://localhost:{dn_port + i}"
                 self._dn_urls.append(dn_url)
 
         # sort the ports so that node_number can be determined based on dn_url
@@ -277,6 +280,8 @@ class HsdsApp:
                     pargs.append("--password_file=")
 
                 pargs.append(f"--sn_url={self._endpoint}")
+                if self._listen_all:
+                    pargs.append("--sn_listen_all=1")
                 pargs.append("--logfile=sn1.log")
             else:
                 node_number = i - 1  # start with 0
