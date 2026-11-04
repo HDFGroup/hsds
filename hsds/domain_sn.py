@@ -1541,6 +1541,11 @@ async def PUT_ACL(request):
     body["domain"] = domain
 
     put_rsp = await http_put(app, req, data=body)
+
+    # the cached domain json holds the old acls
+    domain_cache = app["domain_cache"]
+    if domain in domain_cache:
+        del domain_cache[domain]
     log.info("PUT ACL resp: " + str(put_rsp))
 
     # ACL update successful

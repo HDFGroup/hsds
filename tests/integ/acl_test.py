@@ -462,6 +462,45 @@ class AclTest(unittest.TestCase):
         rsp = self.session.get(req, params={"domain": private_folder + "/"}, headers=headers)
         self.assertEqual(rsp.status_code, 403)
 
+    def testRevokeAppliesToObjectRequests(self):
+        # revoking read stops object requests at once, not after the cached domain expires
+        print("testRevokeAppliesToObjectRequests", self.base_domain)
+        user2name = config.get("user2_name")
+        if not user2name:
+            print("user2_name not set")
+            return
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        user2_headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
+        req = helper.getEndpoint() + "/"
+        root_id = self.session.get(req, headers=headers).json()["root"]
+        acl_req = helper.getEndpoint() + "/acls/" + user2name
+        group_req = helper.getEndpoint() + "/groups/" + root_id
+
+        rsp = self.session.put(acl_req, data=json.dumps({"read": True}), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        # caches the domain json, with the grant, in the service node
+        rsp = self.session.get(group_req, headers=user2_headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rsp = self.session.put(acl_req, data=json.dumps({"read": False}), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rsp = self.session.get(group_req, headers=user2_headers)
+        self.assertEqual(rsp.status_code, 403)
+
+    def testDomainPathSpellings(self):
+        # every spelling of a domain is the same domain; '.' and '..' are rejected
+        print("testDomainPathSpellings", self.base_domain)
+        req = helper.getEndpoint() + "/"
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        root_id = self.session.get(req, headers=headers).json()["root"]
+        alias = self.base_domain.replace("/", "//")
+        rsp = self.session.get(req, headers=helper.getRequestHeaders(domain=alias))
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.json()["root"], root_id)
+        for bad in (self.base_domain + "/../x.h5", "/home/./" + self.base_domain[len("/home/"):]):
+            rsp = self.session.get(req, headers=helper.getRequestHeaders(domain=bad))
+            self.assertEqual(rsp.status_code, 400, bad)
+
 
 if __name__ == "__main__":
     # setup test files

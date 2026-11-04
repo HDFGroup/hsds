@@ -255,6 +255,8 @@ def create_app():
     kwargs["name"] = "MetaCache"
     app["meta_cache"] = LruCache(**kwargs)
     kwargs["name"] = "DomainCache"
+    # bounds how long an acl change made elsewhere (another SN) takes to apply here
+    kwargs["expire_time"] = int(config.get("domain_cache_expire", default=10))
     app["domain_cache"] = LruCache(**kwargs)
 
     if config.get("allow_noauth"):

@@ -14,6 +14,8 @@ import sys
 
 sys.path.append("../..")
 from hsds.util.domainUtil import getParentDomain, isValidDomain, isValidHostDomain
+from hsds.util.domainUtil import normalizeDomainPath
+from aiohttp.web_exceptions import HTTPBadRequest
 from hsds.util.domainUtil import (
     isValidDomainPath,
     getBucketForDomain,
@@ -135,6 +137,23 @@ class DomainUtilTest(unittest.TestCase):
         self.assertEqual("/gov/nasa/nex/climate.h5", domain_path)
         bucket = getBucketForDomain(domain)
         self.assertEqual(bucket, "https://myaccount.blob.core.windows.net/nasaeos")
+
+    def testNormalizeDomainPath(self):
+        same = {
+            "/home/test_user1/x.h5": "/home/test_user1/x.h5",
+            "/home//test_user1/x.h5": "/home/test_user1/x.h5",
+            "//home/test_user1///x.h5": "/home/test_user1/x.h5",
+            "mybucket//home/x.h5": "mybucket/home/x.h5",
+            "s3://mybucket/home//x.h5": "s3://mybucket/home/x.h5",
+            "/home/test_user1/": "/home/test_user1/",  # folder listings keep the slash
+            "/home/test_user1//": "/home/test_user1/",
+            "/": "/",
+        }
+        for domain, expected in same.items():
+            self.assertEqual(normalizeDomainPath(domain), expected, domain)
+        for domain in ("/home/test_user1/../test_user2/x.h5", "/home/./x.h5", "/..", "./x"):
+            with self.assertRaises(HTTPBadRequest, msg=domain):
+                normalizeDomainPath(domain)
 
     def testIsValidBucketName(self):
         # Illegal characters

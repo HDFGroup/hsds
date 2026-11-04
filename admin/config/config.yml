@@ -55,6 +55,7 @@ aio_max_pool_connections: 64 # number of connections to keep in conection pool f
 client_pool_count: 10 # pool count for SessionClient
 metadata_mem_cache_size: 128m # 128 MB - metadata cache size per DN node
 metadata_mem_cache_expire: 3600 # expire cache items after one hour
+domain_cache_expire: 10 # seconds a service node reuses a domain's acls before re-reading them
 # chunk_mem_cache_size also caps single chunk size and contiguous dataset size,
 # since a chunk or contiguous dataset has to fit in the cache to be written
 chunk_mem_cache_size: 128m # 128 MB - chunk cache size per DN node
