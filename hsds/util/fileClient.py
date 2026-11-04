@@ -1,15 +1,20 @@
 import asyncio
 import hashlib
-from os import mkdir, rmdir, listdir, stat, remove, walk
+from os import mkdir, rmdir, listdir, stat, remove, walk, replace
 import os.path as pp
 from asyncio import CancelledError
 from inspect import iscoroutinefunction
 import time
+import uuid
 import aiofiles
 from aiohttp.web_exceptions import HTTPNotFound, HTTPInternalServerError
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPException
 from .. import hsds_logger as log
 from .. import config
+
+
+# suffix of in-progress writes; renamed into place when complete, never listed
+TMP_SUFFIX = ".hsdstmp"
 
 
 class FileClient:
@@ -273,9 +278,18 @@ class FileClient:
                     dirpath = pp.join(dirpath, key_dir)
                     log.debug(f"pp.join({key_dir}) => {dirpath}")
                     self._mkdir(dirpath)
-            log.debug(f"open({filepath}, 'wb')")
-            async with aiofiles.open(filepath, loop=loop, mode="wb") as f:
-                await f.write(data)
+            # write beside the target, then rename: readers see the old object or
+            # the new one, never a partial write
+            tmp_path = f"{filepath}.{uuid.uuid4().hex}{TMP_SUFFIX}"
+            log.debug(f"open({tmp_path}, 'wb')")
+            try:
+                async with aiofiles.open(tmp_path, loop=loop, mode="wb") as f:
+                    await f.write(data)
+                replace(tmp_path, filepath)
+            except BaseException:
+                if pp.exists(tmp_path):
+                    remove(tmp_path)
+                raise
             finish_time = time.time()
             msg = f"fileClient.put_object({key} bucket={bucket}) "
             msg += f"start={start_time:.4f} finish={finish_time:.4f} "
@@ -459,6 +473,8 @@ class FileClient:
             else:
                 filelist.sort()
                 for filename in filelist:
+                    if filename.endswith(TMP_SUFFIX):
+                        continue  # a write in progress (or left by a crash)
                     if suffix and not filename.endswith(suffix):
                         continue
                     nlen = len(basedir)

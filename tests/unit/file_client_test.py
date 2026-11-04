@@ -9,14 +9,19 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
+import asyncio
+import os
 import os.path as pp
+import tempfile
 import unittest
 import sys
+from unittest.mock import patch
 
 from aiohttp.web_exceptions import HTTPBadRequest
 
 sys.path.append("../..")
-from hsds.util.fileClient import FileClient  # noqa: E402
+from hsds.util.fileClient import FileClient, TMP_SUFFIX  # noqa: E402
+from hsds.util import fileClient as fileClientModule  # noqa: E402
 
 ROOT_DIR = pp.normpath("/var/hsds_data")
 
@@ -95,6 +100,57 @@ class FileClientPathTest(unittest.TestCase):
         for path in rejected:
             with self.assertRaises(HTTPBadRequest, msg=f"path: {path}"):
                 client._checkPathInRoot(path)
+
+
+class FileClientWriteTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = tmp.name
+        os.mkdir(pp.join(self.root, "bucket"))
+        self.client = _client(self.root)
+        self.client._app = {}
+
+    def files(self):
+        return sorted(f for _, _, fs in os.walk(self.root) for f in fs)
+
+    def testWriteLeavesNoTempFiles(self):
+        asyncio.run(self.client.put_object("db/x/.group.json", b"{}", bucket="bucket"))
+        asyncio.run(self.client.put_object("db/x/.group.json", b"{\"a\": 1}", bucket="bucket"))
+        self.assertEqual(self.files(), [".group.json"])
+        with open(pp.join(self.root, "bucket/db/x/.group.json"), "rb") as f:
+            self.assertEqual(f.read(), b"{\"a\": 1}")
+
+    def testFailedWriteKeepsPreviousObject(self):
+        asyncio.run(self.client.put_object("db/x/.group.json", b"old", bucket="bucket"))
+
+        class FailingFile:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def write(self, data):
+                raise IOError("disk full")
+
+        def failing_open(path, loop=None, mode=None):
+            open(path, "wb").close()  # a partial file exists when the write fails
+            return FailingFile()
+
+        with patch.object(fileClientModule.aiofiles, "open", failing_open):
+            with self.assertRaises(Exception):
+                asyncio.run(self.client.put_object("db/x/.group.json", b"new", bucket="bucket"))
+        with open(pp.join(self.root, "bucket/db/x/.group.json"), "rb") as f:
+            self.assertEqual(f.read(), b"old")
+        self.assertEqual(self.files(), [".group.json"])
+
+    def testListingSkipsTempFiles(self):
+        asyncio.run(self.client.put_object("db/x/.group.json", b"{}", bucket="bucket"))
+        leftover = pp.join(self.root, "bucket/db/x/.group.json.0123" + TMP_SUFFIX)
+        open(leftover, "wb").close()  # as a crash mid-write would leave
+        keys = asyncio.run(self.client.list_keys(prefix="db/", bucket="bucket"))
+        self.assertEqual(list(keys), ["db/x/.group.json"])
 
 
 if __name__ == "__main__":
