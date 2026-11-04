@@ -325,7 +325,7 @@ async def http_get(app, url, params=None, client=None):
                 raise HTTPBadRequest(reason="Bad Request")
             elif status_code == 403:
                 log.warn(f"Forbidden to access {url}")
-                raise HTTPForbidden()
+                raise HTTPForbidden(reason=rsp.reason or "Forbidden")
             elif status_code == 404:
                 log.warn(f"Object: {url} not found")
                 raise HTTPNotFound()
@@ -399,6 +399,9 @@ async def http_post(app, url, data=None, params=None, client=None):
                 msg = f"POST request HTTPBadRequest error for url: {url}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason="Bad Request")
+            elif rsp.status == 403:
+                log.warn(f"POST request HTTPForbidden error for url: {url}")
+                raise HTTPForbidden(reason=rsp.reason or "Forbidden")
             elif rsp.status == 404:
                 msg = f"POST  request HTTPNotFound error for url: {url}"
                 log.warn(msg)

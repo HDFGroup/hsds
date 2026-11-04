@@ -19,7 +19,7 @@ import random
 from asyncio import CancelledError
 import numpy as np
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPNotFound, HTTPServiceUnavailable
-from aiohttp.web_exceptions import HTTPInternalServerError
+from aiohttp.web_exceptions import HTTPInternalServerError, HTTPForbidden
 from aiohttp.client_exceptions import ClientError
 
 from h5json.hdf5dtype import createDataType
@@ -692,6 +692,7 @@ class ChunkCrawler:
         self._hits = 0
         self._limit = limit
         self._status_map = {}  # map of chunk_ids to status code
+        self.reason = None  # reason given with a 403 from a data node
         self._q = asyncio.Queue()
         self._fail_count = 0
         self._action = action
@@ -924,6 +925,12 @@ class ChunkCrawler:
                 else:
                     log.error(msg)
                 break  # no retry on 400's
+            except HTTPForbidden as hfe:
+                # not retried: the data node refused, e.g. a disallowed reference bucket
+                status_code = 403
+                self.reason = hfe.reason
+                log.warn(f"HTTPForbidden for {self._action}({chunk_id}): {hfe.reason}")
+                break
             except HTTPNotFound as nfe:
                 status_code = 404
                 log.info(f"HTTPNotFoundRequest for {self._action}({chunk_id}): {nfe}")
