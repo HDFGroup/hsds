@@ -618,7 +618,8 @@ async def deleteLinks(app, group_id, titles=None, separator="/", bucket=None):
 
 
 async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, domain=None,
-                            follow_soft_links=False, follow_external_links=False):
+                            follow_soft_links=False, follow_external_links=False,
+                            username=None):
     """Find the object at the provided h5path location.
     If not found raise 404 error.
     Returns a tuple of the object's id, the domain it is under,
@@ -684,6 +685,8 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
             ext_domain_json = await getDomainJson(app, domain)
 
             verifyRoot(ext_domain_json)
+            # following the link must not reach a domain the caller can't read
+            aclCheck(app, ext_domain_json, "read", username)
 
             msg = f"external domain response = {ext_domain_json}"
             log.debug(msg)
@@ -694,7 +697,8 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
                 app, ext_domain_json["root"], link_json["h5path"], bucket=bucket,
                 refresh=refresh, domain=domain,
                 follow_soft_links=follow_soft_links,
-                follow_external_links=follow_external_links)
+                follow_external_links=follow_external_links,
+                username=username)
 
         elif link_json["class"] == "H5L_TYPE_SOFT":
             if not follow_soft_links:
@@ -710,7 +714,8 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
                     app, obj_id, path_from_link, bucket=bucket,
                     refresh=refresh, domain=domain,
                     follow_soft_links=follow_soft_links,
-                    follow_external_links=follow_external_links)
+                    follow_external_links=follow_external_links,
+                    username=username)
             else:
                 if not domain:
                     msg = "Soft link with absolute path used with no domain given"
@@ -725,7 +730,8 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
                     app, domain_json["root"], path_from_link,
                     bucket=bucket, refresh=refresh, domain=domain,
                     follow_soft_links=follow_soft_links,
-                    follow_external_links=follow_external_links)
+                    follow_external_links=follow_external_links,
+                    username=username)
 
         elif link_json["class"] == "H5L_TYPE_HARD":
             obj_id = link_json["id"]

@@ -20,6 +20,7 @@ from aiohttp.web_exceptions import HTTPServiceUnavailable
 
 from h5json.time_util import getNow
 from .servicenode_lib import getObjectJson, getDomainResponse, getDomainJson
+from .util.authUtil import aclCheck
 from .util.nodeUtil import getNodeCount
 
 from . import hsds_logger as log
@@ -35,11 +36,13 @@ class FolderCrawler:
         get_root=False,
         verbose=False,
         max_tasks_per_node=100,
+        username=None,
     ):
         log.info(f"FolderCrawler.__init__  {len(domains)} domain names")
         self._app = app
         self._get_root = get_root
         self._verbose = verbose
+        self._username = username  # if set, skip domains this user can't read
         self._q = asyncio.Queue()
         self._domain_dict = {}
         self._group_dict = {}
@@ -94,6 +97,9 @@ class FolderCrawler:
             msg = f"FolderCrawler - {domain} got domain_json: {domain_json}"
             log.debug(msg)
             if domain_json:
+                if self._username is not None:
+                    # raises HTTPForbidden, which skips this domain
+                    aclCheck(self._app, domain_json, "read", self._username)
                 kwargs = {"verbose": self._verbose, "bucket": self._bucket}
                 domain_rsp = await getDomainResponse(self._app, domain_json, **kwargs)
                 for k in ("limits", "version", "compressors"):
