@@ -54,6 +54,28 @@ class HeadNodeTest(unittest.TestCase):
         self.assertEqual(app["active_sn_ids"], [None])
         self.assertEqual(app["active_dn_ids"], [None, None, None, None])
 
+    def testRemoveNodeFreesSlot(self):
+        # a node registering on an existing node's address under a new id (a
+        # restarted container) replaces it; its slot must be freed, not left dangling
+        with patch.object(headnode.config, "get", configWithTargets(1, 2)):
+            app = asyncio.run(headnode.init())
+        nodes = app["nodes"]
+        for node_id, node_type, host in (("sn-1", "sn", "10.0.0.1"),
+                                         ("dn-1", "dn", "10.0.0.2"),
+                                         ("dn-2", "dn", "10.0.0.3")):
+            nodes[node_id] = headnode.Node(node_id=node_id, node_type=node_type,
+                                           node_host=host, node_port=6101)
+        app["active_sn_ids"][0] = "sn-1"
+        app["active_dn_ids"][:] = ["dn-1", "dn-2"]
+
+        headnode.removeNode(app, host="10.0.0.2", port=6101)
+
+        self.assertNotIn("dn-1", nodes)
+        self.assertEqual(app["active_dn_ids"], [None, "dn-2"])
+        dn_urls = headnode.getNodeUrls(nodes, app["active_dn_ids"])
+        self.assertEqual(dn_urls, [None, "http://10.0.0.3:6101"])
+        self.assertEqual(headnode.getActiveNodeCount(app, "dn"), 1)
+
 
 if __name__ == "__main__":
     # setup test files
