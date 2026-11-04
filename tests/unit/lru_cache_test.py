@@ -9,6 +9,7 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
+import json
 import unittest
 import random
 import sys
@@ -252,6 +253,32 @@ class LruCacheTest(unittest.TestCase):
 
         self.assertTrue(mem_per <= 100)
 
+    def testMetaDataCacheSizes(self):
+        """large objects count at their size, and updates change the totals"""
+        cc = LruCache(mem_target=1024 * 1024 * 1024, name="MetaCache")
+        big = {"attributes": {"a": {"value": [7] * 100_000}}}
+        big_size = len(json.dumps(big))
+        id1 = _createId()
+        cc[id1] = big
+        cc.consistencyCheck()
+        self.assertEqual(cc.memUsed, big_size)
+
+        # replacing an entry with a smaller one shrinks the total, dirty size included
+        cc.setDirty(id1)
+        cc[id1] = {"foo": "bar"}
+        cc.consistencyCheck()
+        self.assertEqual(cc.memUsed, 1024)
+        self.assertEqual(cc.memDirty, 1024)
+        cc.clearDirty(id1)
+
+        # and a numpy array that grows is counted at its new size
+        chunks = LruCache(mem_target=1024 * 1024 * 1024, name="ChunkCache")
+        id2 = _createId()
+        chunks[id2] = np.zeros((16,), dtype="i4")
+        chunks[id2] = np.zeros((1024,), dtype="i4")
+        chunks.consistencyCheck()
+        self.assertEqual(chunks.memUsed, 4096)
+
     def testMetaDataCache(self):
         """check metadata cache functionality"""
         cc = LruCache(mem_target=1024 * 10, name="ChunkCache")
@@ -272,7 +299,7 @@ class LruCacheTest(unittest.TestCase):
         mem_tgt = cc.memTarget
         self.assertEqual(mem_tgt, 1024 * 10)
         mem_used = cc.memUsed
-        self.assertEqual(mem_used, 1024)  # not based on actual size
+        self.assertEqual(mem_used, 1024)  # small objects count as at least 1 KB
         mem_per = cc.cacheUtilizationPercent
         self.assertEqual(mem_per, 10)  # have used 10% of target memory
         # try out the dirty flags

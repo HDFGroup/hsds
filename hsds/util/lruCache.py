@@ -9,10 +9,19 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
+import json
 import numpy
 import time
 
 from .. import hsds_logger as log
+
+
+def getJsonSize(obj):
+    """Return the approximate size in bytes of a JSON-style object, at least 1 KB."""
+    try:
+        return max(1024, len(json.dumps(obj, default=str)))
+    except (TypeError, ValueError):
+        return 1024
 
 
 def getArraySize(arr):
@@ -161,9 +170,8 @@ class LruCache(object):
             # can just compute size for numpy array
             mem_size = getArraySize(data)
         elif isinstance(data, dict):
-            # TBD - come up with a way to get the actual data size
-            # for dict objects
-            mem_size = 1024
+            # object json can carry large attributes, so count its serialized size
+            mem_size = getJsonSize(data)
         elif isinstance(data, bytes):
             mem_size = len(data)
         else:
@@ -173,8 +181,8 @@ class LruCache(object):
             # key is already in the LRU - update mem size, data and
             # move to front
             node = self._hash[key]
-            old_size = self._hash[key]._mem_size
-            mem_delta = node._mem_size - old_size
+            old_size = node._mem_size
+            mem_delta = mem_size - old_size
             self._mem_size += mem_delta
             node._data = data
             node._mem_size = mem_size
