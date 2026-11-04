@@ -38,7 +38,7 @@ from .util.storUtil import getBucketFromStorURI, getKeyFromStorURI, getURIFromKe
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
-from .util.dsetUtil import getChunkInitializer, getSliceQueryParam
+from .util.dsetUtil import getChunkInitializer, getSliceQueryParam, validateChunkInitializer
 from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
 from .util.nodeUtil import validateInPartition
 from .util.rangegetUtil import ChunkLocation, chunkMunge, getHyperChunkIndex, getHyperChunkFactors
@@ -47,9 +47,6 @@ from .util.lruCache import getArraySize
 from . import config
 from . import hsds_logger as log
 from .dset_lib import getFillValue
-
-# supported initializer commands
-INITIALIZER_CMDS = ["chunklocator", "arange"]
 
 
 def get_obj_id(request, body=None):
@@ -718,10 +715,14 @@ async def run_chunk_initializer(
         bucket = app.get_bucket()
     filepath = None
 
-    init_app = initializer[0]
-    if init_app not in INITIALIZER_CMDS:
-        log.warn(f"initializer cmd is not supported: {init_app}")
+    # datasets created before creation-time validation, or sent straight to a DN,
+    # may still carry an invalid initializer
+    try:
+        validateChunkInitializer(initializer)
+    except ValueError as ve:
+        log.warn(f"not running chunk initializer: {ve}")
         return None
+    init_app = initializer[0]
 
     # some specific initializers can be run in process
     # if so, just do it now
@@ -785,15 +786,11 @@ async def run_chunk_initializer(
     prefix = "chunkinit_"
     cmd_args.append(f"--log_prefix={prefix}")
 
-    # stitch together the cmd_args to a string
-    cmd = ""
-    for cmd_arg in cmd_args:
-        cmd += f"{cmd_arg} "
+    log.info(f"running chunk initializer: {cmd_args}")
 
-    log.info(f"running subprocessing cmd: {cmd}")
-
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
+    # exec, not a shell, so no argument is ever interpreted by /bin/sh
+    proc = await asyncio.create_subprocess_exec(
+        *cmd_args,
         stderr=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE
     )

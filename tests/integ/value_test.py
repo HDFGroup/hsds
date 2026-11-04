@@ -3780,6 +3780,25 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(item[1], "MHFI")
         self.assertEqual(item[2], 3)
 
+    def testInvalidInitializerDataset(self):
+        # initializer arguments are never passed to a shell; bad ones are rejected
+        test_name = "testInvalidInitializerDataset"
+        print(test_name, self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/datasets"
+        layout = {"class": "H5D_CHUNKED", "dims": [10]}
+        bad_initializers = [
+            ["chunklocator", "--h5path=/dset", "--x=$(id)"],
+            ["bash", "-c", "id"],
+            ["arange", "--start=0", "--root_dir=/"],
+            "arange",
+        ]
+        for initializer in bad_initializers:
+            payload = {"type": "H5T_STD_I32LE", "shape": [10]}
+            payload["creationProperties"] = {"layout": layout, "initializer": initializer}
+            rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 400, initializer)
+
     def testARangeInitializerDataset(self):
         test_name = "testARangeInitializerDataset"
         print(test_name, self.base_domain)

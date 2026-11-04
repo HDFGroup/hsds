@@ -39,7 +39,7 @@ from h5json.time_util import getNow
 from .util.nodeUtil import getDataNodeUrl
 from .util.authUtil import getAclKeys
 from .util.linkUtil import getRequestLinks
-from .util.dsetUtil import CHUNK_REF_LAYOUTS
+from .util.dsetUtil import CHUNK_REF_LAYOUTS, validateChunkInitializer
 from .util.storUtil import getStorJSONObj, isStorObj, getSupportedFilters
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
@@ -1573,6 +1573,8 @@ def getDatasetCreateArgs(body,
             if "filters" in creation_props:
                 creation_props["filters"] = normalizeFilters(creation_props["filters"])
             validateDatasetCreationProps(creation_props, type_json=type_json, shape=shape_json)
+            if "initializer" in creation_props:
+                validateChunkInitializer(creation_props["initializer"])
         except (KeyError, TypeError, ValueError) as e:
             msg = f"Provided creation properties are invalid: {e}"
             log.warn(msg)
