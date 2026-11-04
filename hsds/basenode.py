@@ -492,14 +492,15 @@ async def about(request):
     answer["greeting"] = config.get("greeting")
     answer["about"] = config.get("about")
     answer["node_count"] = getNodeCount(app)
-    answer["dn_urls"] = app["dn_urls"]
-    answer["dn_ids"] = app["dn_ids"]
     if username:
         answer["username"] = username
     else:
         answer["username"] = "anonymous"
     if username and isAdminUser(app, username):
         answer["isadmin"] = True
+        # internal addresses of the data nodes, which accept requests unauthenticated
+        answer["dn_urls"] = app["dn_urls"]
+        answer["dn_ids"] = app["dn_ids"]
     else:
         answer["isadmin"] = False
 

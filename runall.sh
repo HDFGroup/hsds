@@ -142,7 +142,10 @@ if [[ ${NO_DOCKER} ]]; then
   if [[ -f "admin/config/passwd.txt" ]]; then
      export PASSWORD_FILE="admin/config/passwd.txt"
   else
-     export PASSWORD_FILE="admin/config/passwd.default"
+     # passwd.default has well-known passwords (admin:admin); don't serve with them silently
+     echo "admin/config/passwd.txt not found; copy admin/config/passwd.default to it"
+     echo "and change the passwords, then run again"
+     exit 1
   fi
   echo "using password file: ${PASSWORD_FILE}"
      
