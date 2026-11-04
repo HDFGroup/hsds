@@ -5481,6 +5481,58 @@ class ValueTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 400)
         self.assertNotIn("acls", rsp.text)
 
+    def testReferenceToOtherBucketRejected(self):
+        # by default a reference may only read from its own bucket and the default bucket
+        print("testReferenceToOtherBucketRejected", self.base_domain)
+        if config.get("reference_buckets_open"):
+            print("server allows all reference buckets, skipping")
+            return
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/"
+        root_uuid = json.loads(self.session.get(req, headers=headers).text)["root"]
+        rsp = self.session.get(self.endpoint + "/groups/" + root_uuid, headers=headers)
+        bucket = json.loads(rsp.text)["bucket"]
+        other = "hsds-test-unlisted-bucket"
+        req = self.endpoint + "/datasets"
+
+        def create(creation_props, shape=(10,), dtype="H5T_STD_U8LE"):
+            payload = {"type": dtype, "shape": list(shape), "creationProperties": creation_props}
+            return self.session.post(req, data=json.dumps(payload), headers=headers)
+
+        layout = {"class": "H5D_CONTIGUOUS_REF", "file_uri": f"{other}/data/f.h5",
+                  "offset": 0, "size": 10}
+        rsp = create({"layout": layout})
+        self.assertEqual(rsp.status_code, 403)
+        self.assertIn("reference_buckets", rsp.reason)
+        layout["file_uri"] = f"{bucket}/data/f.h5"  # own bucket
+        self.assertEqual(create({"layout": layout}).status_code, 201)
+
+        # chunk initializers follow the same rule
+        initializer = ["chunklocator", "--h5path=/dset", "--filepath=/data/f.h5",
+                       f"--bucket={other}"]
+        props = {"layout": {"class": "H5D_CHUNKED", "dims": [10]}, "initializer": initializer}
+        self.assertEqual(create(props).status_code, 403)
+
+        # and chunk-table paths are checked when read
+        str_type = {"class": "H5T_STRING", "charSet": "H5T_CSET_ASCII",
+                    "strPad": "H5T_STR_NULLPAD", "length": 256}
+        fields = [{"name": "offset", "type": "H5T_STD_I64LE"},
+                  {"name": "size", "type": "H5T_STD_I32LE"},
+                  {"name": "path", "type": str_type}]
+        payload = {"type": {"class": "H5T_COMPOUND", "fields": fields}, "shape": [1]}
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        table_id = rsp.json()["id"]
+        rsp = self.session.put(self.endpoint + "/datasets/" + table_id + "/value",
+                               data=json.dumps({"value": [[0, 10, f"{other}/data/f.h5"]]}),
+                               headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        layout = {"class": "H5D_CHUNKED_REF_INDIRECT", "dims": [10], "chunk_table": table_id}
+        rsp = create({"layout": layout})
+        self.assertEqual(rsp.status_code, 201)
+        rsp = self.session.get(self.endpoint + "/datasets/" + rsp.json()["id"] + "/value",
+                               headers=headers)
+        self.assertEqual(rsp.status_code, 403)
+
     def testContiguousRefShortRead(self):
         # A contiguous reference whose chunk runs past the end of the file it
         # points into should return the bytes that exist, zero-filled past the end.

@@ -41,7 +41,8 @@ from .util.authUtil import getAclKeys
 from .util.linkUtil import getRequestLinks
 from .util.dsetUtil import CHUNK_REF_LAYOUTS, validateChunkInitializer
 from .util.storUtil import getStorJSONObj, isStorObj, getSupportedFilters
-from .util.storUtil import getKeyFromStorURI, isHsdsStorageKey
+from .util.storUtil import getKeyFromStorURI, isHsdsStorageKey, getBucketFromStorURI
+from .util.storUtil import isReferenceBucketAllowed, referenceBucketError
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
 from .util.domainUtil import getBucketForDomain, getPathForDomain, verifyRoot, getLimits
@@ -1619,6 +1620,22 @@ def getDatasetCreateArgs(body,
                 msg = f"invalid reference file_uri: {layout['file_uri']}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
+            ref_bucket = getBucketFromStorURI(layout["file_uri"])
+            if not isReferenceBucketAllowed(ref_bucket, dset_bucket=bucket):
+                raise referenceBucketError(layout["file_uri"], ref_bucket)
+
+        initializer = creation_props.get("initializer")
+        if isinstance(initializer, list) and initializer and initializer[0] == "chunklocator":
+            # the initializer reads its file with the service's credentials too
+            options = dict(arg[2:].split("=", 1) for arg in initializer[1:] if "=" in arg)
+            init_bucket = options.get("bucket") or bucket
+            filepath = options.get("filepath", "")
+            if isHsdsStorageKey(filepath.lstrip("/")):
+                msg = f"chunk initializer filepath: {filepath} names an object managed by HSDS"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            if init_bucket and not isReferenceBucketAllowed(init_bucket, dset_bucket=bucket):
+                raise referenceBucketError(f"{init_bucket}/{filepath.lstrip('/')}", init_bucket)
 
         if "filters" in creation_props:
             # check that the given filters are supported by HSDS

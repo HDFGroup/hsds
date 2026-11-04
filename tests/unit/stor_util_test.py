@@ -27,7 +27,7 @@ import hsds.config as config
 from hsds.util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
 from hsds.util.storUtil import getStorBytes, isStorObj
 from hsds.util.storUtil import getStorObjStats, getStorKeys, releaseStorageClient
-from hsds.util.storUtil import isHsdsStorageKey
+from hsds.util.storUtil import isHsdsStorageKey, isReferenceBucketAllowed
 from hsds.util.storUtil import _uncompress
 from hsds.util.storUtil import _getStorageDriverName, getBucketFromStorURI, getKeyFromStorURI
 
@@ -257,6 +257,26 @@ class StorUtilTest(unittest.TestCase):
                 self.assertEqual(result, data)
         finally:
             loop.close()
+
+    def testIsReferenceBucketAllowed(self):
+        def allowed(bucket, reference_buckets, dset_bucket="dsetbucket"):
+            settings = {"bucket_name": "defaultbucket", "reference_buckets": reference_buckets}
+            with patch.object(config, "get", lambda k, default=None: settings.get(k, default)):
+                return isReferenceBucketAllowed(bucket, dset_bucket=dset_bucket)
+
+        # the dataset's own bucket and the default bucket are always allowed
+        self.assertTrue(allowed("dsetbucket", []))
+        self.assertTrue(allowed("defaultbucket", []))
+        self.assertTrue(allowed("s3://defaultbucket", None))
+        # anything else must be listed
+        self.assertFalse(allowed("otherbucket", []))
+        self.assertFalse(allowed("otherbucket", None))
+        self.assertTrue(allowed("otherbucket", ["otherbucket"]))
+        self.assertTrue(allowed("s3://otherbucket", ["otherbucket"]))
+        self.assertTrue(allowed("otherbucket", "a, otherbucket"))  # from an env var
+        self.assertFalse(allowed("thirdbucket", ["otherbucket"]))
+        self.assertTrue(allowed("anything", ["*"]))
+        self.assertTrue(allowed("anything", "*"))
 
     def testIsHsdsStorageKey(self):
         internal = [

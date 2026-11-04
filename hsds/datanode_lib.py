@@ -35,7 +35,7 @@ from .util.nodeUtil import getDataNodeUrl
 from .util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
 from .util.storUtil import getStorBytes, isStorObj, deleteStorObj, getHyperChunks
 from .util.storUtil import getBucketFromStorURI, getKeyFromStorURI, getURIFromKey
-from .util.storUtil import isHsdsStorageKey
+from .util.storUtil import isHsdsStorageKey, isReferenceBucketAllowed, referenceBucketError
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
@@ -739,6 +739,7 @@ async def run_chunk_initializer(
 
     # example initializer args:
     # 'hsds-chunklocator', '--h5path=/dset', '--filepath=/data/myfile.h5' '--bucket=hdf5.sample'
+    dset_bucket = bucket
     cmd_args = None
     for arg in initializer:
         if cmd_args is None:
@@ -757,6 +758,13 @@ async def run_chunk_initializer(
             cmd_args.append(arg)
 
     if filepath:
+        # the initializer reads with the service's credentials: same rules as reference layouts
+        if isHsdsStorageKey(filepath.lstrip("/")):
+            msg = f"chunk initializer filepath: {filepath} names an object managed by HSDS"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if not isReferenceBucketAllowed(bucket, dset_bucket=dset_bucket):
+            raise referenceBucketError(f"{bucket}/{filepath.lstrip('/')}", bucket)
         # convert to uri and add to arg list
         log.info(f"bucket: {bucket} filepath: {filepath}")
         fileuri = getURIFromKey(app, bucket=bucket, key=filepath)

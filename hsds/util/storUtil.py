@@ -425,7 +425,38 @@ def isHsdsStorageKey(key):
     return parts[0] == "db" or parts[-1] == ".domain.json" or bool(_V1_OBJ_KEY.match(parts[0]))
 
 
-def validateReferenceUri(app, uri):
+def _bucketName(bucket):
+    """Return a bucket's bare name, without any protocol or account prefix."""
+    try:
+        return getBucketFromStorURI(f"{bucket.rstrip('/')}/x")
+    except (ValueError, AttributeError):
+        return bucket
+
+
+def isReferenceBucketAllowed(bucket, dset_bucket=None):
+    """Return True if reference layouts and chunk initializers may read from bucket:
+    the dataset's own bucket, the default bucket, or one listed in reference_buckets."""
+    allowed = config.get("reference_buckets", default=None) or []
+    if isinstance(allowed, str):
+        allowed = allowed.split(",")
+    allowed = {_bucketName(b.strip()) for b in allowed if b and b.strip()}
+    if "*" in allowed:
+        return True
+    for always in (dset_bucket, config.get("bucket_name")):
+        if always:
+            allowed.add(_bucketName(always))
+    return _bucketName(bucket) in allowed
+
+
+def referenceBucketError(uri, bucket):
+    """Return the 403 for a reference target in a bucket reference_buckets doesn't allow."""
+    msg = f"reference target {uri} is in bucket {bucket}, which isn't allowed; "
+    msg += "an administrator can add it to the reference_buckets setting"
+    log.warn(msg)
+    return HTTPForbidden(reason=msg)
+
+
+def validateReferenceUri(app, uri, dset_bucket=None):
     """Raise unless a reference layout may read from uri."""
     try:
         bucket = getBucketFromStorURI(uri)
@@ -442,6 +473,8 @@ def validateReferenceUri(app, uri):
     if bucket != app.get("bucket_name") and not app.get("allow_any_bucket_read", True):
         log.warn(f"reference uri: {uri} is in a bucket reads aren't allowed from")
         raise HTTPForbidden()
+    if not isReferenceBucketAllowed(bucket, dset_bucket=dset_bucket):
+        raise referenceBucketError(uri, bucket)
 
 
 def getKeyFromStorURI(uri):

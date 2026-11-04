@@ -23,9 +23,12 @@ cfg = {
     "test_noauth": True,
     "default_public": False,  # set to true if the server makes new domains publicly readable
     "bucket_name": "",  # bucket name to be used for requests
-    "hdf5_sample_bucket": "",  # S3 bucket for storing traditional HDF5 files
+    # S3 bucket for storing traditional HDF5 files; unless it is the server's default bucket,
+    # the server needs it in reference_buckets for the tests that read from it
+    "hdf5_sample_bucket": "",
     "test_group": "test_group",  # group defined in admin/config/groups.txt
     "max_chunks_per_folder": 0,  # match with this config setting on server
+    "reference_buckets_open": False,  # set if the server's reference_buckets is ["*"]
 }
 
 
