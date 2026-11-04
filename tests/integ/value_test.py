@@ -3799,6 +3799,30 @@ class ValueTest(unittest.TestCase):
             rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
             self.assertEqual(rsp.status_code, 400, initializer)
 
+    def testInvalidPointsAndShapes(self):
+        # malformed point coordinates and shapes are client errors, not server errors
+        print("testInvalidPointsAndShapes", self.base_domain)
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = self.endpoint + "/datasets"
+        payload = {"type": "H5T_STD_I32LE", "shape": [10], "maxdims": [5]}
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
+        for shape, bad_points in (([100], ([-1], [[1, 2]], ["x"])),
+                                  ([10, 10], ([1, 2], [[1, 2, 3]], [[-1, 0]]))):
+            payload = {"type": "H5T_STD_I32LE", "shape": shape}
+            rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+            value_req = self.endpoint + "/datasets/" + rsp.json()["id"] + "/value"
+            for points in bad_points:
+                rsp = self.session.post(value_req, data=json.dumps({"points": points}),
+                                        headers=headers)
+                self.assertEqual(rsp.status_code, 400, (shape, points))
+
+        # a selection without brackets isn't read as "everything"
+        rsp = self.session.get(value_req, params={"select": "0:3,0:3"}, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+
     def testARangeInitializerDataset(self):
         test_name = "testARangeInitializerDataset"
         print(test_name, self.base_domain)

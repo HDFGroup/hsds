@@ -618,9 +618,13 @@ async def deleteLinks(app, group_id, titles=None, separator="/", bucket=None):
     await http_delete(app, req, params=params)
 
 
+# most soft or external links one path lookup may follow (HDF5's default nlinks)
+MAX_LINK_HOPS = 16
+
+
 async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, domain=None,
                             follow_soft_links=False, follow_external_links=False,
-                            username=None):
+                            username=None, hops=0):
     """Find the object at the provided h5path location.
     If not found raise 404 error.
     Returns a tuple of the object's id, the domain it is under,
@@ -658,6 +662,13 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
             continue  # skip empty link
 
         link_json = await getLink(app, obj_id, link, bucket=bucket)
+
+        if link_json["class"] in ("H5L_TYPE_EXTERNAL", "H5L_TYPE_SOFT"):
+            hops += 1
+            if hops > MAX_LINK_HOPS:
+                msg = f"h5path: {h5path} follows more than {MAX_LINK_HOPS} soft or external links"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
 
         if link_json["class"] == "H5L_TYPE_EXTERNAL":
             if not follow_external_links:
@@ -699,7 +710,7 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
                 refresh=refresh, domain=domain,
                 follow_soft_links=follow_soft_links,
                 follow_external_links=follow_external_links,
-                username=username)
+                username=username, hops=hops)
 
         elif link_json["class"] == "H5L_TYPE_SOFT":
             if not follow_soft_links:
@@ -716,7 +727,8 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
                     refresh=refresh, domain=domain,
                     follow_soft_links=follow_soft_links,
                     follow_external_links=follow_external_links,
-                    username=username)
+                    username=username,
+                    hops=hops)
             else:
                 if not domain:
                     msg = "Soft link with absolute path used with no domain given"
@@ -732,7 +744,8 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
                     bucket=bucket, refresh=refresh, domain=domain,
                     follow_soft_links=follow_soft_links,
                     follow_external_links=follow_external_links,
-                    username=username)
+                    username=username,
+                    hops=hops)
 
         elif link_json["class"] == "H5L_TYPE_HARD":
             obj_id = link_json["id"]
@@ -1474,7 +1487,13 @@ def genLayout(shape_json, type_json, has_filters=False):
     if has_filters:
         kwargs["chunks"] = True  # force a chunked layout to support compression
 
-    layout_json = generateLayout(shape_json, type_json, **kwargs)
+    try:
+        layout_json = generateLayout(shape_json, type_json, **kwargs)
+    except (ValueError, TypeError) as e:
+        # e.g. maxdims smaller than dims
+        msg = f"unable to create a layout for this dataset: {e}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
     return layout_json
 
 

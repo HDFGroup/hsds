@@ -9,6 +9,7 @@
 # distribution tree.  If you do not have access to this file, you may        #
 # request a copy from help@hdfgroup.org.                                     #
 ##############################################################################
+import base64
 import unittest
 import time
 import json
@@ -322,6 +323,16 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(rsp_paths["/soft_ok"]["id"], g1_id)
         self.assertNotEqual(rsp_paths["/soft_ok"]["id"], other_g1_id)
         self.assertEqual(rsp_paths["/soft_ok"]["domain"], domain)
+
+    def testMalformedBasicAuth(self):
+        # a malformed Authorization header is a 400, not a server error
+        print("testMalformedBasicAuth", self.base_domain)
+        req = helper.getEndpoint() + "/"
+        for raw in (b"no-colon-here", b"\xff\xfe:x\xff"):
+            token = base64.b64encode(raw).decode()
+            headers = {"Authorization": "Basic " + token, "X-Hdf-domain": self.base_domain}
+            rsp = self.session.get(req, headers=headers)
+            self.assertEqual(rsp.status_code, 400, raw)
 
     def testGetByPath(self):
         domain = helper.getTestDomain("tall.h5")

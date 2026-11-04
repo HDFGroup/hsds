@@ -199,6 +199,8 @@ def _getSelectElements(select):
     dimension"""
     if isinstance(select, list) or isinstance(select, tuple):
         return select  # already listified
+    if not (select.startswith("[") and select.endswith("]")):
+        raise ValueError("selection must be enclosed in brackets")
     select = select[1:-1]  # strip brackets
     query_array = []
     dim_query = []
@@ -237,6 +239,9 @@ def _getSelectElements(select):
             dim_query.append(ch)
     if not dim_query:
         # empty dimension
+        raise ValueError("invalid query")
+    if coord_list:
+        # coordinate list never closed
         raise ValueError("invalid query")
     query_array.append("".join(dim_query))
 

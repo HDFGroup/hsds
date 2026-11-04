@@ -407,6 +407,11 @@ class DsetUtilTest(unittest.TestCase):
     def testInvalidSelectionList(self):
         dims = [50, 100,]
 
+        # missing or unbalanced brackets aren't silently reinterpreted
+        for select in ("0:3,0:3", "[0:3,0:3", "0:3,0:3]", "[[0,1],[2", "x[0:3,0:3]"):
+            with self.assertRaises(ValueError, msg=select):
+                getSelectionList(select, dims)
+
         try:
             # no bracket
             getSelectionList("2", dims)
