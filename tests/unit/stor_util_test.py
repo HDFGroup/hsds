@@ -15,6 +15,9 @@ import time
 import numpy as np
 from aiobotocore.session import get_session
 import unittest
+from aiohttp.web_exceptions import HTTPInternalServerError
+import numcodecs
+import zlib
 from unittest.mock import patch
 import sys
 from aiohttp.web_exceptions import HTTPNotFound
@@ -25,6 +28,7 @@ from hsds.util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
 from hsds.util.storUtil import getStorBytes, isStorObj
 from hsds.util.storUtil import getStorObjStats, getStorKeys, releaseStorageClient
 from hsds.util.storUtil import isHsdsStorageKey
+from hsds.util.storUtil import _uncompress
 from hsds.util.storUtil import _getStorageDriverName, getBucketFromStorURI, getKeyFromStorURI
 
 
@@ -277,6 +281,34 @@ class StorUtilTest(unittest.TestCase):
         ]
         for key in external:
             self.assertFalse(isHsdsStorageKey(key), key)
+
+    def testUncompressIsBounded(self):
+        dtype = np.dtype("u1")
+        shape = (1024,)
+        payload = bytes(range(256)) * 4  # exactly one chunk
+        blosc = numcodecs.Blosc()
+
+        kwargs = {"dtype": dtype, "chunk_shape": shape}
+        self.assertEqual(_uncompress(zlib.compress(payload), compressor="gzip", **kwargs), payload)
+        self.assertEqual(bytes(_uncompress(blosc.encode(payload), compressor="lz4", **kwargs)),
+                         payload)
+
+        # data that would expand far past the chunk's size is refused, not inflated
+        bomb = b"\0" * (64 * 1024 * 1024)
+        with self.assertRaises(HTTPInternalServerError):
+            _uncompress(zlib.compress(bomb), compressor="gzip", **kwargs)
+        with self.assertRaises(HTTPInternalServerError):
+            _uncompress(blosc.encode(bomb), compressor="lz4", **kwargs)
+
+        # a truncated stream is still an error
+        with self.assertRaises(HTTPInternalServerError):
+            _uncompress(zlib.compress(payload)[:-8], compressor="gzip", **kwargs)
+
+        # variable-length types have no fixed size, so the request size limit applies
+        vlen = np.dtype("O")
+        data = _uncompress(zlib.compress(payload), compressor="gzip", dtype=vlen,
+                           chunk_shape=shape)
+        self.assertEqual(data, payload)
 
     def testStorUtil(self):
         # run synchronous tests

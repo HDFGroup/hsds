@@ -15,6 +15,7 @@
 # Abstracts S3 API vs Azure vs Posix storage access
 #
 import json
+import math
 import posixpath
 import re
 import time
@@ -182,6 +183,14 @@ def _unshuffle(codec, data, dtype=None, chunk_shape=None):
     return arr.tobytes()
 
 
+def _maxUncompressedSize(dtype, chunk_shape):
+    """Return the most bytes a chunk of the given type and shape can decompress to."""
+    if dtype is not None and chunk_shape is not None and not dtype.hasobject and dtype.itemsize:
+        return math.prod(chunk_shape) * dtype.itemsize
+    # variable-length or unknown: no exact size, so cap at the request limit
+    return int(config.get("max_request_size"))
+
+
 def _uncompress(data, compressor=None, shuffle=0, level=None, dtype=None, chunk_shape=None):
     """ Uncompress the provided data using compessor and/or shuffle """
     msg = f"_uncompress(compressor={compressor}, shuffle={shuffle})"
@@ -195,9 +204,15 @@ def _uncompress(data, compressor=None, shuffle=0, level=None, dtype=None, chunk_
             compressor = "zlib"
         # first check if this was compressed with blosc
         # returns typesize, isshuffle, and memcopied
+        max_size = _maxUncompressedSize(dtype, chunk_shape)
         blosc_metainfo = codecs.blosc.cbuffer_metainfo(data)
         if blosc_metainfo[0] > 0:
             log.info(f"blosc compressed data for {len(data)} bytes")
+            # the header declares the decoded size; refuse before allocating it
+            nbytes = codecs.blosc.cbuffer_sizes(data)[0]
+            if nbytes > max_size:
+                log.error(f"blosc data would decompress to {nbytes} bytes, max is {max_size}")
+                raise HTTPInternalServerError()
             try:
                 blosc = codecs.Blosc()
                 udata = blosc.decode(data)
@@ -214,8 +229,16 @@ def _uncompress(data, compressor=None, shuffle=0, level=None, dtype=None, chunk_
             # try using zlib directly
             log.info(f"using zlib to decompress {len(data)} bytes")
             try:
-                udata = zlib.decompress(data)
+                # stop one byte past the limit rather than inflating without bound
+                decompressor = zlib.decompressobj()
+                udata = decompressor.decompress(data, max_size + 1)
                 log.info(f"uncompressed to {len(udata)} bytes")
+                if len(udata) > max_size:
+                    log.error(f"zlib data decompresses to more than {max_size} bytes")
+                    raise HTTPInternalServerError()
+                if not decompressor.eof:
+                    # zlib.decompress raised for this; keep treating it as an error
+                    raise zlib.error("incomplete or truncated stream")
                 data = udata
             except zlib.error as zlib_error:
                 log.info(f"zlib_err: {zlib_error}")
