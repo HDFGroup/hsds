@@ -188,7 +188,7 @@ def _maxUncompressedSize(dtype, chunk_shape):
     if dtype is not None and chunk_shape is not None and not dtype.hasobject and dtype.itemsize:
         return math.prod(chunk_shape) * dtype.itemsize
     # variable-length or unknown: no exact size, so cap at the request limit
-    return int(config.get("max_request_size"))
+    return int(config.get("max_request_size", default=100 * 1024 * 1024))
 
 
 def _uncompress(data, compressor=None, shuffle=0, level=None, dtype=None, chunk_shape=None):
