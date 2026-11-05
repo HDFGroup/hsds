@@ -1,6 +1,6 @@
 aiobotocore==3.0.0
 aiofiles==25.1.0
-aiohttp==3.14.3
+aiohttp==3.14.4
 aiohttp-cors==0.8.1
 aioitertools==0.13.0
 aiosignal==1.4.0
@@ -66,4 +66,4 @@ typing-inspection==0.4.4
 typing_extensions==4.16.0
 urllib3==2.8.0
 wrapt==2.4.0
-yarl==1.24.5
+yarl==1.25.1
