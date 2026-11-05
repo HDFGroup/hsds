@@ -397,7 +397,7 @@ def validateQuery(query, dtype):
     dummy_arr = np.zeros((1,), dtype=dtype)
     try:
         arrayQuery(query, dummy_arr)
-    except (TypeError, ValueError) as e:
+    except (TypeError, ValueError, RecursionError) as e:
         msg = f"query: {query} is not valid: {e}"
         log.warn(msg)
         raise HTTPBadRequest(reason=msg)

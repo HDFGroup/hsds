@@ -381,7 +381,7 @@ async def get_domains(request, include_hrefs=False, username=None):
                 union_type = {"class": "H5T_COMPOUND", "fields": union_field_defs}
                 dummy_arr = np.zeros((1,), dtype=createDataType(union_type))
                 arrayQuery(query, dummy_arr)
-            except (TypeError, ValueError) as e:
+            except (TypeError, ValueError, RecursionError) as e:
                 if not _isMissingAttributeError(e):
                     msg = f"get_domains - invalid query: {query}: {e}"
                     log.warn(msg)
