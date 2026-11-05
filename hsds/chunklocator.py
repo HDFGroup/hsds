@@ -31,7 +31,8 @@ def get_cmd_options():
 def h5open(fileuri):
     """ return handle to given hdf5 file """
     if fileuri.startswith("s3://"):
-        s3 = s3fs.S3FileSystem()
+        # honor aws_s3_no_sign_request as the data node's own S3 client does
+        s3 = s3fs.S3FileSystem(anon=bool(config.get("aws_s3_no_sign_request", default=False)))
         f = h5py.File(s3.open(fileuri, 'rb'))
     else:
         # just regular file open
