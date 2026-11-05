@@ -39,8 +39,10 @@ from h5json.time_util import getNow
 from .util.nodeUtil import getDataNodeUrl
 from .util.authUtil import getAclKeys
 from .util.linkUtil import getRequestLinks
-from .util.dsetUtil import CHUNK_REF_LAYOUTS
+from .util.dsetUtil import CHUNK_REF_LAYOUTS, validateChunkInitializer
 from .util.storUtil import getStorJSONObj, isStorObj, getSupportedFilters
+from .util.storUtil import getKeyFromStorURI, isHsdsStorageKey, getBucketFromStorURI
+from .util.storUtil import isReferenceBucketAllowed, referenceBucketError
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
 from .util.domainUtil import getBucketForDomain, getPathForDomain, verifyRoot, getLimits
@@ -617,8 +619,13 @@ async def deleteLinks(app, group_id, titles=None, separator="/", bucket=None):
     await http_delete(app, req, params=params)
 
 
+# most soft or external links one path lookup may follow (HDF5's default nlinks)
+MAX_LINK_HOPS = 16
+
+
 async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, domain=None,
-                            follow_soft_links=False, follow_external_links=False):
+                            follow_soft_links=False, follow_external_links=False,
+                            username=None, hops=0):
     """Find the object at the provided h5path location.
     If not found raise 404 error.
     Returns a tuple of the object's id, the domain it is under,
@@ -657,6 +664,13 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
 
         link_json = await getLink(app, obj_id, link, bucket=bucket)
 
+        if link_json["class"] in ("H5L_TYPE_EXTERNAL", "H5L_TYPE_SOFT"):
+            hops += 1
+            if hops > MAX_LINK_HOPS:
+                msg = f"h5path: {h5path} follows more than {MAX_LINK_HOPS} soft or external links"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+
         if link_json["class"] == "H5L_TYPE_EXTERNAL":
             if not follow_external_links:
                 msg = "Query found unexpected external link"
@@ -684,6 +698,8 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
             ext_domain_json = await getDomainJson(app, domain)
 
             verifyRoot(ext_domain_json)
+            # following the link must not reach a domain the caller can't read
+            aclCheck(app, ext_domain_json, "read", username)
 
             msg = f"external domain response = {ext_domain_json}"
             log.debug(msg)
@@ -694,7 +710,8 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
                 app, ext_domain_json["root"], link_json["h5path"], bucket=bucket,
                 refresh=refresh, domain=domain,
                 follow_soft_links=follow_soft_links,
-                follow_external_links=follow_external_links)
+                follow_external_links=follow_external_links,
+                username=username, hops=hops)
 
         elif link_json["class"] == "H5L_TYPE_SOFT":
             if not follow_soft_links:
@@ -710,7 +727,9 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
                     app, obj_id, path_from_link, bucket=bucket,
                     refresh=refresh, domain=domain,
                     follow_soft_links=follow_soft_links,
-                    follow_external_links=follow_external_links)
+                    follow_external_links=follow_external_links,
+                    username=username,
+                    hops=hops)
             else:
                 if not domain:
                     msg = "Soft link with absolute path used with no domain given"
@@ -725,7 +744,9 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
                     app, domain_json["root"], path_from_link,
                     bucket=bucket, refresh=refresh, domain=domain,
                     follow_soft_links=follow_soft_links,
-                    follow_external_links=follow_external_links)
+                    follow_external_links=follow_external_links,
+                    username=username,
+                    hops=hops)
 
         elif link_json["class"] == "H5L_TYPE_HARD":
             obj_id = link_json["id"]
@@ -1467,7 +1488,13 @@ def genLayout(shape_json, type_json, has_filters=False):
     if has_filters:
         kwargs["chunks"] = True  # force a chunked layout to support compression
 
-    layout_json = generateLayout(shape_json, type_json, **kwargs)
+    try:
+        layout_json = generateLayout(shape_json, type_json, **kwargs)
+    except (ValueError, TypeError) as e:
+        # e.g. maxdims smaller than dims
+        msg = f"unable to create a layout for this dataset: {e}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
     return layout_json
 
 
@@ -1573,11 +1600,42 @@ def getDatasetCreateArgs(body,
             if "filters" in creation_props:
                 creation_props["filters"] = normalizeFilters(creation_props["filters"])
             validateDatasetCreationProps(creation_props, type_json=type_json, shape=shape_json)
+            if "initializer" in creation_props:
+                validateChunkInitializer(creation_props["initializer"])
         except (KeyError, TypeError, ValueError) as e:
             msg = f"Provided creation properties are invalid: {e}"
             log.warn(msg)
             raise HTTPBadRequest(reason=msg)
         log.debug(f"create_props after validation: {creation_props}")
+
+        layout = creation_props.get("layout")
+        if isinstance(layout, dict) and layout.get("class") in CHUNK_REF_LAYOUTS \
+                and layout.get("file_uri"):
+            # also checked, with bucket access, whenever the dataset is read
+            try:
+                ref_key = getKeyFromStorURI(layout["file_uri"])
+            except (ValueError, TypeError):
+                ref_key = None
+            if ref_key is None or isHsdsStorageKey(ref_key):
+                msg = f"invalid reference file_uri: {layout['file_uri']}"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            ref_bucket = getBucketFromStorURI(layout["file_uri"])
+            if not isReferenceBucketAllowed(ref_bucket, dset_bucket=bucket):
+                raise referenceBucketError(layout["file_uri"], ref_bucket)
+
+        initializer = creation_props.get("initializer")
+        if isinstance(initializer, list) and initializer and initializer[0] == "chunklocator":
+            # the initializer reads its file with the service's credentials too
+            options = dict(arg[2:].split("=", 1) for arg in initializer[1:] if "=" in arg)
+            init_bucket = options.get("bucket") or bucket
+            filepath = options.get("filepath", "")
+            if isHsdsStorageKey(filepath.lstrip("/")):
+                msg = f"chunk initializer filepath: {filepath} names an object managed by HSDS"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            if init_bucket and not isReferenceBucketAllowed(init_bucket, dset_bucket=bucket):
+                raise referenceBucketError(f"{init_bucket}/{filepath.lstrip('/')}", init_bucket)
 
         if "filters" in creation_props:
             # check that the given filters are supported by HSDS

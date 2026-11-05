@@ -334,6 +334,11 @@ class S3Client:
                     msg = f"access denied for s3_bucket: {bucket}, response code: {response_code}"
                     log.info(msg)
                     raise HTTPForbidden()
+                elif response_code == "InvalidRange" and range:
+                    # the range starts past the end of the object; return no bytes, as
+                    # a short read of a POSIX file does, and let the caller zero-fill
+                    log.info(f"s3 range {range} is past the end of {bucket}/{key}")
+                    data = b""
                 else:
                     self._s3_stats_increment("error_count")
                     msg = f"got unexpected ClientError on s3 get {bucket}/{key}: "

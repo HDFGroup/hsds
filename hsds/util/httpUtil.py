@@ -143,10 +143,8 @@ def getSocketPath(url):
     return "".join(chars)
 
 
-def bindToSocket(url):
-    """
-    Bind to socket specified by http+unix url
-    """
+def bindToSocket(url, private=False):
+    """Bind to the socket in an http+unix url; private makes it owner-only."""
     if not isUnixDomainUrl(url):
         raise ValueError(f"Invalid url for bindToSocket: {url}")
     # use a unix domain socket path
@@ -159,7 +157,13 @@ def bindToSocket(url):
         if os.path.exists(path):
             raise
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.bind(path)
+    # set the mode through the umask so the socket is never briefly open to others
+    old_umask = os.umask(0o177) if private else None
+    try:
+        s.bind(path)
+    finally:
+        if old_umask is not None:
+            os.umask(old_umask)
     return s
 
 
@@ -325,7 +329,7 @@ async def http_get(app, url, params=None, client=None):
                 raise HTTPBadRequest(reason="Bad Request")
             elif status_code == 403:
                 log.warn(f"Forbidden to access {url}")
-                raise HTTPForbidden()
+                raise HTTPForbidden(reason=rsp.reason or "Forbidden")
             elif status_code == 404:
                 log.warn(f"Object: {url} not found")
                 raise HTTPNotFound()
@@ -399,6 +403,9 @@ async def http_post(app, url, data=None, params=None, client=None):
                 msg = f"POST request HTTPBadRequest error for url: {url}"
                 log.warn(msg)
                 raise HTTPBadRequest(reason="Bad Request")
+            elif rsp.status == 403:
+                log.warn(f"POST request HTTPForbidden error for url: {url}")
+                raise HTTPForbidden(reason=rsp.reason or "Forbidden")
             elif rsp.status == 404:
                 msg = f"POST  request HTTPNotFound error for url: {url}"
                 log.warn(msg)

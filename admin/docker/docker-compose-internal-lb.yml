@@ -10,7 +10,7 @@ services:
       - NODE_TYPE=head_node
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-    ports:
+    expose:
       - ${HEAD_PORT}
     logging:
      options:
@@ -28,7 +28,7 @@ services:
       - NODE_TYPE=dn
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-    ports:
+    expose:
       - ${DN_PORT}
     logging:
      options:

@@ -199,6 +199,8 @@ def _getSelectElements(select):
     dimension"""
     if isinstance(select, list) or isinstance(select, tuple):
         return select  # already listified
+    if not (select.startswith("[") and select.endswith("]")):
+        raise ValueError("selection must be enclosed in brackets")
     select = select[1:-1]  # strip brackets
     query_array = []
     dim_query = []
@@ -237,6 +239,9 @@ def _getSelectElements(select):
             dim_query.append(ch)
     if not dim_query:
         # empty dimension
+        raise ValueError("invalid query")
+    if coord_list:
+        # coordinate list never closed
         raise ValueError("invalid query")
     query_array.append("".join(dim_query))
 
@@ -665,6 +670,29 @@ def setChunkDimQueryParam(params, dims):
         dim_param += "]"
         log.debug(f"dim query param: {dim_param}")
         params["dim"] = dim_param
+
+
+# chunk initializer programs, and the --name=value options a dataset may pass each
+CHUNK_INITIALIZERS = {
+    "chunklocator": ("h5path", "filepath", "bucket"),
+    "arange": ("start", "step"),
+}
+
+
+def validateChunkInitializer(initializer):
+    """Raise ValueError unless initializer is a known program and its known options."""
+    if not isinstance(initializer, list) or not initializer:
+        raise ValueError("initializer must be a non-empty list")
+    if not all(isinstance(arg, str) for arg in initializer):
+        raise ValueError("initializer arguments must be strings")
+    program = initializer[0]
+    if program not in CHUNK_INITIALIZERS:
+        raise ValueError(f"unsupported initializer: {program}")
+    for arg in initializer[1:]:
+        name, sep, value = arg.partition("=")
+        known = name.startswith("--") and name[2:] in CHUNK_INITIALIZERS[program]
+        if not (sep and value and known) or any(ord(ch) < 32 for ch in arg):
+            raise ValueError(f"invalid argument for {program} initializer: {arg!r}")
 
 
 def getChunkInitializer(dset_json):

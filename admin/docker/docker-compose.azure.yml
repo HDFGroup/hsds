@@ -11,7 +11,7 @@ services:
       - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
-    ports:
+    expose:
       - ${HEAD_PORT}
     volumes:
       - ${PWD}/admin/config/:/config/
@@ -26,7 +26,7 @@ services:
       - AZURE_CONNECTION_STRING=${AZURE_CONNECTION_STRING}
       - BUCKET_NAME=${BUCKET_NAME}
       - LOG_LEVEL=${LOG_LEVEL}
-    ports:
+    expose:
       - ${DN_PORT}
     depends_on:
       - head

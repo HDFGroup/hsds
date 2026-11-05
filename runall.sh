@@ -135,14 +135,17 @@ if [[ ${NO_DOCKER} ]]; then
     fi
     if [[ ! -d ${SOCKET_DIR} ]]; then
       echo "creating directory ${SOCKET_DIR}"
-      mkdir ${SOCKET_DIR}
+      mkdir -m 755 ${SOCKET_DIR}
     fi
     echo "--no_docker option specified - using directory: ${SOCKET_DIR} for socket and log files"
   fi
   if [[ -f "admin/config/passwd.txt" ]]; then
      export PASSWORD_FILE="admin/config/passwd.txt"
   else
-     export PASSWORD_FILE="admin/config/passwd.default"
+     # passwd.default has well-known passwords (admin:admin); don't serve with them silently
+     echo "admin/config/passwd.txt not found; copy admin/config/passwd.default to it"
+     echo "and change the passwords, then run again"
+     exit 1
   fi
   echo "using password file: ${PASSWORD_FILE}"
      
@@ -200,14 +203,14 @@ if [[ $NO_DOCKER ]] ; then
       echo "Using Azure connection string"
     fi
     if [[ $USE_TCP ]]; then
-      hsds --bucket_name ${BUCKET_NAME} --password_file ${PASSWORD_FILE} --logfile hs.log --loglevel ${LOG_LEVEL} --host localhost --port ${SN_PORT} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+      hsds --bucket_name ${BUCKET_NAME} --password_file ${PASSWORD_FILE} --logfile hs.log --loglevel ${LOG_LEVEL} --port ${SN_PORT} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
     else
       hsds --bucket_name ${BUCKET_NAME} --password_file ${PASSWORD_FILE} --logfile hs.log  --loglevel ${LOG_LEVEL} --socket_dir ${SOCKET_DIR} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
     fi
   else
     echo "Using posix storage: ${ROOT_DIR}"
     if [[ $USE_TCP ]]; then
-      hsds --root_dir ${ROOT_DIR} --password_file ${PASSWORD_FILE} --logfile hs.log  --loglevel ${LOG_LEVEL} --host localhost --port ${SN_PORT} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
+      hsds --root_dir ${ROOT_DIR} --password_file ${PASSWORD_FILE} --logfile hs.log  --loglevel ${LOG_LEVEL} --port ${SN_PORT} --config_dir=${CONFIG_DIR} --count=${DN_CORES}
     else
       hsds --root_dir ${ROOT_DIR} --password_file ${PASSWORD_FILE} --logfile hs.log  --loglevel ${LOG_LEVEL} --socket_dir ${SOCKET_DIR}  --config_dir=${CONFIG_DIR} --count=${DN_CORES}
     fi

@@ -28,6 +28,13 @@ class DatasetTest(unittest.TestCase):
         helper.setupDomain(self.base_domain, folder=True)
         self.endpoint = helper.getEndpoint()
 
+    def _refFileUri(self, domain, scheme=""):
+        """Return a reference file_uri in the domain's own bucket, which is always allowed."""
+        root_id = helper.getRootUUID(domain, session=self.session)
+        req = helper.getEndpoint() + "/groups/" + root_id
+        rsp = self.session.get(req, headers=helper.getRequestHeaders(domain=domain))
+        return f"{scheme}{rsp.json()['bucket']}/some-file.h5"
+
     def setUp(self):
         self.session = helper.getSession()
 
@@ -1931,7 +1938,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(layout_json["dims"], [1024, 1024])
 
         # linked datasets are exempt since their chunks are sized by the source file
-        layout = {"class": "H5D_CHUNKED_REF", "file_uri": "some_bucket/some_file.h5",
+        layout = {"class": "H5D_CHUNKED_REF", "file_uri": self._refFileUri(domain),
                   "dims": [extent], "chunks": {"0": [0, 8 * extent]}}
         payload = {"type": "H5T_IEEE_F64LE", "shape": [extent],
                    "creationProperties": {"layout": layout}}
@@ -2414,7 +2421,7 @@ class DatasetTest(unittest.TestCase):
         # 50K x 80K dataset
         dims = [50000, 8000000]
         payload = {"type": "H5T_IEEE_F32LE", "shape": dims}
-        file_uri = "s3://a-storage-bucket/some-file.h5"
+        file_uri = self._refFileUri(domain, scheme="s3://")
 
         offset = 1234
         size = dims[0] * dims[1] * 4  # uncompressed size
@@ -2488,7 +2495,7 @@ class DatasetTest(unittest.TestCase):
         # 0 x 10 dataset
         dims = [0, 10]
         payload = {"type": "H5T_STD_I16LE", "shape": dims}
-        file_uri = "s3://a-storage-bucket/some-file.h5"
+        file_uri = self._refFileUri(domain, scheme="s3://")
 
         offset = 1234
         size = dims[0] * dims[1] * 4  # uncompressed size
@@ -2565,7 +2572,7 @@ class DatasetTest(unittest.TestCase):
         chunks["1_1"] = [1234 + 5 * chunk_size, chunk_size]
         chunks["1_2"] = [1234 + 6 * chunk_size, chunk_size]
 
-        file_uri = "s3://a-storage-bucket/some-file.h5"
+        file_uri = self._refFileUri(domain, scheme="s3://")
 
         layout = {
             "class": "H5D_CHUNKED_REF",
@@ -2642,7 +2649,7 @@ class DatasetTest(unittest.TestCase):
         dims = [20000, 30000]
         # 1000x1000 chunks
         chunk_layout = [1000, 1000]
-        file_uri = "s3://a-storage-bucket/some-file.h5"
+        file_uri = self._refFileUri(domain, scheme="s3://")
 
         layout = {
             "class": "H5D_CHUNKED_REF_INDIRECT",
@@ -2732,7 +2739,7 @@ class DatasetTest(unittest.TestCase):
         dims = [20000, 30000]
         # 1000x1000 chunks
         chunk_layout = [1000, 1000]
-        file_uri = "s3://a-storage-bucket/some-file.h5"
+        file_uri = self._refFileUri(domain, scheme="s3://")
 
         layout = {
             "class": "H5D_CHUNKED_REF_INDIRECT",

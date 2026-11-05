@@ -267,6 +267,21 @@ def validateDomainKey(domain_key):
         raise ValueError("Invalid domain key")
 
 
+def normalizeDomainPath(domain):
+    """Collapse repeated slashes in a domain path; reject '.' and '..' segments.
+    Every spelling of a domain must map to one cache entry and one data node."""
+    prefix = ""
+    n = domain.find("://")
+    if n > 0:
+        prefix, domain = domain[:n + 3], domain[n + 3:]
+    leading = "/" if domain.startswith("/") else ""
+    trailing = "/" if domain.endswith("/") and domain.strip("/") else ""
+    parts = [part for part in domain.split("/") if part]
+    if any(part in (".", "..") for part in parts):
+        raise HTTPBadRequest(reason="domain path can't contain '.' or '..' segments")
+    return prefix + leading + "/".join(parts) + trailing
+
+
 def getDomainFromRequest(request, validate=True):
     app = request.app
     domain = None
@@ -281,6 +296,7 @@ def getDomainFromRequest(request, validate=True):
     if domain.startswith("hdf5:/"):
         # strip off the prefix to make following logic easier
         domain = domain[6:]
+    domain = normalizeDomainPath(domain)
 
     # validate that its a properly formed domain
     if validate:

@@ -15,6 +15,9 @@ import time
 import numpy as np
 from aiobotocore.session import get_session
 import unittest
+from aiohttp.web_exceptions import HTTPInternalServerError
+import numcodecs
+import zlib
 from unittest.mock import patch
 import sys
 from aiohttp.web_exceptions import HTTPNotFound
@@ -24,6 +27,8 @@ import hsds.config as config
 from hsds.util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
 from hsds.util.storUtil import getStorBytes, isStorObj
 from hsds.util.storUtil import getStorObjStats, getStorKeys, releaseStorageClient
+from hsds.util.storUtil import isHsdsStorageKey, isReferenceBucketAllowed
+from hsds.util.storUtil import _uncompress
 from hsds.util.storUtil import _getStorageDriverName, getBucketFromStorURI, getKeyFromStorURI
 
 
@@ -252,6 +257,78 @@ class StorUtilTest(unittest.TestCase):
                 self.assertEqual(result, data)
         finally:
             loop.close()
+
+    def testIsReferenceBucketAllowed(self):
+        def allowed(bucket, reference_buckets, dset_bucket="dsetbucket"):
+            settings = {"bucket_name": "defaultbucket", "reference_buckets": reference_buckets}
+            with patch.object(config, "get", lambda k, default=None: settings.get(k, default)):
+                return isReferenceBucketAllowed(bucket, dset_bucket=dset_bucket)
+
+        # the dataset's own bucket and the default bucket are always allowed
+        self.assertTrue(allowed("dsetbucket", []))
+        self.assertTrue(allowed("defaultbucket", []))
+        self.assertTrue(allowed("s3://defaultbucket", None))
+        # anything else must be listed
+        self.assertFalse(allowed("otherbucket", []))
+        self.assertFalse(allowed("otherbucket", None))
+        self.assertTrue(allowed("otherbucket", ["otherbucket"]))
+        self.assertTrue(allowed("s3://otherbucket", ["otherbucket"]))
+        self.assertTrue(allowed("otherbucket", "a, otherbucket"))  # from an env var
+        self.assertFalse(allowed("thirdbucket", ["otherbucket"]))
+        self.assertTrue(allowed("anything", ["*"]))
+        self.assertTrue(allowed("anything", "*"))
+
+    def testIsHsdsStorageKey(self):
+        internal = [
+            "db/1cb6faa9-95aadb01/.group.json",
+            "db/1cb6faa9-95aadb01/d/a2d8-78da2f-8c356e/0",
+            "home/test_user1/x.h5/.domain.json",
+            ".domain.json",
+            "data/../db/x",
+            "./db/x",
+            "data/./../home/x.h5/.domain.json",
+            "a1b2c-g-1cb6faa9-95aadb01-943e-72211d-225389",  # schema v1 object
+            "",
+            ".",
+        ]
+        for key in internal:
+            self.assertTrue(isHsdsStorageKey(key), key)
+        external = [
+            "data/hdf5test/tall.h5",
+            "some-file.h5",
+            "dbx/file.h5",
+            "home/test_user1/notes.domain.json.h5",
+        ]
+        for key in external:
+            self.assertFalse(isHsdsStorageKey(key), key)
+
+    def testUncompressIsBounded(self):
+        dtype = np.dtype("u1")
+        shape = (1024,)
+        payload = bytes(range(256)) * 4  # exactly one chunk
+        blosc = numcodecs.Blosc()
+
+        kwargs = {"dtype": dtype, "chunk_shape": shape}
+        self.assertEqual(_uncompress(zlib.compress(payload), compressor="gzip", **kwargs), payload)
+        self.assertEqual(bytes(_uncompress(blosc.encode(payload), compressor="lz4", **kwargs)),
+                         payload)
+
+        # data that would expand far past the chunk's size is refused, not inflated
+        bomb = b"\0" * (64 * 1024 * 1024)
+        with self.assertRaises(HTTPInternalServerError):
+            _uncompress(zlib.compress(bomb), compressor="gzip", **kwargs)
+        with self.assertRaises(HTTPInternalServerError):
+            _uncompress(blosc.encode(bomb), compressor="lz4", **kwargs)
+
+        # a truncated stream is still an error
+        with self.assertRaises(HTTPInternalServerError):
+            _uncompress(zlib.compress(payload)[:-8], compressor="gzip", **kwargs)
+
+        # variable-length types have no fixed size, so the request size limit applies
+        vlen = np.dtype("O")
+        data = _uncompress(zlib.compress(payload), compressor="gzip", dtype=vlen,
+                           chunk_shape=shape)
+        self.assertEqual(data, payload)
 
     def testStorUtil(self):
         # run synchronous tests

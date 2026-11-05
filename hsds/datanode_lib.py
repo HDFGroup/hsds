@@ -35,10 +35,11 @@ from .util.nodeUtil import getDataNodeUrl
 from .util.storUtil import getStorJSONObj, putStorJSONObj, putStorBytes
 from .util.storUtil import getStorBytes, isStorObj, deleteStorObj, getHyperChunks
 from .util.storUtil import getBucketFromStorURI, getKeyFromStorURI, getURIFromKey
+from .util.storUtil import isHsdsStorageKey, isReferenceBucketAllowed, referenceBucketError
 from .util.domainUtil import isValidDomain, getBucketForDomain
 from .util.attrUtil import getRequestCollectionName
 from .util.httpUtil import http_post
-from .util.dsetUtil import getChunkInitializer, getSliceQueryParam
+from .util.dsetUtil import getChunkInitializer, getSliceQueryParam, validateChunkInitializer
 from .util.chunkUtil import getDatasetId, getChunkSelection, getChunkIndex
 from .util.nodeUtil import validateInPartition
 from .util.rangegetUtil import ChunkLocation, chunkMunge, getHyperChunkIndex, getHyperChunkFactors
@@ -47,9 +48,6 @@ from .util.lruCache import getArraySize
 from . import config
 from . import hsds_logger as log
 from .dset_lib import getFillValue
-
-# supported initializer commands
-INITIALIZER_CMDS = ["chunklocator", "arange"]
 
 
 def get_obj_id(request, body=None):
@@ -718,10 +716,14 @@ async def run_chunk_initializer(
         bucket = app.get_bucket()
     filepath = None
 
-    init_app = initializer[0]
-    if init_app not in INITIALIZER_CMDS:
-        log.warn(f"initializer cmd is not supported: {init_app}")
+    # datasets created before creation-time validation, or sent straight to a DN,
+    # may still carry an invalid initializer
+    try:
+        validateChunkInitializer(initializer)
+    except ValueError as ve:
+        log.warn(f"not running chunk initializer: {ve}")
         return None
+    init_app = initializer[0]
 
     # some specific initializers can be run in process
     # if so, just do it now
@@ -737,6 +739,7 @@ async def run_chunk_initializer(
 
     # example initializer args:
     # 'hsds-chunklocator', '--h5path=/dset', '--filepath=/data/myfile.h5' '--bucket=hdf5.sample'
+    dset_bucket = bucket
     cmd_args = None
     for arg in initializer:
         if cmd_args is None:
@@ -755,6 +758,13 @@ async def run_chunk_initializer(
             cmd_args.append(arg)
 
     if filepath:
+        # the initializer reads with the service's credentials: same rules as reference layouts
+        if isHsdsStorageKey(filepath.lstrip("/")):
+            msg = f"chunk initializer filepath: {filepath} names an object managed by HSDS"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
+        if not isReferenceBucketAllowed(bucket, dset_bucket=dset_bucket):
+            raise referenceBucketError(f"{bucket}/{filepath.lstrip('/')}", bucket)
         # convert to uri and add to arg list
         log.info(f"bucket: {bucket} filepath: {filepath}")
         fileuri = getURIFromKey(app, bucket=bucket, key=filepath)
@@ -785,15 +795,11 @@ async def run_chunk_initializer(
     prefix = "chunkinit_"
     cmd_args.append(f"--log_prefix={prefix}")
 
-    # stitch together the cmd_args to a string
-    cmd = ""
-    for cmd_arg in cmd_args:
-        cmd += f"{cmd_arg} "
+    log.info(f"running chunk initializer: {cmd_args}")
 
-    log.info(f"running subprocessing cmd: {cmd}")
-
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
+    # exec, not a shell, so no argument is ever interpreted by /bin/sh
+    proc = await asyncio.create_subprocess_exec(
+        *cmd_args,
         stderr=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE
     )
@@ -1089,6 +1095,10 @@ async def get_chunk(
         except ValueError as ve:
             log.error(f"Invalid URI path: {s3path} exception: {ve}")
             raise
+        if isHsdsStorageKey(s3key):
+            msg = f"s3path: {s3path} names an object managed by HSDS"
+            log.warn(msg)
+            raise HTTPBadRequest(reason=msg)
 
         msg = f"Using s3path bucket: {bucket} and  s3key: {s3key} "
         msg += f"offset: {s3offset} length: {s3size}"

@@ -312,6 +312,7 @@ class QueryTest(unittest.TestCase):
                 "open > 12; close < 40",
                 "import os; print(os.environ['FOO'])",
                 "i = 2",
+                "(" * 500 + "open > 3000" + ")" * 500,  # nested past the recursion limit
             )
             for query in queries:
                 params = {"query": query}

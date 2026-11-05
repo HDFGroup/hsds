@@ -1,4 +1,4 @@
-v1.0.2 --- 10/2/26
+v1.0.3 --- 11/5/26
 
 # 🔺 HSDS Changelog
 
@@ -18,7 +18,7 @@ at <https://github.com/HDFGroup/hsds/releases>.
 
 ## 📖 Contents
 
-* [Executive Summary](CHANGELOG.md#-executive-summary-hsds-version-102)
+* [Executive Summary](CHANGELOG.md#-executive-summary-hsds-version-103)
 * [Breaking Changes](CHANGELOG.md#%EF%B8%8F-breaking-changes)
 * [Deprecations](CHANGELOG.md#-deprecations)
 * [New Features & Improvements](CHANGELOG.md#-new-features--improvements)
@@ -26,41 +26,48 @@ at <https://github.com/HDFGroup/hsds/releases>.
 * [Platforms Tested](CHANGELOG.md#%EF%B8%8F-platforms-tested)
 * [Known Problems](CHANGELOG.md#-known-problems)
 
-# 🔆 Executive Summary: HSDS Version 1.0.2
+# 🔆 Executive Summary: HSDS Version 1.0.3
+
+## Security:
+
+This release fixes several security vulnerabilities, including one that let any user
+with an account run commands on a data node. Every deployment should upgrade. The
+details are in these security advisories:
+
+- [GHSA-5c9x-6w3j-4pfh](https://github.com/HDFGroup/hsds/security/advisories/GHSA-5c9x-6w3j-4pfh):
+  command execution on data nodes through dataset chunk initializers (critical)
+- [GHSA-w5jh-vhvj-vppc](https://github.com/HDFGroup/hsds/security/advisories/GHSA-w5jh-vhvj-vppc):
+  users can read domains they have no access to (high)
+- [GHSA-fc4g-2g65-rqh9](https://github.com/HDFGroup/hsds/security/advisories/GHSA-fc4g-2g65-rqh9):
+  unauthenticated internal services reachable from the network in some deployments (high)
+- [GHSA-c687-6xwp-992v](https://github.com/HDFGroup/hsds/security/advisories/GHSA-c687-6xwp-992v):
+  denial of service through decompression, metadata caching and bearer tokens (medium)
+
+Some of the fixes change behavior that existing deployments may rely on. Read
+[Breaking Changes](CHANGELOG.md#%EF%B8%8F-breaking-changes) before upgrading, in
+particular if you link HDF5 files from buckets other than the server's default bucket.
 
 ## Bug Fixes:
 
-- `PUT` to an object's attributes collection now returns 400 when the request contains
-  no attributes, instead of reporting success without writing anything
+- `POST /` can report the paths it couldn't resolve instead of failing the whole
+  request, with the new `ignore_unresolved` parameter (#487)
 
-- A read that fails on the data node returns an error instead of a 200 with an
-  empty or partial body
+- External links whose file is a relative path, such as the bare `other.h5` that h5py
+  writes, are resolved from the linking domain's folder instead of returning 500 (#488)
 
-- A range read that runs past the end of an object keeps the bytes it read
-  instead of returning zeros
+- Malformed requests that returned 500 or wrong data now return 400
 
-- Chunks and contiguous datasets are limited to the data node chunk cache size,
-  and compact datasets to 64 KiB, so a large chunk can no longer exhaust a data
-  node's memory
+- POSIX storage objects are written atomically, so a crash mid-write no longer leaves
+  a truncated object
 
-- The head node refuses to start when `TARGET_SN_COUNT` or `TARGET_DN_COUNT` is
-  unset or 0, instead of leaving the cluster stuck in `WAITING`
+- Stopping the `hsds` launcher with SIGTERM stops its nodes as well
 
-- Dataset creation no longer rejects filters that give a class but omit `id` or `name`
-
-- Link and attribute names containing `{` or `}` no longer get a 404
-
-- Looking up a committed datatype by path no longer returns 500
-
-- `GET` on a linked dataset created by HSDS 0.9.x reports its reference layout
-  instead of a plain chunked one
-
-- Reading a few elements of an `H5D_CONTIGUOUS_REF` dataset no longer fetches the
-  whole dataset from its file
+- An S3 read starting past the end of a linked file returns zeros, as POSIX storage
+  does, instead of 500
 
 ## Dependencies:
 
-- h5json 2.0.1 or later is required, for the `H5D_CONTIGUOUS_REF` fix above
+- aiohttp 3.14.4, which requires yarl 1.25.1 or later
 
 ## Acknowledgements:
 
@@ -73,22 +80,58 @@ The full list of changes in this release is in
 
 # ⚠️ Breaking Changes
 
-### Chunks larger than `chunk_mem_cache_size` are refused at creation
+### Reference layouts and chunk initializers may only read from allowed buckets
 
-   HSDS 1.0.0 and 1.0.1 stored client chunk shapes with no size limit, and stored
-   contiguous and compact datasets as a single chunk the size of the whole dataset.
-   To read or write any part of a chunk, a data node loads the whole chunk, and its
-   memory use peaks at 2-3x the chunk's size while it does, so a large chunk could
-   exhaust a data node's memory. Writes to chunks over roughly 128M elements failed
-   outright.
+   A dataset's `file_uri`, the paths in its chunk table, and a `chunklocator`
+   initializer's `--bucket` may now name only the dataset's own bucket, the server's
+   default bucket, or a bucket listed in the new `reference_buckets` setting. Reading an
+   existing dataset that points anywhere else returns 403 with a message naming the
+   bucket and the setting. Setting `reference_buckets: ["*"]` restores the old
+   behavior, which lets any user read any object the server's credentials can reach.
 
-   Creating a dataset whose chunk, or whose whole contiguous dataset, is larger than
-   `chunk_mem_cache_size` (128 MB by default) now returns 400. A chunked layout should
-   be used for larger contiguous data. Compact datasets are limited to
-   `max_compact_dset_size` (64 KiB, as in HDF5). Writes to existing datasets with
-   chunks over the limit now fail, but their data is still readable. In order to
-   handle large contiguous datasets or large chunks, raise `chunk_mem_cache_size`
-   and `dn_ram`.
+   If you link HDF5 files from other buckets, for example with `hsload --link`, run
+   `tools/find_reference_buckets.py` against your server as an admin before upgrading.
+   It lists every bucket your existing datasets read from and prints the
+   `reference_buckets` line to add.
+
+   Reference targets also may not name HSDS's own storage objects (anything under
+   `db/`, or a `.domain.json`).
+
+### Chunk initializers are limited to known programs and options
+
+   A dataset's `initializer` must be `chunklocator` (with `--h5path`, `--filepath` and
+   `--bucket`) or `arange` (with `--start` and `--step`), each option given as
+   `--name=value`. Dataset creation returns 400 for anything else, and data nodes
+   refuse to run other initializers stored by earlier versions.
+
+### Docker Compose no longer publishes data node and head node ports
+
+   The Compose files under `admin/docker/` now `expose` the data node and head node
+   ports instead of publishing them on the host, so only containers on the Compose
+   network can reach them. The service node port is published as before.
+
+### Folder listings only include what the caller can read
+
+   `GET /domains` requires read access to the folder being listed, and returns only
+   the domains in it the caller can read. Attribute queries on `GET /domains` are
+   filtered the same way.
+
+### Requests that now return 400
+
+   - `GET /` or `POST /` with a `parent_id` that isn't a group in the request's domain
+   - A domain path containing `.` or `..` segments (repeated slashes are now collapsed,
+     so `/home//user/x.h5` is `/home/user/x.h5`)
+   - A `select` value not enclosed in brackets, such as `select=0:3`, which previously
+     read the whole dataset
+   - An h5path that follows more than 16 soft or external links, HDF5's default limit
+
+### Other changes
+
+   - `/about` returns `dn_urls` and `dn_ids` only to admin users.
+   - `runall.sh --no-docker` and `--no-docker-tcp` exit if `admin/config/passwd.txt` is
+     missing, instead of using `passwd.default` and its default admin password.
+   - Bearer tokens without a `kid` header are rejected with 401.
+   - HSDS refuses to start if its socket directory is owned by another user.
 
 # 🪦 Deprecations
 
@@ -96,85 +139,131 @@ None.
 
 # 🚀 New Features & Improvements
 
-None.
+### `ignore_unresolved` for `POST /`
+
+   `POST /` resolves a list of h5paths, and the first one that can't be resolved (a
+   dangling soft link, an external link to a missing domain, or a link the request
+   didn't ask to follow) fails the whole request. With `ignore_unresolved=1`, such paths
+   are left out of `h5paths` and listed in an `errors` map with the status they would
+   have returned. The default is unchanged.
+
+### New settings
+
+   - `reference_buckets`: buckets reference layouts and chunk initializers may read from,
+     beyond the dataset's own bucket and the default bucket. See Breaking Changes.
+   - `domain_cache_expire`: seconds a service node caches a domain's JSON, including its
+     ACLs (default 10). ACL changes take effect within this time on every service node,
+     and immediately on the one that made the change.
+
+   List settings such as `reference_buckets` and `top_level_domains` can be given as
+   comma-separated environment variables, for example
+   `REFERENCE_BUCKETS=s3://bucket1,s3://bucket2`. Previously each character became a
+   separate entry.
+
+### `tools/find_reference_buckets.py`
+
+   Lists the buckets that a server's reference datasets and chunk initializers read
+   from, for setting `reference_buckets` before upgrading.
 
 # 🪲 Bug Fixes
 
 ## Service Node
 
-### `PUT /{collection}/{id}/attributes` no longer returns 200 without writing anything
+### External links with a relative file are followed
 
-   A body without an `attributes` map, such as the single-attribute form
-   `{"name": ..., "type": ..., "value": ...}` that belongs on
-   `/attributes/{name}`, produced an empty set of attributes that was forwarded to the
-   data node and answered with 200. It now returns 400, as does an `obj_ids` entry
-   with no `attributes` key, which was previously skipped while the other objects'
-   attributes were written.
+   An external link whose file is a relative path returned 500 when followed by path,
+   because the bucket name was prefixed directly onto the filename. A relative file is
+   now resolved from the folder of the domain holding the link, as HDF5 does from the
+   linking file's directory, so `b.h5`, `./b.h5`, `sub/c.h5` and `../b.h5` all work.
 
-### Failed reads no longer return 200
+### External link targets resolve in the right domain
 
-   `GET` and `POST /datasets/{id}/value` sent their 200 status before fetching any
-   data, so a data node failure produced an empty or truncated body that looked
-   successful. Errors now return their real status, and a failure partway through a
-   streamed response drops the connection.
+   Paths after one that went through an external link were resolved in the external
+   domain, so an absolute soft link could return an object from the wrong domain. An
+   external link with a relative target path returned 500, and now resolves from the
+   target domain's root. A target that isn't a valid domain returns 404 instead of 500.
 
-### Names containing `{` or `}` are routed again
+### Malformed requests return 400 instead of 500
 
-   Since the move to aiohttp 3.14 in 1.0.1, link titles and attribute names containing `{` or
-   `}` got a 404 from the router before reaching a handler, even when
-   percent-encoded. The name-bearing routes now match any character but `/`, as they
-   did before.
+   A Basic `Authorization` header without a colon, a dataset whose `maxdims` is smaller
+   than its shape, point selections with negative or wrongly shaped coordinates, query
+   expressions nested past the parser's limit, and link cycles all returned 500. They
+   now return 400. A selection missing its closing bracket, such as `[[0,1`, returned
+   wrong data and is now 400.
 
-### Committed datatypes can be looked up by path again
+### A data node's 403 reaches the client
 
-   `GET /` with `h5path`, and `POST /` with `h5paths`, returned 500 for a path that
-   resolved to a committed datatype, because the datatype id was rejected as invalid.
+   A 403 from a data node during a read was retried and then reported as 500, losing
+   its message. It is now returned as 403 with the data node's reason.
 
-### Filters that omit `id` or `name` are accepted again
+### Bearer tokens no longer stall the service node
 
-   HSDS 1.0 required every filter in `creationProperties` to give class, id and
-   name, so dataset creation which adhered to the API specification could still
-   fail. A missing id or name is now filled in from the filter's class again.
+   With OpenID configured, every new token made the service node fetch the provider's
+   signing keys with blocking requests and no timeout. Keys are now cached for an hour,
+   refetched at most once a minute, and fetched with a 2 s timeout. Every token error
+   returns 401.
 
 ## Data Node
 
-### Linked datasets keep their reference layout
+### Metadata cache stays within its configured size
 
-   For a linked dataset created by HSDS 0.9.x, which also stored a top-level `layout`,
-   `GET /datasets/{id}` replaced the reference layout with the plain `H5D_CHUNKED` layout
-   stored beside it, dropping the `file_uri` (and `chunk_table`) that locate the data,
-   and did so in the data node's cached copy of the dataset's metadata. The reference
-   layout is now reported, and the cache is left unchanged.
+   The cache counted every object's JSON as 1 KB, so objects with large attributes could
+   grow data node memory far past `metadata_mem_cache_size`. Entries are now counted at
+   their serialized size.
 
-### Contiguous linked datasets are read in chunks again
+### Chunk decompression is bounded
 
-   An `H5D_CONTIGUOUS_REF` dataset was treated as one chunk the size of the whole
-   dataset, so reading any part of it fetched all of it from its file. With h5json
-   2.0.1 it is split into chunks of at most 8 MB, as in 0.9.x, and only the chunks a
-   read touches are fetched.
+   A compressed chunk may decompress to at most its uncompressed chunk size. Larger
+   output is an error instead of being allocated.
 
 ## Storage
 
-### Short range reads no longer come back as zeros
+### POSIX writes are atomic
 
-   A range read that returned fewer bytes than requested discarded the bytes it had
-   read and returned zeros in their place. It now keeps them and zero-fills only the
-   missing remainder. This affected `H5D_CONTIGUOUS_REF` datasets whose last chunk
-   extends past the end of their file.
+   Objects are written to a temporary file and renamed into place, so readers see
+   either the old object or the new one, and a crash mid-write no longer leaves a
+   truncated object.
+
+### S3 reads past the end of a linked file
+
+   A reference read whose range started past the end of its file returned 500 on S3,
+   while POSIX storage returned zeros. S3 now matches POSIX.
+
+### `hsds-chunklocator` reads S3 without credentials
+
+   The `chunklocator` initializer ignored `aws_s3_no_sign_request`, so it failed on
+   public buckets when the server had no AWS credentials.
 
 ## Head Node
 
-### Missing target node counts are reported at startup
+### A restarted node no longer takes the cluster down
 
-   With `target_sn_count` or `target_dn_count` at its default of 0, the head node
-   admitted no nodes and every request got 503. It now exits at startup with an
-   error naming the relevant settings.
+   When a node re-registered under a new id at the same address, as a restarted Compose
+   container does, the head node left the old id in its node list and every later
+   registration failed, so the whole cluster returned 503 until the head node was
+   restarted.
+
+## Launcher
+
+### SIGTERM stops the nodes
+
+   The `hsds` launcher stopped its node processes only on Ctrl-C. SIGTERM, as sent by
+   service managers and container runtimes, ended the launcher alone and left the nodes
+   running. It now stops them the same way.
+
+### Data nodes listen only on localhost
+
+   `hsds` and `runall.sh --no-docker-tcp` started data nodes listening on every network
+   interface. Data nodes are local child processes and now listen only on localhost, and
+   in socket mode only their owner can connect to their sockets. The service node
+   listens on all interfaces as before, or only on `--host` when one is given.
 
 # ☑️ Platforms Tested
 
 Every push and pull request runs the suite against Python 3.11, 3.12 and 3.13 on
 `ubuntu-22.04`, `ubuntu-latest` and `windows-latest`, with the POSIX backend, plus the
-h5pyd integration suite and a headless k3s cluster on Ubuntu. `.github/workflows/` holds
+h5pyd integration suite and a headless k3s cluster on Ubuntu. The socket job also reads
+linked HDF5 files from the public `hdf5.sample` S3 bucket. `.github/workflows/` holds
 the current matrix, and the badges in [README.md](README.md) show its status.
 
 # ⛔ Known Problems

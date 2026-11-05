@@ -45,6 +45,7 @@ from .util.storUtil import getStorKeys, getCompressors
 from .util.globparser import globmatch
 from .servicenode_lib import getDomainJson, getObjectJson, getObjectIdByPath
 from .servicenode_lib import getRootInfo, checkBucketAccess, doFlush, getDomainResponse
+from .servicenode_lib import validateAction
 from .basenode import getVersion
 from .domain_crawl import DomainCrawler
 from .folder_crawl import FolderCrawler
@@ -173,8 +174,19 @@ def _domainRowArray(field_defs, values):
     return row_arr
 
 
-async def get_domains(request, include_hrefs=False):
-    """This method is called by GET_Domains and GET_Domain"""
+async def _validateParentId(app, domain, parent_id, username):
+    """Raise unless parent_id is a group in domain that username can read."""
+    if not isValidUuid(parent_id, obj_class="groups"):
+        msg = f"Invalid parent_id: {parent_id}"
+        log.warn(msg)
+        raise HTTPBadRequest(reason=msg)
+    # 400 if the group belongs to another domain, 403 if not readable
+    await validateAction(app, domain, parent_id, username, "read")
+
+
+async def get_domains(request, include_hrefs=False, username=None):
+    """This method is called by GET_Domains and GET_Domain.
+    Lists only the folder's domains that username can read."""
     app = request.app
     params = request.rel_url.query
 
@@ -253,6 +265,16 @@ async def get_domains(request, include_hrefs=False):
 
     log.info(f"get_domains - prefix: {prefix} bucket: {bucket}")
 
+    folder = prefix.rstrip("/")
+    if folder:
+        # listing a folder requires read access to it
+        try:
+            folder_json = await getDomainJson(app, bucket + folder, reload=True)
+        except HTTPNotFound:
+            folder_json = None  # nothing to list
+        if folder_json is not None:
+            aclCheck(app, folder_json, "read", username)
+
     # list the S3 keys for this prefix
     domainNames = []
     if prefix == "/" and config.get("top_level_domains"):
@@ -323,7 +345,7 @@ async def get_domains(request, include_hrefs=False):
         get_root = True
     else:
         get_root = False
-    kwargs = {"bucket": bucket, "get_root": get_root, "verbose": verbose}
+    kwargs = {"bucket": bucket, "get_root": get_root, "verbose": verbose, "username": username}
     crawler = FolderCrawler(app, domainNames, **kwargs)
     await crawler.crawl()
 
@@ -359,7 +381,7 @@ async def get_domains(request, include_hrefs=False):
                 union_type = {"class": "H5T_COMPOUND", "fields": union_field_defs}
                 dummy_arr = np.zeros((1,), dtype=createDataType(union_type))
                 arrayQuery(query, dummy_arr)
-            except (TypeError, ValueError) as e:
+            except (TypeError, ValueError, RecursionError) as e:
                 if not _isMissingAttributeError(e):
                     msg = f"get_domains - invalid query: {query}: {e}"
                     log.warn(msg)
@@ -437,7 +459,7 @@ async def GET_Domains(request):
     else:
         await validateUserPassword(app, username, pswd)
 
-    domains = await get_domains(request)
+    domains = await get_domains(request, username=username)
 
     for domain in domains:
         domain_name = domain["name"]
@@ -521,7 +543,7 @@ async def GET_Domain(request):
         # actual domain (i.e. doesn't have corresponding domain json in S3)
         log.info("no domain passed in, returning all top-level domains")
         # no domain passed in, return top-level domains for this request
-        domains = await get_domains(request, include_hrefs=True)
+        domains = await get_domains(request, include_hrefs=True, username=username)
         rsp_json = {"domains": domains}
         hrefs = []
         href = getHref(request, "/")
@@ -548,13 +570,16 @@ async def GET_Domain(request):
         log.debug(f"h5path: {h5path}")
 
         # select which object to perform path search under
+        if parent_id:
+            await _validateParentId(app, domain, parent_id, username)
         base_id = parent_id if parent_id else domain_json["root"]
 
         # getObjectIdByPath throws 404 if not found
         obj_id, domain, _ = await getObjectIdByPath(
             app, base_id, h5path, bucket=bucket, domain=domain,
             follow_soft_links=follow_soft_links,
-            follow_external_links=follow_external_links)
+            follow_external_links=follow_external_links,
+            username=username)
         log.info(f"got obj_id: {obj_id} from h5path: {h5path}")
         # get authoritative state for object from DN (even if
         # it's in the meta_cache).
@@ -760,6 +785,8 @@ async def POST_Domain(request):
     root_id = domain_json["root"]
 
     # select which object to perform path search under
+    if parent_id:
+        await _validateParentId(app, domain, parent_id, username)
     base_id = parent_id if parent_id else root_id
 
     log.debug(f"POST_Domain with h5paths: {h5paths} from: {base_id}")
@@ -778,7 +805,8 @@ async def POST_Domain(request):
             obj_id, obj_domain, _ = await getObjectIdByPath(
                 app, base_id, h5path, bucket=bucket, domain=domain,
                 follow_soft_links=follow_soft_links,
-                follow_external_links=follow_external_links)
+                follow_external_links=follow_external_links,
+                username=username)
 
             log.info(f"got obj_id: {obj_id} from h5path: {h5path}")
             # get authoritative state for object from DN (even if
@@ -1513,6 +1541,11 @@ async def PUT_ACL(request):
     body["domain"] = domain
 
     put_rsp = await http_put(app, req, data=body)
+
+    # the cached domain json holds the old acls
+    domain_cache = app["domain_cache"]
+    if domain in domain_cache:
+        del domain_cache[domain]
     log.info("PUT ACL resp: " + str(put_rsp))
 
     # ACL update successful

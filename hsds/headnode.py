@@ -144,6 +144,11 @@ def removeNode(app, host=None, port=None):
     if remove_id:
         del nodes[remove_id]
         dead_node_ids.add(remove_id)
+        # free its slot so the node replacing it can take it
+        for active_list in (app["active_sn_ids"], app["active_dn_ids"]):
+            for i, node_id in enumerate(active_list):
+                if node_id == remove_id:
+                    active_list[i] = None
 
 
 async def info(request):
@@ -453,6 +458,8 @@ def getActiveNodeCount(app, node_type):
         active_list = app["active_dn_ids"]
 
     for node_id in active_list:
+        if node_id not in nodes:
+            continue  # empty slot
         node = nodes[node_id]
         if node.type != node_type:
             continue

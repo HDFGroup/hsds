@@ -509,7 +509,7 @@ def getUserPasswordFromRequest(request):
             msg = "Malformed authorization header"
             # log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        if token_decoded.index(b":") < 0:
+        if b":" not in token_decoded:
             msg = "Malformed authorization header (No ':' character)"
             # log.warn(msg)
             raise HTTPBadRequest(reason=msg)
@@ -518,8 +518,11 @@ def getUserPasswordFromRequest(request):
             msg = "Malformed authorization header, user/password not found"
             # log.warn(msg)
             raise HTTPBadRequest(reason=msg)
-        user = user.decode("utf-8")  # convert bytes to string
-        pswd = pswd.decode("utf-8")  # convert bytes to string
+        try:
+            user = user.decode("utf-8")  # convert bytes to string
+            pswd = pswd.decode("utf-8")  # convert bytes to string
+        except UnicodeDecodeError:
+            raise HTTPBadRequest(reason="Malformed authorization header (not UTF-8)")
 
     elif scheme.lower() == "bearer":
         # OpenID Auth.

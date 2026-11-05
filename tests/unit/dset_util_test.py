@@ -23,7 +23,7 @@ from hsds.util.dsetUtil import get_slices
 from hsds.util.dsetUtil import getSelectionList, getSelectionPagination
 from hsds.util.dsetUtil import parseRegionRefParam, extractJsonArrayElement
 from hsds.util.dsetUtil import regionRefSelectionToTargetSelection, unwrapSingleElement
-from hsds.util.dsetUtil import getDatasetCreationProps
+from hsds.util.dsetUtil import getDatasetCreationProps, validateChunkInitializer
 
 
 class DsetUtilTest(unittest.TestCase):
@@ -407,6 +407,11 @@ class DsetUtilTest(unittest.TestCase):
     def testInvalidSelectionList(self):
         dims = [50, 100,]
 
+        # missing or unbalanced brackets aren't silently reinterpreted
+        for select in ("0:3,0:3", "[0:3,0:3", "0:3,0:3]", "[[0,1],[2", "x[0:3,0:3]"):
+            with self.assertRaises(ValueError, msg=select):
+                getSelectionList(select, dims)
+
         try:
             # no bracket
             getSelectionList("2", dims)
@@ -607,6 +612,35 @@ class DsetUtilTest(unittest.TestCase):
         ref_pts = RegionReference(dset_id, pts_sel)
         pts_target = regionRefSelectionToTargetSelection(ref_pts.to_json(), (3, 16))
         self.assertEqual(pts_target.nselect, 2)
+
+    def testValidateChunkInitializer(self):
+        valid = [
+            ["arange"],
+            ["arange", "--start=0", "--step=1"],
+            ["chunklocator", "--h5path=/dset", "--filepath=/x/f.h5", "--bucket=b"],
+            ["chunklocator", "--h5path=/a; b"],  # literal path; no shell involved
+        ]
+        for initializer in valid:
+            validateChunkInitializer(initializer)  # no exception
+
+        invalid = [
+            None,
+            [],
+            "arange",
+            ["arange", 1],
+            ["bash", "-c", "id"],
+            ["chunklocator", "--x=$(id)"],
+            ["chunklocator", "--h5path=/dset\n"],  # control character
+            ["chunklocator", "--fileuri=s3://b/f.h5"],  # set by the DN, not the dataset
+            ["chunklocator", "--root_dir=/"],
+            ["arange", "--start"],
+            ["arange", "--start="],
+            ["arange", "start=1"],
+            ["arange", "--h5path=/dset"],  # chunklocator option on arange
+        ]
+        for initializer in invalid:
+            with self.assertRaises(ValueError, msg=repr(initializer)):
+                validateChunkInitializer(initializer)
 
     def testGetDatasetCreationProps(self):
         # datasets created by this version carry the layout in creationProperties

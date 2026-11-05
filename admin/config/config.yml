@@ -55,6 +55,7 @@ aio_max_pool_connections: 64 # number of connections to keep in conection pool f
 client_pool_count: 10 # pool count for SessionClient
 metadata_mem_cache_size: 128m # 128 MB - metadata cache size per DN node
 metadata_mem_cache_expire: 3600 # expire cache items after one hour
+domain_cache_expire: 10 # seconds a service node reuses a domain's acls before re-reading them
 # chunk_mem_cache_size also caps single chunk size and contiguous dataset size,
 # since a chunk or contiguous dataset has to fit in the cache to be written
 chunk_mem_cache_size: 128m # 128 MB - chunk cache size per DN node
@@ -86,6 +87,7 @@ dn_retry_backoff_exp: 0.1 # backoff factor for retries
 xss_protection: "1; mode=block"  # Include in response headers if set
 allow_any_bucket_read: true  # enable reads to buckets other than default bucket
 allow_any_bucket_write: true # enable writes to buckets other than default bucket
+reference_buckets: [] # other buckets reference layouts and chunk initializers may read from, or ["*"] for any. A dataset's own bucket and the default bucket are always allowed
 bit_shuffle_default_blocksize: 2048 # default blocksize for bitshuffle filter
 max_rangeget_gap: 1024 # max gap in byte for intelligent range get requests
 predate_max_time: 10.0 # max delta between object created timestamp in request and actual time

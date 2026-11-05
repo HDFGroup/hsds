@@ -1,5 +1,6 @@
 import os
 import sys
+import stat
 from pathlib import Path
 import site
 import subprocess
@@ -68,6 +69,19 @@ def get_cmd_dir():
     return bin_dir
 
 
+def _secureSocketDir(socket_dir):
+    """Refuse a socket dir owned by another user, and stop others from writing to it."""
+    if not hasattr(os, "getuid"):
+        return  # windows
+    st = os.stat(socket_dir)
+    if st.st_uid != os.getuid():
+        msg = f"socket directory {socket_dir} is owned by another user (uid {st.st_uid}); "
+        msg += "remove it or choose another with --socket_dir"
+        raise PermissionError(msg)
+    if st.st_mode & 0o022:
+        os.chmod(socket_dir, stat.S_IMODE(st.st_mode) & ~0o022)
+
+
 class HsdsApp:
     """
     Class to initiate and manage sub-process HSDS service
@@ -88,6 +102,7 @@ class HsdsApp:
         sn_port=None,
         config_dir=None,
         readonly=False,
+        listen_all=False,
     ):
         """
         Initializer for class
@@ -105,6 +120,7 @@ class HsdsApp:
         self._logfile = logfile
         self._loglevel = log_level
         self._readonly = readonly
+        self._listen_all = listen_all  # TCP: SN listens on all interfaces, not just host
         self._ready = False
         self._config_dir = config_dir
         self._cmd_dir = get_cmd_dir()
@@ -120,8 +136,10 @@ class HsdsApp:
         if host and not sn_port:
             raise ValueError("sn_port not set")
 
-        if socket_dir is not None and not os.path.isdir(socket_dir):
-            os.mkdir(socket_dir)
+        if socket_dir is not None:
+            if not os.path.isdir(socket_dir):
+                os.mkdir(socket_dir, 0o755)
+            _secureSocketDir(socket_dir)
 
         if root_dir:
             if not os.path.isdir(root_dir):
@@ -154,7 +172,8 @@ class HsdsApp:
             sn_url = f"http://{host}:{sn_port}"
             dn_port = 6101  # TBD: pull this from config
             for i in range(dn_count):
-                dn_url = f"http://{host}:{dn_port + i}"
+                # DNs are local child processes; only the SN listens on the given host
+                dn_url = f"http://localhost:{dn_port + i}"
                 self._dn_urls.append(dn_url)
 
         # sort the ports so that node_number can be determined based on dn_url
@@ -277,6 +296,8 @@ class HsdsApp:
                     pargs.append("--password_file=")
 
                 pargs.append(f"--sn_url={self._endpoint}")
+                if self._listen_all:
+                    pargs.append("--sn_listen_all=1")
                 pargs.append("--logfile=sn1.log")
             else:
                 node_number = i - 1  # start with 0

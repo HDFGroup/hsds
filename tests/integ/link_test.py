@@ -1155,6 +1155,45 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(rsp.status_code, 200)
         self.assertEqual(rsp.json()["link"]["file"], "b.h5")
 
+    def testSymbolicLinkHopLimit(self):
+        # following soft or external links stops after 16 hops, as in HDF5
+        domain = self.base_domain + "/testSymbolicLinkHopLimit.h5"
+        print("testSymbolicLinkHopLimit", domain)
+        helper.setupDomain(domain)
+        other = self.base_domain + "/testSymbolicLinkHopLimit_other.h5"
+        helper.setupDomain(other)
+        headers = helper.getRequestHeaders(domain=domain)
+        other_headers = helper.getRequestHeaders(domain=other)
+        root_id = helper.getRootUUID(domain, session=self.session)
+        other_root = helper.getRootUUID(other, session=self.session)
+
+        def link(dom_headers, root, title, payload):
+            req = self.endpoint + "/groups/" + root + "/links/" + title
+            rsp = self.session.put(req, data=json.dumps(payload), headers=dom_headers)
+            self.assertEqual(rsp.status_code, 201)
+
+        req = self.endpoint + "/groups"
+        payload = {"link": {"id": root_id, "name": "g"}}
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        # s0 -> s1 -> ... -> s16 -> /g: resolving /s1 takes 16 hops, /s0 takes 17
+        for i in range(17):
+            target = f"/s{i + 1}" if i < 16 else "/g"
+            link(headers, root_id, f"s{i}", {"h5path": target})
+        link(headers, root_id, "loop", {"h5path": "/loop"})
+        link(headers, root_id, "ping", {"h5path": "/pong"})
+        link(headers, root_id, "pong", {"h5path": "/ping"})
+        link(headers, root_id, "ext", {"h5path": "/back", "file": other})
+        link(other_headers, other_root, "back", {"h5path": "/ext", "file": domain})
+
+        req = self.endpoint + "/"
+        follow = {"follow_soft_links": 1, "follow_external_links": 1}
+        rsp = self.session.get(req, params={"h5path": "/s1", **follow}, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        for h5path in ("/s0", "/loop", "/ping", "/ext"):
+            rsp = self.session.get(req, params={"h5path": h5path, **follow}, headers=headers)
+            self.assertEqual(rsp.status_code, 400, h5path)
+
     def testRelativeH5Path(self):
         # test that an object can be found via h5path request to domain endpoint
         domain = self.base_domain + "/testRelativeH5Path.h5"

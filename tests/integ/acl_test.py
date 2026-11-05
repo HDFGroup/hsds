@@ -340,6 +340,167 @@ class AclTest(unittest.TestCase):
         rsp = self.session.get(req, headers=headers)
         self.assertEqual(rsp.status_code, 403)  # Forbidden
 
+    def _privateDomain(self, name):
+        """Create an admin-owned domain beside the test domain that test_user1 can't read.
+        Returns (domain, root_id), or (None, None) if the setup doesn't allow it."""
+        admin = config.get("admin_username")
+        if not admin or config.get("default_public"):
+            print("admin_username not set or default_public on, skipping")
+            return None, None
+        admin_pw = config.get("admin_password")
+        folder = helper.getParentDomain(self.base_domain)
+        domain = folder + "/" + helper.getRandomName() + "_" + name
+        req = helper.getEndpoint() + "/"
+        admin_headers = helper.getRequestHeaders(domain=domain, username=admin, password=admin_pw)
+        rsp = self.session.put(req, headers=admin_headers)
+        self.assertEqual(rsp.status_code, 201)
+        self.addCleanup(self.session.delete, req, headers=admin_headers)
+        root_id = rsp.json()["root"]
+        # domains inherit the folder owner's acl; take test_user1's away
+        acl_req = helper.getEndpoint() + "/acls/" + config.get("user_name")
+        no_access = {k: False for k in acl_keys}
+        rsp = self.session.put(acl_req, data=json.dumps(no_access), headers=admin_headers)
+        self.assertEqual(rsp.status_code, 201)
+        attr_req = helper.getEndpoint() + "/groups/" + root_id + "/attributes/secret"
+        payload = {"type": "H5T_STD_I32LE", "value": 424242}
+        rsp = self.session.put(attr_req, data=json.dumps(payload), headers=admin_headers)
+        self.assertEqual(rsp.status_code, 201)
+        rsp = self.session.get(req, headers=helper.getRequestHeaders(domain=domain))
+        self.assertEqual(rsp.status_code, 403)  # test_user1 can't read it
+        return domain, root_id
+
+    def testParentIdOutsideDomain(self):
+        # parent_id must belong to the domain whose access was checked
+        print("testParentIdOutsideDomain", self.base_domain)
+        _, victim_root = self._privateDomain("parent_id_victim.h5")
+        if not victim_root:
+            return
+        req = helper.getEndpoint() + "/"
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        params = {"h5path": ".", "parent_id": victim_root, "include_attrs": 1}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+        self.assertNotIn("424242", rsp.text)
+
+        body = {"h5paths": ["."]}
+        rsp = self.session.post(req, params=params, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 400)
+        self.assertNotIn("424242", rsp.text)
+
+        # anonymous, against the (readable) folder holding the domains
+        folder = helper.getParentDomain(self.base_domain)
+        rsp = self.session.get(req, params={"domain": folder, **params})
+        self.assertIn(rsp.status_code, (400, 401, 403))
+        self.assertNotIn("424242", rsp.text)
+
+    def testExternalLinkToUnreadableDomain(self):
+        # following an external link checks read access on the target domain
+        print("testExternalLinkToUnreadableDomain", self.base_domain)
+        victim, _ = self._privateDomain("external_link_victim.h5")
+        if not victim:
+            return
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        req = helper.getEndpoint() + "/"
+        root_id = self.session.get(req, headers=headers).json()["root"]
+        link_req = helper.getEndpoint() + "/groups/" + root_id + "/links/ext_private"
+        rsp = self.session.put(link_req, data=json.dumps({"h5path": "/", "file": victim}),
+                               headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+
+        params = {"h5path": "/ext_private", "follow_external_links": 1, "include_attrs": 1}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 403)
+        self.assertNotIn("424242", rsp.text)
+
+        body = {"h5paths": ["/ext_private"]}
+        rsp = self.session.post(req, params=params, data=json.dumps(body), headers=headers)
+        self.assertEqual(rsp.status_code, 403)
+        self.assertNotIn("424242", rsp.text)
+
+    def testListingHidesUnreadable(self):
+        # GET /domains lists, and queries, only domains the caller can read
+        print("testListingHidesUnreadable", self.base_domain)
+        victim, victim_root = self._privateDomain("listing_victim.h5")
+        if not victim:
+            return
+        folder = helper.getParentDomain(self.base_domain)
+        req = helper.getEndpoint() + "/domains"
+        headers = helper.getRequestHeaders()
+        admin_headers = helper.getRequestHeaders(username=config.get("admin_username"),
+                                                 password=config.get("admin_password"))
+
+        params = {"domain": folder + "/", "verbose": 1}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        names = [d["name"] for d in rsp.json()["domains"]]
+        self.assertIn(self.base_domain, names)
+        self.assertNotIn(victim, names)
+        self.assertNotIn(victim_root, rsp.text)
+        rsp = self.session.get(req, params=params, headers=admin_headers)
+        self.assertIn(victim, [d["name"] for d in rsp.json()["domains"]])
+
+        # an attribute query mustn't reveal anything about unreadable domains
+        params = {"domain": folder + "/", "query": "secret > 1"}
+        rsp = self.session.get(req, params=params, headers=headers)
+        self.assertEqual(rsp.status_code, 200)
+        self.assertNotIn(victim, [d["name"] for d in rsp.json()["domains"]])
+
+        # a folder without read access can't be listed at all
+        private_folder = folder + "/" + helper.getRandomName() + "_private_folder"
+        folder_headers = helper.getRequestHeaders(domain=private_folder,
+                                                  username=config.get("admin_username"),
+                                                  password=config.get("admin_password"))
+        root_req = helper.getEndpoint() + "/"
+        rsp = self.session.put(root_req, data=json.dumps({"folder": True}), headers=folder_headers)
+        self.assertEqual(rsp.status_code, 201)
+        self.addCleanup(self.session.delete, root_req, headers=folder_headers)
+        for acl_user in ("default", config.get("user_name")):
+            acl_req = helper.getEndpoint() + "/acls/" + acl_user
+            rsp = self.session.put(acl_req, data=json.dumps({"read": False}),
+                                   headers=folder_headers)
+            self.assertEqual(rsp.status_code, 201)
+        rsp = self.session.get(req, params={"domain": private_folder + "/"}, headers=headers)
+        self.assertEqual(rsp.status_code, 403)
+
+    def testRevokeAppliesToObjectRequests(self):
+        # revoking read stops object requests at once, not after the cached domain expires
+        print("testRevokeAppliesToObjectRequests", self.base_domain)
+        user2name = config.get("user2_name")
+        if not user2name:
+            print("user2_name not set")
+            return
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        user2_headers = helper.getRequestHeaders(domain=self.base_domain, username=user2name)
+        req = helper.getEndpoint() + "/"
+        root_id = self.session.get(req, headers=headers).json()["root"]
+        acl_req = helper.getEndpoint() + "/acls/" + user2name
+        group_req = helper.getEndpoint() + "/groups/" + root_id
+
+        rsp = self.session.put(acl_req, data=json.dumps({"read": True}), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        # caches the domain json, with the grant, in the service node
+        rsp = self.session.get(group_req, headers=user2_headers)
+        self.assertEqual(rsp.status_code, 200)
+
+        rsp = self.session.put(acl_req, data=json.dumps({"read": False}), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        rsp = self.session.get(group_req, headers=user2_headers)
+        self.assertEqual(rsp.status_code, 403)
+
+    def testDomainPathSpellings(self):
+        # every spelling of a domain is the same domain; '.' and '..' are rejected
+        print("testDomainPathSpellings", self.base_domain)
+        req = helper.getEndpoint() + "/"
+        headers = helper.getRequestHeaders(domain=self.base_domain)
+        root_id = self.session.get(req, headers=headers).json()["root"]
+        alias = self.base_domain.replace("/", "//")
+        rsp = self.session.get(req, headers=helper.getRequestHeaders(domain=alias))
+        self.assertEqual(rsp.status_code, 200)
+        self.assertEqual(rsp.json()["root"], root_id)
+        for bad in (self.base_domain + "/../x.h5", "/home/./" + self.base_domain[len("/home/"):]):
+            rsp = self.session.get(req, headers=helper.getRequestHeaders(domain=bad))
+            self.assertEqual(rsp.status_code, 400, bad)
+
 
 if __name__ == "__main__":
     # setup test files

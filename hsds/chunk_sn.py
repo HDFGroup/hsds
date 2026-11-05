@@ -1307,7 +1307,17 @@ async def POST_Value(request):
                 msg = "POST Value expected list of points"
                 log.warn(msg)
                 raise HTTPBadRequest(reason=msg)
-            points = np.asarray(points_list, dtype=point_dt)
+            try:
+                points = np.asarray(points_list, dtype=point_dt)
+            except (OverflowError, ValueError, TypeError):
+                msg = "POST Value points must be non-negative integer coordinates"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
+            expected_ndim = 1 if rank == 1 else 2
+            if points.ndim != expected_ndim or (rank > 1 and points.shape[1] != rank):
+                msg = f"POST Value points must each have {rank} coordinate(s)"
+                log.warn(msg)
+                raise HTTPBadRequest(reason=msg)
             log.debug(f"get {len(points)} points from json request")
 
         elif not isSelect(params, body=body):

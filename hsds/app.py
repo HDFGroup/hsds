@@ -14,6 +14,7 @@ import os
 import json
 import sys
 import logging
+import signal
 import time
 
 from .hsds_app import HsdsApp
@@ -307,7 +308,9 @@ def main():
         if args.host:
             kwargs["host"] = args.host
         else:
+            # without --host, nodes reach the SN at localhost but it listens everywhere
             kwargs["host"] = "localhost"
+            kwargs["listen_all"] = True
         # sn_port only relevant for TCP connections
         if args.port:
             kwargs["sn_port"] = args.port
@@ -361,7 +364,19 @@ def main():
             os.mkdir(bucket_path)
 
     app = HsdsApp(**kwargs)
-    app.run()
+
+    def on_sigterm(signum, frame):
+        # stop the node processes too, rather than leaving them running
+        raise KeyboardInterrupt()
+
+    signal.signal(signal.SIGTERM, on_sigterm)
+
+    try:
+        app.run()
+    except KeyboardInterrupt:
+        print("shutting down server")
+        app.stop()
+        return
 
     waiting_on_ready = True
 
