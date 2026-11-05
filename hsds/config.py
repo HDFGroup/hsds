@@ -149,7 +149,10 @@ def _load_cfg():
             debug(f"got config override for {x}")
 
         if override is not None and override != "":
-            if cfgval is not None:
+            if isinstance(cfgval, list) and isinstance(override, str):
+                # a list setting from the command line or environment is comma-separated
+                override = [v.strip() for v in override.split(",") if v.strip()]
+            elif cfgval is not None:
                 try:
                     # convert to same type as yaml
                     override = type(cfgval)(override)
