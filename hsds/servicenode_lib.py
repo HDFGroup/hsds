@@ -42,7 +42,7 @@ from .util.dsetUtil import CHUNK_REF_LAYOUTS
 from .util.storUtil import getStorJSONObj, isStorObj, getSupportedFilters
 from .util.authUtil import aclCheck
 from .util.httpUtil import http_get, http_put, http_post, http_delete
-from .util.domainUtil import getBucketForDomain, verifyRoot, getLimits
+from .util.domainUtil import getBucketForDomain, verifyRoot, getLimits, isValidDomain
 from .util.storUtil import getCompressors
 
 from .basenode import getVersion
@@ -671,6 +671,11 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
             if bucket:
                 domain = bucket + domain
 
+            if not isValidDomain(domain):
+                msg = f"External link target {getLinkFilePath(link_json)} is not a valid domain"
+                log.warn(msg)
+                raise HTTPNotFound(reason=msg)
+
             ext_domain_json = await getDomainJson(app, domain)
 
             verifyRoot(ext_domain_json)
@@ -678,21 +683,13 @@ async def getObjectIdByPath(app, obj_id, h5path, bucket=None, refresh=False, dom
             msg = f"external domain response = {ext_domain_json}"
             log.debug(msg)
 
-            if link_json["h5path"][0] == '/':
-                msg = "External link by absolute path"
-                log.debug(msg)
-                kwargs = {}
-                kwargs["bucket"] = bucket
-                kwargs["refresh"] = refresh
-                kwargs["domain"] = domain
-                kwargs["follow_soft_links"] = follow_soft_links
-                kwargs["follow_external_links"] = follow_external_links
-                obj_id, domain, link_json = await getObjectIdByPath(
-                    app, ext_domain_json["root"], link_json["h5path"], **kwargs)
-            else:
-                msg = "Cannot follow external link by relative path"
-                log.warn(msg)
-                raise HTTPInternalServerError()
+            # as in HDF5, the target path is resolved from the external root
+            # whether or not it starts with '/'
+            obj_id, domain, link_json = await getObjectIdByPath(
+                app, ext_domain_json["root"], link_json["h5path"], bucket=bucket,
+                refresh=refresh, domain=domain,
+                follow_soft_links=follow_soft_links,
+                follow_external_links=follow_external_links)
 
         elif link_json["class"] == "H5L_TYPE_SOFT":
             if not follow_soft_links:

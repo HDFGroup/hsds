@@ -1048,6 +1048,47 @@ class LinkTest(unittest.TestCase):
             self.assertEqual(rspJson["id"], expected_id, h5path)
             self.assertEqual(rspJson["domain"], expected_domain, h5path)
 
+    def testExternalLinkTargetEdgeCases(self):
+        # relative target paths resolve from the external root; malformed targets are 404
+        domain = self.base_domain + "/testExternalLinkTargetEdgeCases.h5"
+        print("testExternalLinkTargetEdgeCases", domain)
+        helper.setupDomain(domain)
+        other_domain = self.base_domain + "/testExternalLinkTargetEdgeCases_other.h5"
+        helper.setupDomain(other_domain)
+
+        root_id = helper.getRootUUID(domain, session=self.session)
+        other_root_id = helper.getRootUUID(other_domain, session=self.session)
+
+        # group /g1 in the other domain
+        headers = helper.getRequestHeaders(domain=other_domain)
+        req = self.endpoint + "/groups"
+        payload = {"link": {"id": other_root_id, "name": "g1"}}
+        rsp = self.session.post(req, data=json.dumps(payload), headers=headers)
+        self.assertEqual(rsp.status_code, 201)
+        g1_id = rsp.json()["id"]
+
+        headers = helper.getRequestHeaders(domain=domain)
+        links = {
+            "ext_relative": {"h5path": "g1", "file": other_domain},
+            "ext_malformed": {"h5path": "/g1", "file": "not a domain"},
+        }
+        for title, payload in links.items():
+            req = self.endpoint + "/groups/" + root_id + "/links/" + title
+            rsp = self.session.put(req, data=json.dumps(payload), headers=headers)
+            self.assertEqual(rsp.status_code, 201)
+
+        req = self.endpoint + "/"
+        params = {"h5path": "/ext_relative", "follow_external_links": 1}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 200)
+        rspJson = rsp.json()
+        self.assertEqual(rspJson["id"], g1_id)
+        self.assertEqual(rspJson["domain"], other_domain)
+
+        params = {"h5path": "/ext_malformed", "follow_external_links": 1}
+        rsp = self.session.get(req, headers=headers, params=params)
+        self.assertEqual(rsp.status_code, 404)
+
     def testRelativeH5Path(self):
         # test that an object can be found via h5path request to domain endpoint
         domain = self.base_domain + "/testRelativeH5Path.h5"

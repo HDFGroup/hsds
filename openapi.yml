@@ -498,6 +498,13 @@ paths:
         - name: follow_external_links
           in: query
           schema: { type: boolean, default: false }
+        - name: ignore_unresolved
+          in: query
+          schema: { type: boolean, default: false }
+          description: |
+            Report each h5path that can't be resolved (missing path, broken soft or
+            external link, link not followed, no read access) in `errors` instead of
+            failing the whole request. Without it, the first such path fails the request.
       requestBody:
         required: true
         content:
@@ -522,6 +529,16 @@ paths:
                     type: object
                     additionalProperties:
                       $ref: '#/components/schemas/ObjectResponse'
+                  errors:
+                    type: object
+                    description: |
+                      Present only with `ignore_unresolved`. Maps each h5path that
+                      couldn't be resolved to the status it would otherwise have failed with.
+                    additionalProperties:
+                      type: object
+                      properties:
+                        status: { type: integer, enum: [400, 403, 404, 410] }
+                        message: { type: string }
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
