@@ -1,5 +1,6 @@
 import os
 import sys
+import stat
 from pathlib import Path
 import site
 import subprocess
@@ -68,6 +69,19 @@ def get_cmd_dir():
     return bin_dir
 
 
+def _secureSocketDir(socket_dir):
+    """Refuse a socket dir owned by another user, and stop others from writing to it."""
+    if not hasattr(os, "getuid"):
+        return  # windows
+    st = os.stat(socket_dir)
+    if st.st_uid != os.getuid():
+        msg = f"socket directory {socket_dir} is owned by another user (uid {st.st_uid}); "
+        msg += "remove it or choose another with --socket_dir"
+        raise PermissionError(msg)
+    if st.st_mode & 0o022:
+        os.chmod(socket_dir, stat.S_IMODE(st.st_mode) & ~0o022)
+
+
 class HsdsApp:
     """
     Class to initiate and manage sub-process HSDS service
@@ -122,8 +136,10 @@ class HsdsApp:
         if host and not sn_port:
             raise ValueError("sn_port not set")
 
-        if socket_dir is not None and not os.path.isdir(socket_dir):
-            os.mkdir(socket_dir)
+        if socket_dir is not None:
+            if not os.path.isdir(socket_dir):
+                os.mkdir(socket_dir, 0o755)
+            _secureSocketDir(socket_dir)
 
         if root_dir:
             if not os.path.isdir(root_dir):

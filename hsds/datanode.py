@@ -415,7 +415,8 @@ def main():
 
     if isUnixDomainUrl(dn_url):
         try:
-            s = bindToSocket(dn_url)
+            # data nodes don't authenticate requests, so only this user may connect
+            s = bindToSocket(dn_url, private=True)
         except OSError as oe:
             log.error(f"unable to find to socket: {oe}")
             raise

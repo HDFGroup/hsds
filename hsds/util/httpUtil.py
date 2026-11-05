@@ -143,10 +143,8 @@ def getSocketPath(url):
     return "".join(chars)
 
 
-def bindToSocket(url):
-    """
-    Bind to socket specified by http+unix url
-    """
+def bindToSocket(url, private=False):
+    """Bind to the socket in an http+unix url; private makes it owner-only."""
     if not isUnixDomainUrl(url):
         raise ValueError(f"Invalid url for bindToSocket: {url}")
     # use a unix domain socket path
@@ -159,7 +157,13 @@ def bindToSocket(url):
         if os.path.exists(path):
             raise
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.bind(path)
+    # set the mode through the umask so the socket is never briefly open to others
+    old_umask = os.umask(0o177) if private else None
+    try:
+        s.bind(path)
+    finally:
+        if old_umask is not None:
+            os.umask(old_umask)
     return s
 
 

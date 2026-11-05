@@ -135,7 +135,7 @@ if [[ ${NO_DOCKER} ]]; then
     fi
     if [[ ! -d ${SOCKET_DIR} ]]; then
       echo "creating directory ${SOCKET_DIR}"
-      mkdir ${SOCKET_DIR}
+      mkdir -m 755 ${SOCKET_DIR}
     fi
     echo "--no_docker option specified - using directory: ${SOCKET_DIR} for socket and log files"
   fi
