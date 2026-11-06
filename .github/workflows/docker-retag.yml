@@ -1,0 +1,80 @@
+name: Docker Retag
+
+# Gives the image that master CI built for a release's commit its version tags
+# on Docker Hub. docker-image.yml can't do this itself: release.yml pushes the
+# release tag with GITHUB_TOKEN, and pushes made with that token don't start
+# other workflows.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, e.g. v1.0.3'
+        required: true
+        type: string
+      latest:
+        description: 'Also move the latest tag'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  retag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check tag format
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$TAG' is not a release tag like v1.0.3"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+
+      - name: Resolve tags
+        id: tags
+        env:
+          TAG: ${{ inputs.tag }}
+          LATEST: ${{ inputs.latest }}
+        run: |
+          version="${TAG#v}"
+          minor="${version%.*}"
+          # docker-image.yml names each master build sha-<first 7 chars of the commit>
+          echo "source=hdfgroup/hsds:sha-$(git rev-parse HEAD | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          targets="-t hdfgroup/hsds:$version -t hdfgroup/hsds:$minor"
+          if [ "$LATEST" = "true" ]; then
+            targets="$targets -t hdfgroup/hsds:latest"
+          fi
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Retag
+        env:
+          SOURCE: ${{ steps.tags.outputs.source }}
+          TARGETS: ${{ steps.tags.outputs.targets }}
+        run: |
+          if ! docker buildx imagetools inspect "$SOURCE" > /dev/null; then
+            echo "::error::$SOURCE not found; master CI builds it when the commit is pushed"
+            exit 1
+          fi
+          # TARGETS is a list of -t options, so it is split on purpose
+          docker buildx imagetools create $TARGETS "$SOURCE"
+          for t in $TARGETS; do
+            [ "$t" = "-t" ] || docker buildx imagetools inspect "$t" | head -3
+          done
