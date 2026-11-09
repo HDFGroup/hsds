@@ -6,7 +6,7 @@ SSOT: the `version` field of [project] in pyproject.toml.
 HSDS keeps a second copy of the version in hsds/basenode.py (HSDS_VERSION),
 which is served to clients via /about and in domain JSON. A release where the
 two disagree would ship a service that misreports its own version, so a
-mismatch fails the run here - before the tag is turned into a release.
+mismatch fails the run here - before the tag is created.
 """
 import os
 import re
@@ -19,6 +19,43 @@ BASENODE = Path("hsds/basenode.py")
 
 # PEP 440 pre-release / dev-release markers.
 PRERELEASE_RE = re.compile(r"(a|b|rc|alpha|beta|dev)\d*$", re.IGNORECASE)
+
+# PEP 440 version syntax, from the spec's Appendix B (the same pattern
+# `packaging.version` uses). `packaging` is not installed in the job that runs
+# this script, so the pattern is inlined. Always applied with fullmatch().
+PEP440_RE = re.compile(
+    r"""
+    v?
+    (?:
+        (?:(?P<epoch>[0-9]+)!)?                           # epoch
+        (?P<release>[0-9]+(?:\.[0-9]+)*)                  # release segment
+        (?P<pre>                                          # pre-release
+            [-_\.]?
+            (?P<pre_l>(a|b|c|rc|alpha|beta|pre|preview))
+            [-_\.]?
+            (?P<pre_n>[0-9]+)?
+        )?
+        (?P<post>                                         # post release
+            (?:-(?P<post_n1>[0-9]+))
+            |
+            (?:
+                [-_\.]?
+                (?P<post_l>post|rev|r)
+                [-_\.]?
+                (?P<post_n2>[0-9]+)?
+            )
+        )?
+        (?P<dev>                                          # dev release
+            [-_\.]?
+            (?P<dev_l>dev)
+            [-_\.]?
+            (?P<dev_n>[0-9]+)?
+        )?
+    )
+    (?:\+(?P<local>[a-z0-9]+(?:[-_\.][a-z0-9]+)*))?       # local version
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
 
 
 def set_output(name, value):
@@ -44,7 +81,16 @@ def read_pyproject_version():
             f"{PYPROJECT} [project] has no static `version`. If the project has "
             "moved to a dynamic version, point this script at the new SSOT."
         )
-    return str(project["version"]).strip()
+    return str(project["version"])
+
+
+def validate_version(version):
+    """Fail unless the version is a well-formed PEP 440 version with no whitespace."""
+    if any(c.isspace() for c in version) or not PEP440_RE.fullmatch(version):
+        fail(
+            f"{PYPROJECT} [project] version {version!r} is not a valid PEP 440 "
+            "version (whitespace and newlines are not allowed)"
+        )
 
 
 def check_service_version(version):
@@ -71,17 +117,10 @@ def check_service_version(version):
 
 def main():
     version = read_pyproject_version()
+    validate_version(version)
     check_service_version(version)
 
     tag = f"v{version}"
-    if os.environ.get("EVENT_NAME") == "push":
-        ref = os.environ.get("GITHUB_REF_NAME", "")
-        if ref != tag:
-            fail(
-                f"tag {ref!r} does not match the version in {PYPROJECT} "
-                f"({version}, expected tag {tag!r}). Bump the SSOT and re-tag."
-            )
-
     set_output("version", version)
     set_output("tag", tag)
     set_output("prerelease", "true" if PRERELEASE_RE.search(version) else "false")
