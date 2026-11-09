@@ -20,9 +20,9 @@ jobs:
   rest-vol-integration:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -33,7 +33,7 @@ jobs:
 
       - name: Restore HDF5 ${{ env.HDF5_TAG }} installation
         id: hdf5-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/hdf5-install
           key: ${{ runner.os }}-${{ runner.arch }}-hdf5-${{ env.HDF5_TAG }}
@@ -55,7 +55,7 @@ jobs:
           cmake --install "$RUNNER_TEMP/hdf5-build"
 
       - name: Checkout REST VOL
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: HDFGroup/vol-rest
           ref: ${{ env.VOL_REST_REF }}
